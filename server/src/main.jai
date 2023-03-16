@@ -93,6 +93,19 @@ declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     };
 }
 
+last_change_time: Apollo_Time = APOLLO_TIME_INVALID;
+
+refresh_if_needed :: () {
+    if last_change_time == APOLLO_TIME_INVALID return;
+
+    // @Incomplete: We want to use the last_change_time to debounce.
+    // But since we’re blocking on messages right now, we can’t use a timeout to start recompiling.
+    // So we just use last_change_time as dirty flag.
+
+    success := run_metaprogram_analysis();
+    if !success return;
+}
+
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
     log("Got %", request.method);
 
@@ -135,10 +148,19 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
+            refresh_if_needed();
             handle_goto(body);
 
         case "textDocument/didSave";
-            success := run_metaprogram_analysis();
+            success, body := json_parse_string(raw_request, LSP_Did_Save_Text_Document);
+            if !success {
+                log_error("Unable to parse textDocument/didOpen message");
+                return;
+            }
+
+            // @ToDo: Remove all changes from the "modified files" table so we don’t send that file over on ever compile?
+
+            success = run_metaprogram_analysis();
             if !success return;
 
         case "textDocument/didOpen";
@@ -163,6 +185,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := body.params.textDocument.uri;
             edit_file(file_path, body.params.contentChanges);
 
+            last_change_time = current_time_consensus();
+
         case "textDocument/completion";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
             if !success {
@@ -170,6 +194,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
+            refresh_if_needed();
             handle_completitions(body);
 
     }

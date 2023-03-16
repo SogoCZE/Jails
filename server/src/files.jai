@@ -1,28 +1,34 @@
-#scope_file
-
+// @ToDo: Give these more distinguished names! (modified_files?)
+file_lock: Mutex;
 files: Table(string, [..]u8); // Tohle je asi hodně hloupé. - převést na array řádků (to je asi fajn idea)
-
-#scope_export
+// @ToDo: Keep track of a modified flag per file
 
 init_files :: () {
+    init(*file_lock);
     init(*files);
 }
 
 deinit_files :: () {
+    destroy(*file_lock);
     deinit(*files);
 }
- 
+
 create_file :: (file_path: string, content: string) {
     content_dynamic: [..]u8;
 
     array_copy(*content_dynamic, cast([]u8) content);
     free(content);
 
+    lock(*file_lock);
+    defer unlock(*file_lock);
     table_set(*files, file_path, content_dynamic);
     // dump_files();
 }
 
 edit_file :: (file_path: string, changes: []LSP_Content_Change) {
+    lock(*file_lock);
+    defer unlock(*file_lock);
+
     content := table_find_pointer(*files, file_path);
     if !content {
         log_error("File is not in the cache %", file_path);
@@ -38,7 +44,18 @@ edit_file :: (file_path: string, changes: []LSP_Content_Change) {
     // dump_files();
 }
 
+remove_file :: (file_path: string) {
+    lock(*file_lock);
+    defer unlock(*file_lock);
+    found := table_remove(*files, file_path);
+    if !found {
+        log_error("Tried to remove file % but it was not in the modified files table!", file_path);
+    }
+}
+
 find_range_in_file :: (file: string, range: LSP_Range) -> string {
+    lock(*file_lock);
+    defer unlock(*file_lock);
     content, ok := table_find(*files, file);
     if !ok {
         return "";
@@ -71,6 +88,8 @@ find_range_in_file :: (file: string, range: LSP_Range) -> string {
 }
 
 find_line_in_file :: (file: string, position: LSP_Position) -> string {
+    lock(*file_lock);
+    defer unlock(*file_lock);
     content, ok := table_find(*files, file);
     if !ok {
         return "";
@@ -103,12 +122,14 @@ find_line_in_file :: (file: string, position: LSP_Position) -> string {
             end_index = index;
             break;
         }
-    }  
+    }
 
     return to_string(*content[start_index], end_index-start_index);
 }
 
 find_word_in_file :: (file: string, position: LSP_Position) -> string {
+    lock(*file_lock);
+    defer unlock(*file_lock);
     content, ok := table_find(*files, file);
     if !ok {
         return "";
@@ -148,7 +169,7 @@ find_word_in_file :: (file: string, position: LSP_Position) -> string {
             start_index = index+1;
             break;
         }
-    }  
+    }
 
     // Hledání konce
     for index: pointer_index..content.count-1 {
@@ -157,17 +178,17 @@ find_word_in_file :: (file: string, position: LSP_Position) -> string {
             end_index = index;
             break;
         }
-    }  
+    }
 
 
     return to_string(*content[start_index], end_index-start_index);
 }
 
-#scope_file 
+#scope_file
 
 DEBUG_AC :: false;
 
-// TODO: 
+// TODO:
 // - unicode
 // - {}, "", () jak vscode vloží automaticky uzavěrky těchto znaků tak to blbne občas.
 // - pořádně otestovat různé případy...
@@ -223,7 +244,7 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
             #if DEBUG_AC log("inserting % at %", to_string(*char, 1), start_index + it_index);
         }
         return;
-    } 
+    }
 
     // Nahrazení nebo mazání (nahrazení range za vložený text)
     text_index := 0;
@@ -254,8 +275,12 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
 }
 
 dump_files :: () {
+    lock(*file_lock);
+    defer unlock(*file_lock);
     for content, file: files {
         just_filename := path_filename(file);
         write_entire_file(tprint("/Users/patriksmely/Documents/Projekty/jai_lsp_meta/server/bin/files_dump/%", just_filename), cast(string) content);
     }
 }
+
+#import "Thread";

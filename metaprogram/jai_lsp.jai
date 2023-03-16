@@ -20,30 +20,76 @@ declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarac
 Jai_LSP_Plugin :: struct {
     #as using base: Plugin;
     should_run := true;
-    channel: Write_Channel;
+    write_channel: Write_Channel;
+    read_channel: Read_Channel;
+    modified_files: [..] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
 }
 
 get_plugin :: () -> *Plugin {
     p := New(Jai_LSP_Plugin);
 
-    channel_success, channel := writer_connect("jlsp");
-    if !channel_success {
-        log_error("Exiting due to channel opening failure.\n");
+    #if OS != .WINDOWS {
+        POSIX :: #import "POSIX";
+        POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
+    }
+
+    success: bool;
+    success, p.read_channel = reader_create_channel(IPC_CHANNEL_NAME_TO_META, CHANNEL_DATA_BYTES);
+    if !success {
+        log_error("Could not open read channel.");
+        exit(1);
+    }
+
+    success, p.write_channel = writer_connect(IPC_CHANNEL_NAME_FROM_META);
+    if !success {
+        log_error("Could not open write channel.");
         exit(1);
     }
 
     options := get_build_options();
 
-    send_to_server(*channel, .INITIALIZATION, *Initialization.{
+    send_to_server(*p.write_channel, .INITIALIZATION, *Initialization.{
         import_path=options.import_path
     });
+
+
+    // Read all (modified) files from the server
+    received_all_files := false;
+    while !received_all_files {
+        message_success, fatal_error, message := reader_poll_for_message(*p.read_channel);
+        if fatal_error {
+            log_error("Fatal error");
+            exit(1);
+        }
+
+        if !message_success {
+            sleep_milliseconds(1);
+            continue;
+        }
+
+        defer reader_done_with_message(*message);
+
+        success, command, body_bytes := decode_command(message, Server_To_Metaprogram_Protocol_Tag);
+        if !success exit(1);
+
+        if command == {
+            case .MODIFIED_FILE;
+                body_copy := array_copy(body_bytes);
+                file := deserialize(body_copy, Modified_File);
+                log("Got file %. Pretending to use this for something…", file.path);
+                array_add(*p.modified_files, file);
+            case .DONE;
+                log("Received % files", p.modified_files.count);
+                received_all_files = true;
+        }
+    }
+
 
     init(*declarations_by_type_info_struct);
 
     p.message  = message;
     p.shutdown = shutdown;
     p.before_intercept = before_intercept;
-    p.channel  = channel;
 
     return p;
 }
@@ -567,7 +613,7 @@ message :: (_p: *Plugin, message: *Message) {
             project = true;
         }
 
-        send_to_server(*p.channel, .FILE, *Source_File.{path=file_message.fully_pathed_filename, project=project});
+        send_to_server(*p.write_channel, .FILE, *Source_File.{path=file_message.fully_pathed_filename, project=project});
     }
 
     if message.kind == .PHASE {
@@ -614,7 +660,7 @@ message :: (_p: *Plugin, message: *Message) {
                 print("declaration location =  %\n", declaration.location);
             }
 
-            process_struct_declaration(declaration, code_struct, *p.channel);
+            process_struct_declaration(declaration, code_struct, *p.write_channel);
         }
         #if DEBUG then print("\n");
     }
@@ -634,16 +680,16 @@ message :: (_p: *Plugin, message: *Message) {
 
         if it.expression.kind == {
             case .DECLARATION;
-                process_declaration(xx it.expression, *p.channel);
+                process_declaration(xx it.expression, *p.write_channel);
             case .PROCEDURE_BODY;
-                process_procedure_body(xx it.expression, *p.channel);
+                process_procedure_body(xx it.expression, *p.write_channel);
             case .DIRECTIVE_IMPORT;
                 import := cast(*Code_Directive_Import) it.expression;
 
                 if import.location.enclosing_load {
 
                     if array_find(files, import.location.enclosing_load.fully_pathed_filename) {
-                        send_to_server(*p.channel, .MODULE_IMPORT, *Module.{ import.name, import.location.enclosing_load.fully_pathed_filename });
+                        send_to_server(*p.write_channel, .MODULE_IMPORT, *Module.{ import.name, import.location.enclosing_load.fully_pathed_filename });
                     }
 
                 }
@@ -656,7 +702,9 @@ message :: (_p: *Plugin, message: *Message) {
 
 shutdown :: (_p: *Plugin) {
     p := cast(*Jai_LSP_Plugin) _p;
-    writer_disconnect(*p.channel);
+    writer_disconnect(*p.write_channel);
+    reader_release_channel(*p.read_channel);
+
     free(p);
     defer deinit(*declarations_by_type_info_struct);
 }
