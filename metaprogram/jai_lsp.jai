@@ -344,7 +344,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
 
                 return _enum.serial;
             
-            // number := 10; | Jirka := Person.{ name = "Jirka" }; | gay := true; | name := "Jirka"; | numbers := int.[1, 3, 5, 7, 9];
+            // number := 10; | Jirka := Person.{ name = "Jirka" }; | name := "Jirka"; | numbers := int.[1, 3, 5, 7, 9];
             case .LITERAL;
                 code_literal := cast(*Code_Literal) decl.expression;
                 _expression := New(Expression);
