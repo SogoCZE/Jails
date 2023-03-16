@@ -19,8 +19,6 @@ DEBUG :: false;
 
 declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarace dle Type_Info_Struct pointru
 
-// jai main.jai -debugger -plug jai_lsp --- import_dir /Users/patriksmely/Documents/Projekty/jai_lsp_meta/metaprogram
-
 Jai_LSP_Plugin :: struct {
     #as using base: Plugin;
     should_run := true;
