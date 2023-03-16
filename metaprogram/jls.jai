@@ -9,15 +9,13 @@
 #load "../shared/binary_serization.jai";
 #load "../shared/shared.jai";
 
-// Jai -> Plugin (jai_lsp) -> Metaprogram (user) -> main.jai
-
 Plugin :: Metaprogram_Plugin;
 
 DEBUG :: false;
 
-declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarace dle Type_Info_Struct pointru
+declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarations by Type_Info_Struct pointer.
 
-Jai_LSP_Plugin :: struct {
+JLS_Plugin :: struct {
     #as using base: Plugin;
     should_run := true;
     write_channel: Write_Channel;
@@ -26,7 +24,7 @@ Jai_LSP_Plugin :: struct {
 }
 
 get_plugin :: () -> *Plugin {
-    p := New(Jai_LSP_Plugin);
+    p := New(JLS_Plugin);
 
     #if OS != .WINDOWS {
         POSIX :: #import "POSIX";
@@ -122,7 +120,7 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
 }
 
 before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
-    p := cast(*Jai_LSP_Plugin) _p;
+    p := cast(*JLS_Plugin) _p;
     options := get_build_options(p.workspace);
     options.output_type = .NO_OUTPUT;
     set_build_options(options, p.workspace);
@@ -189,7 +187,6 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
 
-    // Posléze pošleme na server
     defer send_to_server(channel, .TYPE_INSTANTIATION, type_inst);
 
     // persons: []Person; | groups_of_persons: [][]Person;
@@ -225,9 +222,6 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
         if code_type_inst.type_valued_expression.kind == {
             case .IDENT;
                 ident_expression := cast(*Code_Ident) code_type_inst.type_valued_expression;
-
-                // @todo pokud má struct argumenty jsou všechny declarace v body ANY type
-                // včetně a: int, a: Param - neodkazuje na serial parametru structu
 
                 if ident_expression.resolved_declaration && ident_expression.resolved_declaration.expression && ident_expression.resolved_declaration.expression.location.enclosing_load {
                     type_inst.type_kind = .SERIAL;
@@ -596,13 +590,13 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
     return our_block.serial;
 }
 
-// TODO: nevím jestli tenhle global state dělá moc dobro.
+// @todo: global state - probably not so good.
 files: [..]string;
 
 message :: (_p: *Plugin, message: *Message) {
-    p := cast(*Jai_LSP_Plugin) _p;
+    p := cast(*JLS_Plugin) _p;
 
-    // Získání souborů projektu
+    // Gathering of project files
     if message.kind == .FILE {
         file_message := cast(*Message_File) message;
 
@@ -630,12 +624,6 @@ message :: (_p: *Plugin, message: *Message) {
 
     for tc.structs {
         if it.expression.serial == 0 continue;
-
-        #if DEBUG {
-            // Bereme věci pouze z mainu
-            filename := get_filename(it.expression);
-            if !contains(filename, FOR_FILE) continue;
-        }
 
         code_struct := cast(*Code_Struct) it.expression;
 
@@ -672,12 +660,6 @@ message :: (_p: *Plugin, message: *Message) {
 
         if it.expression.serial == 0 continue;
 
-        #if DEBUG {
-            // Bereme věci pouze z mainu
-            filename := get_filename(it.expression);
-            if !contains(filename, FOR_FILE) continue;
-        }
-
         if it.expression.kind == {
             case .DECLARATION;
                 process_declaration(xx it.expression, *p.write_channel);
@@ -701,7 +683,7 @@ message :: (_p: *Plugin, message: *Message) {
 }
 
 shutdown :: (_p: *Plugin) {
-    p := cast(*Jai_LSP_Plugin) _p;
+    p := cast(*JLS_Plugin) _p;
     writer_disconnect(*p.write_channel);
     reader_release_channel(*p.read_channel);
 

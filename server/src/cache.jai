@@ -12,10 +12,10 @@ Program :: struct {
 
     code_blocks: [..]Block;
 
-    declarations: [..]Declaration; // Array všech declarací
-    declarations_by_serial: Table(ID, *Declaration); // Declarace dle serial
-    declarations_by_name: Table(string, *Declaration); // Declarace dle jména @SPEED: Pointer vs
-    // declarations_by_location: Table(string, []Line); // Declarace dle lokace
+    declarations: [..]Declaration; 
+    declarations_by_serial: Table(ID, *Declaration); 
+    declarations_by_name: Table(string, *Declaration); 
+    // declarations_by_location: Table(string, []Line); // Declarations by location
 }
 
 program_cache: Program;
@@ -41,7 +41,7 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
     }
 
     start := current_time_consensus();
-    result, output, error := run_command("jai", program_cache.entry, "-quiet", "-no_color", "-plug", "jai_lsp", "---", "import_dir", METAPROGRAM_PLUGIN_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
+    result, output, error := run_command("jai", program_cache.entry, "-quiet", "-no_color", "-plug", "jls", "---", "import_dir", METAPROGRAM_PLUGIN_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
     if result.exit_code != 0 || error {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
         return false, error;

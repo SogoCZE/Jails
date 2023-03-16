@@ -24,7 +24,7 @@ LSP_Response_Error :: struct (Data_Type: Type) {
     data: Data_Type;
 }
 
-LSP_Error_Codes :: enum s32 { // Co to má být vlastně za typ?
+LSP_Error_Codes :: enum s32 {
     PARSE_ERROR                         :: -32700;
     INVALID_REQUEST                     :: -32600;
     METHOD_NOT_FOUND                    :: -32601;
@@ -208,7 +208,7 @@ LSP_Location_Link :: struct {
 LSP_Diagnostic :: struct {
     range: LSP_Range;
     serverity: *s64; // *LSP_Diagnostic_Severity;
-    code: *string; //NOTE: prý může být i int
+    code: *string; // @NOTE: potentionaly int
     codeDescription: LSP_Code_Description;
     source: *string;
     message: *[]u32; //*[]LSP_Diagnostic_Tag;
@@ -249,7 +249,7 @@ LSP_Command :: struct {
 /* Markup Content */
 
 
-/* --- TODO: FIX ---
+/* --- @todo: FIX ---
 LSP_Markup_Kind :: enum {
     PLAIN_TEXT; @JsonName(plaintext)
     MARKDOWN; @JsonName(markdown)
@@ -338,7 +338,7 @@ LSP_Failure_Handling_Kind :: enum {
     ABORT;
     TRANSACTION;
     UNDO;
-    TEXT_ONLY_TRANSACTIONAL; // 🛑 Je tohle v pohodě s podtržítky? originál je totiž "textOnlyTransactional"
+    TEXT_ONLY_TRANSACTIONAL; // 🛑 textOnlyTransactional
 }
 
 
@@ -349,7 +349,7 @@ LSP_Work_Done_Progess_Begin :: struct {
     title: string;
     cancellable: *bool;
     message: *string;
-    precentage: *u8; // tohle snad nepůjde nad 100? XD
+    precentage: *u8;
 }
 
 LSP_Work_Done_Progress_Report :: struct {
@@ -379,14 +379,6 @@ LSP_Partial_Result_Params :: struct {
 
 /* Server Lifecycle */
 // 📌
-
-
-
-
-// Neco :: enum {
-//     PRVNI @JsonName(prvni);
-// }
-
 
 LSP_Document_Symbol :: struct {
 
@@ -493,7 +485,7 @@ LSP_Result_Initialize :: struct {
     };
 
     serverInfo: struct {
-        name := "jai_lsp";
+        name := "jsl";
         version := VERSION;
     };
 }

@@ -21,11 +21,11 @@ export function activate(context: ExtensionContext) {
 
     let clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: "file", language: "jai" }],
-        outputChannel: window.createOutputChannel("Jai LSP"),
+        outputChannel: window.createOutputChannel("Jai Language Server"),
     };
 
     client = new LanguageClient(
-        "jai_lsp", "Jai LSP", serverOptions, clientOptions
+        "jls", "Jai Language Server", serverOptions, clientOptions
     );
 
     client.start();

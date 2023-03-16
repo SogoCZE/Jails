@@ -10,9 +10,6 @@
 			"path": "server"
 		},
 		{
-			"path": "sandbox"
-		},
-		{
 			"path": "vscode_extension"
 		}
 	],

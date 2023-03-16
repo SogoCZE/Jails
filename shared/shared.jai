@@ -1,11 +1,9 @@
 #import "Hash_Table";
 
-// Shared Memory věci
-
 IPC_CHANNEL_NAME_FROM_META :: "jls_channel_from_meta";
 IPC_CHANNEL_NAME_TO_META   :: "jls_channel_to_meta";
 
-CHANNEL_DATA_BYTES :: 64 * 1024 * 1024; // 64 MB TODO: co když dojde?
+CHANNEL_DATA_BYTES :: 64 * 1024 * 1024; // 64 MB @ToDo: what if we run out of space?
 HEADER_SIZE :: 2;  // 1 byte for message-or-done, 1 byte for the checksum.
 
 Protocol_Tag :: enum u8 {  // Is there a message here, or are we done?
@@ -131,8 +129,7 @@ Procedure :: struct {
     body: ID;
 }
 
-// TODO: tohle je asi hodně hloupé a šlo by to vymyslet lépe.
-// Kor ten název je fakt něco...
+// @ToDo: this is probably dumb... We could do this better.
 Base_Type_Or_Serial_To :: struct {
     type_kind: enum {
         BASE;

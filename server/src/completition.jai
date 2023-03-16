@@ -1,10 +1,10 @@
 handle_completitions :: (request: LSP_Request_Message_Completion) {
-    file_without_prefix := replace(request.params.textDocument.uri, "file://", "");
+    file_without_uri_prefix := replace(request.params.textDocument.uri, "file://", "");
 
     cursor_pos := request.params.position;
 
     for block: program_cache.code_blocks {
-        if block.location.file != file_without_prefix continue;
+        if block.location.file != file_without_uri_prefix continue;
         
         if block.location.l0 > xx cursor_pos.line continue;
         if block.location.l1 < xx cursor_pos.line continue;
@@ -21,7 +21,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         if !(decl.flags & .IS_GLOBAL) continue;
         if decl.kind != .PROCEDURE continue;
 
-        if decl.flags & .SCOPE_FILE && file_without_prefix != decl.location.file continue;
+        if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
         if !path_in_imported_modules_or_files(decl.location.file) continue;
 
         procedure := cast(*Procedure) decl;

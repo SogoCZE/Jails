@@ -1,13 +1,12 @@
-// TODO:
+// @TODO:
 // - Code block context
 // - Workspaces
-// - Vylepšit nebo předělat detekci entry pointu
+// - Improve or remake entry point detection
 // - Autocomplete
-//     - procedury (parametry atd)
-//     - structy (membery, atd)
-// - Error reporting (to by mělo být easy)
+//     - procedures (params etc)
+//     - structs (members etc)
+// - Error reporting (that shoud be quite easy)
 
-// #import "Compiler";
 #import "Basic";
 #import "File";
 #import "File_Utilities";
@@ -32,11 +31,8 @@
 VERSION :: "1.0.0";
 
 PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "../..");
-// SANDBOX_PATH :: #run tprint("%/sandbox", PROJECT_FOLDER_PATH);
 METAPROGRAM_PLUGIN_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
 
-// Tohle je hodně dummy řešení - měli bychom se zamyslet nad lepším.
-// TODO:
 find_entry_file :: (root: string) -> string {
 
     contains_main_procedure :: (file: string) -> bool {
@@ -44,7 +40,7 @@ find_entry_file :: (root: string) -> string {
         return contains(content, "main ::") || contains(content, "main::");
     }
 
-    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Jaké další?
+    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Maybe build.jai ... etc?
 
     for path: COMMON_MAIN_PATH {
         if file_exists(path) && contains_main_procedure(path) {
@@ -66,7 +62,7 @@ find_entry_file :: (root: string) -> string {
         }
     }
 
-    return ""; // Co když to nenajde?
+    return ""; // What we gonna do when we do not find any 
 }
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
@@ -220,7 +216,7 @@ main :: () {
     thread_start(thread);
 
     while !quit {
-        // reset_temporary_storage(); // čistka paměti...
+        reset_temporary_storage();
 
         body, success := get_message();
         if !success {

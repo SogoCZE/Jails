@@ -3,8 +3,9 @@
 #import "File";
 #import "String";
 #import "Process";
+#import "System";
 
-// Základní build file
+// Basic build file
 #run {
     set_build_options_dc(.{do_output=false});
 
@@ -46,22 +47,32 @@ message_loop :: (w: Workspace, args: []string) {
         break;
     }
 
-    // Uncomment to automaticly run VSCode with Jai LSP Extension
-    // Tohle by nemělo být povinné.. (TODO: zapínat jen přes argument)
-    // vscode_extension_directory := replace(get_working_directory(), "server", "vscode_extension");
-    // vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
+    // When we provide -vscode argument automatically launch vscode with our extension installed.
+    if args.count > 2 && args[2] == "-vscode" {
+        vscode_extension_directory := join(get_working_directory(), "/../vscode_extension");
+        vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
 
-    // assert(OS == .WINDOWS || OS == .MACOS, "Openning vscode on Linux is not supported at the time.");
+        print("%\n", vscode_extension_development_path);
 
-    // vscode_path: string;
+        assert(OS == .WINDOWS || OS == .MACOS, "Openning vscode on Linux is not supported at the time.");
 
-    // if OS == .WINDOWS {
-    //     vscode_path = "C:/Users/sogoc/AppData/Local/Programs/Microsoft VS Code/Code.exe";
-    // }
+        vscode_path: string;
 
-    // if OS == .MACOS {
-    //     vscode_path = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code";
-    // }
+        if OS == .WINDOWS {
+            username, ok := get_username();
+            if !ok {
+                log_error("Cannot resolve Windows username. Cannot launch vscode.");
+                return;
+            }
 
-    // run_command(vscode_path, "--profile=lsp_dev", vscode_extension_development_path);
+            vscode_path = tprint("C:/Users/%/AppData/Local/Programs/Microsoft VS Code/Code.exe", username);
+        }
+
+        if OS == .MACOS {
+            vscode_path = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code";
+        }
+
+        run_command(vscode_path, "--profile=lsp_dev", vscode_extension_development_path);
+    }
+
 }

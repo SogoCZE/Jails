@@ -1,12 +1,6 @@
-// Tady je implementace od https://github.com/osor-io/osor_serialization.
-// Moje původní verze nevyužívala Code Generation tolik a dělala nějaké věci runtime
-// A zatím neřešila Array atd, nicméně ještě nevím jak je na tom performance u tohoto atd.
-// Teoreticky obojí má něco do sebe, ale moje verze byla možná trochu více clear - možná se
-// k ní časem vrátíme a dokončíme jí ale zatím bude bohatě stačit tato verze od cápka.
-
-// Dole je moje testovací implementace.
-
-// - Trochu mě štve, že to generuje kód jako string i když by mohlo přes #Code přímo jako AST.
+// This is slightly modified version of this module https://github.com/osor-io/osor_serialization.
+// I don't know if this is ideal but it worked so far.
+// @SPEED: how fast it is?
 
 #import "Basic";
 #import "Hash_Table";
@@ -417,7 +411,7 @@ get_type_name :: (info : *Type_Info) -> string {
 
 
 
-// Tady je moje testovací implementace:
+// Old test implementation ----
 
 // size_of_bytes :: (data: *void, type: *Type_Info) -> s64 {
 //     total_size: s64;
@@ -443,8 +437,6 @@ get_type_name :: (info : *Type_Info) -> string {
 
 //     return total_size;
 // }
-
-// // Serializace
 
 // to_bytes_helper :: (data: *void, type: *Type_Info, offset: s64, buffer: []u8) {
 //     if type.type == {
@@ -483,8 +475,6 @@ get_type_name :: (info : *Type_Info) -> string {
 
 //     return bytes;
 // }
-
-// // Deserilizace
 
 // from_bytes_helper :: (buffer: []u8, offset: s64, data: *void, info: *Type_Info) -> s64 {
 //     if info.type == {

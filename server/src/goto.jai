@@ -42,7 +42,7 @@ handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string,
 
 handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
-    file_without_picovina := replace(file, "file://", "");
+    file_without_uri_prefix := replace(file, "file://", "");
 
     line := find_line_in_file(file, request.params.position);
 
@@ -69,7 +69,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     for decl: decls {
         // if !(decl.flags & .IS_GLOBAL) continue;
-        if decl.flags & .SCOPE_FILE && file_without_picovina != decl.location.file continue;
+        if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
         array_add(*locations, declaration_to_lsp_location(decl));
     }
 

@@ -1,7 +1,7 @@
 {
-  "name": "jai-lsp",
-  "displayName": "Jai LSP",
-  "description": "Language Server Protocol for Jai",
+  "name": "jai_language_server",
+  "displayName": "Jai Language Server",
+  "description": "Language Server for Jai",
   "version": "0.0.1",
   "publisher": "Patrik Smělý",
   "author": "Patrik Smělý",
@@ -11,7 +11,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/SogoCZE/jai_lsp_meta"
+    "url": "https://github.com/SogoCZE/jai_language_server"
   },
   "scripts": {
     "compile": "tsc -b",
