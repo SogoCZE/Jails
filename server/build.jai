@@ -29,7 +29,6 @@
     compiler_end_intercept(w);
 
     set_build_options_dc(.{do_output=false});
-    set_build_options_dc(.{do_output=false});
 }
 
 message_loop :: (w: Workspace, args: []string) {

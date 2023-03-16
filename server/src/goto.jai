@@ -7,14 +7,14 @@ handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string,
 
     uri: string;
     if module {
-        modules_path := program_cache.import_path[1]; // TODO: hardcoded!
+        modules_path := program_cache.import_path[1]; 
         uri = tprint("%/%/module.jai", modules_path, path);
         if !file_exists(uri) {
            uri = tprint("%/%.jai", modules_path, path);
         }
     } else {
         current_file := path_strip_filename(request.params.textDocument.uri);
-        uri = tprint("%/%", current_file, path); // TODO: hardcored project file!
+        uri = tprint("%/%", current_file, path); 
     }
 
     #if OS == .WINDOWS {
