@@ -1,0 +1,61 @@
+{
+  "name": "jai-lsp",
+  "displayName": "Jai LSP",
+  "description": "Language Server Protocol for Jai",
+  "version": "0.0.1",
+  "publisher": "Patrik Smělý",
+  "author": "Patrik Smělý",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:jai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SogoCZE/jai_lsp_meta"
+  },
+  "scripts": {
+    "compile": "tsc -b",
+    "watch": "tsc --watch",
+    "pack": "cp ../server/bin/* ./out/ && vsce package"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "dependencies": {
+    "vscode-languageclient": "8.0.2"
+  },
+  "devDependencies": {
+    "typescript": "4.9.4",
+    "@types/vscode": "1.74.0",
+    "@types/node": "18.11.18"
+  },
+  "keywords": [
+    "Jai"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "jai",
+        "aliases": [
+          "Jai",
+          "jai"
+        ],
+        "extensions": [
+          ".jai"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jai",
+        "scopeName": "source.jai",
+        "path": "./syntaxes/jai.tmLanguage.json"
+      }
+    ]
+  }
+}
