@@ -9,8 +9,6 @@
 #load "../shared/binary_serization.jai";
 #load "../shared/shared.jai";
 
-#load "./print.jai";
-
 // Jai -> Plugin (jai_lsp) -> Metaprogram (user) -> main.jai
 
 Plugin :: Metaprogram_Plugin;

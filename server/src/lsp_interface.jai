@@ -24,7 +24,7 @@ LSP_Response_Error :: struct (Data_Type: Type) {
     data: Data_Type;
 }
 
-LSP_Error_Codes :: enum s32 { // Co to má být vlastně za typ? 
+LSP_Error_Codes :: enum s32 { 
     PARSE_ERROR             :: -32700;
     INVALID_REQUEST         :: -32600;
     METHOD_NOT_FOUND        :: -32601;
