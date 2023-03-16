@@ -12,7 +12,7 @@ let client: LanguageClient;
 export function activate(context: ExtensionContext) {
     var isWin = process.platform === "win32";
     const pathDelimeter = isWin ? "\\" : "/";
-    const devServerPath = __dirname.replace(`vscode_extension${pathDelimeter}out`, `server${pathDelimeter}bin`) + pathDelimeter + "jlsp" + (isWin ? ".exe" : "");
+    const devServerPath = __dirname.replace(`vscode_extension${pathDelimeter}out`, `server${pathDelimeter}bin`) + pathDelimeter + "jls" + (isWin ? ".exe" : "");
 
     let serverOptions: ServerOptions = {
         command: devServerPath,

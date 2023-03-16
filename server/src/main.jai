@@ -104,6 +104,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             if !success {
                 log_error("Unable to parse initialize message");
                 // @Incomplete: report error back!
+                return;
             }
 
             log("Workspace Folders: %", <<body.params.workspaceFolders);
@@ -131,6 +132,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Request_Message_Definition);
             if !success {
                 log_error("Unable to parse textDocument/definition message");
+                return;
             }
 
             handle_goto(body);
@@ -143,6 +145,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document);
             if !success {
                 log_error("Unable to parse textDocument/didOpen message");
+                return;
             }
 
             file_path := body.params.textDocument.uri;
@@ -154,6 +157,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);
             if !success {
                 log_error("Unable to parse textDocument/didChange message");
+                return;
             }
 
             file_path := body.params.textDocument.uri;
@@ -163,6 +167,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
             if !success {
                 log_error("Unable to parse textDocument/completion message");
+                return;
             }
 
             handle_completitions(body);
