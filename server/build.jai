@@ -44,21 +44,24 @@ message_loop :: (w: Workspace, args: []string) {
         break;
     }
 
+    // Uncomment to automaticly run VSCode with Jai LSP Extension
     // Tohle by nemělo být povinné.. (TODO: zapínat jen přes argument)
-    vscode_extension_directory := replace(get_working_directory(), "server", "vscode_extension");
-    vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
+    // vscode_extension_directory := replace(get_working_directory(), "server", "vscode_extension");
+    // vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
     
-    assert(OS == .WINDOWS || OS == .MACOS, "Openning vscode on Linux is not supported at the time.");
+    // assert(OS == .WINDOWS || OS == .MACOS, "Openning vscode on Linux is not supported at the time.");
 
-    vscode_path: string;
+    // vscode_path: string;
 
-    if OS == .WINDOWS {
-        vscode_path = "C:/Users/sogoc/AppData/Local/Programs/Microsoft VS Code/Code.exe";
-    } 
+    // if OS == .WINDOWS {
+    //     vscode_path = "C:/Users/sogoc/AppData/Local/Programs/Microsoft VS Code/Code.exe";
+    // } 
 
-    if OS == .MACOS {
-        vscode_path = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code";
-    }
+    // if OS == .MACOS {
+    //     vscode_path = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code";
+    // }
 
-    run_command(vscode_path, "--profile=lsp_dev", vscode_extension_development_path);
+    // run_command(vscode_path, "--profile=lsp_dev", vscode_extension_development_path);
+
+
 }   
