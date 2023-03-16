@@ -1,5 +1,11 @@
+# vscode_extension
 node_modules/
+out/
+
+# Jai
 .build/
 bin/
+*.dSYM
+
+# Mac
 .DS_Store
-out

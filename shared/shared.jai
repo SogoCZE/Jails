@@ -1,8 +1,9 @@
 #import "Hash_Table";
 
-// Shared Memory věci
+IPC_CHANNEL_NAME_FROM_META :: "jls_channel_from_meta";
+IPC_CHANNEL_NAME_TO_META   :: "jls_channel_to_meta";
 
-CHANNEL_DATA_BYTES :: 64 * 1024 * 1024; // 64 MB TODO: co když dojde?
+CHANNEL_DATA_BYTES :: 64 * 1024 * 1024; // 64 MB @ToDo: what if we run out of space?
 HEADER_SIZE :: 2;  // 1 byte for message-or-done, 1 byte for the checksum.
 
 Protocol_Tag :: enum u8 {  // Is there a message here, or are we done?
@@ -10,16 +11,16 @@ Protocol_Tag :: enum u8 {  // Is there a message here, or are we done?
     DONE                :: 0;
 
     MESSAGE_START;
-    
+
     INITIALIZATION;
     MODULE_IMPORT;
     FILE;
- 
+
     BLOCK;
     ENUM;
     STRUCT;
     PROCEDURE;
-    TYPE_INSTANTIATION; 
+    TYPE_INSTANTIATION;
     EXPRESSION;
     IF_STATEMENT;
     FOR_STATEMENT;
@@ -29,12 +30,23 @@ Protocol_Tag :: enum u8 {  // Is there a message here, or are we done?
     MESSAGE_END;
 }
 
+Server_To_Metaprogram_Protocol_Tag :: enum u8 {
+    DONE          :: 0;
+    MODIFIED_FILE :: 1;
+}
+
+Modified_File :: struct {
+    path:    string;
+    content: [] u8;
+}
+
+
 ID :: s64;
 
 Our_Declaration_Flags :: enum_flags u32 {
     IS_IMPORTED;
     SCOPE_FILE;
-    IS_GLOBAL; 
+    IS_GLOBAL;
 };
 
 Source_File :: struct {
@@ -54,12 +66,12 @@ Initialization :: struct {
 // Struktury
 Declaration :: struct {
     Location :: struct {
-        file: string; 
+        file: string;
         l0, c0, l1, c1: s32;
     }
 
     flags: Our_Declaration_Flags;
-    
+
     kind: Protocol_Tag;
     name: string;
     serial: ID;
@@ -117,8 +129,7 @@ Procedure :: struct {
     body: ID;
 }
 
-// TODO: tohle je asi hodně hloupé a šlo by to vymyslet lépe.
-// Kor ten název je fakt něco...
+// @ToDo: this is probably dumb... We could do this better.
 Base_Type_Or_Serial_To :: struct {
     type_kind: enum {
         BASE;
@@ -127,7 +138,7 @@ Base_Type_Or_Serial_To :: struct {
         ARRAY;
     }
 
-    base_type: Base_Type; 
+    base_type: Base_Type;
     serial_to: ID; // age: Person;
 }
 
@@ -144,7 +155,7 @@ Expression :: struct {
     #as using base: Declaration;
     base.kind = .EXPRESSION;
 
-    using type: Base_Type_Or_Serial_To;    
+    using type: Base_Type_Or_Serial_To;
 }
 
 // Person :: { name: string; age: int };
@@ -193,6 +204,36 @@ If_Statement :: struct {
     is_directive_static := false;
 }
 
+decode_command :: (message: Read_Message, $T: Type) -> bool, T, [] u8 {
+    command := cast(T) message.user_read_pointer[0];
+
+    valid_messages := type_info(T).values;
+    if !array_find(valid_messages, cast(s64) command) {
+        log_error("Got an invalid command on a data message: %", command);
+        return false, command, .[];
+    }
+
+    stored_checksum := message.user_read_pointer[1];
+
+    data_bytes := message.user_read_bytes - HEADER_SIZE;
+
+    my_checksum: u8;
+    for 0..data_bytes-1 {
+        my_checksum ^= message.user_read_pointer[it + HEADER_SIZE];
+    }
+
+    if my_checksum != stored_checksum {
+        log_error("Checksum mismatch in message %: Wanted %, got %. Quitting.\n", command, stored_checksum, my_checksum);
+        return false, command, .[];
+    }
+
+    body_bytes: [] u8 = ---;
+    body_bytes.data = message.user_read_pointer + HEADER_SIZE;
+    body_bytes.count = message.user_read_bytes - HEADER_SIZE;
+
+    return true, command, body_bytes;
+}
+
 // OLD --------
 
 // Procedure_Call :: struct {
@@ -205,7 +246,7 @@ If_Statement :: struct {
 // Indent :: struct {
 //     #as using base: Node;
 //     base.kind = .INDENT;
-    
+
 //     serial_to: s64;
 // }
 
@@ -230,6 +271,6 @@ If_Statement :: struct {
 
 // for node: lines[line] {
 //     if node.location.c0 >= column && node.location.c1 <= column {
-        
-//     } 
+
+//     }
 // }

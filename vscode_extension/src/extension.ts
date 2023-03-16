@@ -12,7 +12,7 @@ let client: LanguageClient;
 export function activate(context: ExtensionContext) {
     var isWin = process.platform === "win32";
     const pathDelimeter = isWin ? "\\" : "/";
-    const devServerPath = __dirname.replace(`vscode_extension${pathDelimeter}out`, `server${pathDelimeter}bin`) + pathDelimeter + "jlsp" + (isWin ? ".exe" : "");
+    const devServerPath = __dirname.replace(`vscode_extension${pathDelimeter}out`, `server${pathDelimeter}bin`) + pathDelimeter + "jls" + (isWin ? ".exe" : "");
 
     let serverOptions: ServerOptions = {
         command: devServerPath,
@@ -21,11 +21,11 @@ export function activate(context: ExtensionContext) {
 
     let clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: "file", language: "jai" }],
-        outputChannel: window.createOutputChannel("Jai LSP"),
+        outputChannel: window.createOutputChannel("Jai Language Server"),
     };
 
     client = new LanguageClient(
-        "jai_lsp", "Jai LSP", serverOptions, clientOptions
+        "jls", "Jai Language Server", serverOptions, clientOptions
     );
 
     client.start();

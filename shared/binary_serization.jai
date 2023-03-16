@@ -1,12 +1,6 @@
-// Tady je implementace od https://github.com/osor-io/osor_serialization.
-// Moje původní verze nevyužívala Code Generation tolik a dělala nějaké věci runtime
-// A zatím neřešila Array atd, nicméně ještě nevím jak je na tom performance u tohoto atd.
-// Teoreticky obojí má něco do sebe, ale moje verze byla možná trochu více clear - možná se 
-// k ní časem vrátíme a dokončíme jí ale zatím bude bohatě stačit tato verze od cápka.
-
-// Dole je moje testovací implementace.
-
-// - Trochu mě štve, že to generuje kód jako string i když by mohlo přes #Code přímo jako AST.
+// This is slightly modified version of this module https://github.com/osor-io/osor_serialization.
+// I don't know if this is ideal but it worked so far.
+// @SPEED: how fast it is?
 
 #import "Basic";
 #import "Hash_Table";
@@ -15,7 +9,7 @@
 serialize :: (input : *$T, allocator: Allocator = context.allocator) -> []u8 #must {
     ALIGNED_INPUT_SIZE :: #run align_for_serialization(size_of(T));
 
-    dynamic_memory_required := cast(s64) handle_dynamic_memory(input, null, .COUNT); 
+    dynamic_memory_required := cast(s64) handle_dynamic_memory(input, null, .COUNT);
 
     // print("dynamic_memory_required = %, ALIGNED_INPUT_SIZE = %\n", dynamic_memory_required, ALIGNED_INPUT_SIZE);
 
@@ -25,7 +19,7 @@ serialize :: (input : *$T, allocator: Allocator = context.allocator) -> []u8 #mu
     memset(buffer.data, 0, buffer.count);
 
     dynamic_memory: []u8;
-    dynamic_memory.count = dynamic_memory_required; 
+    dynamic_memory.count = dynamic_memory_required;
     dynamic_memory.data  = buffer.data + ALIGNED_INPUT_SIZE;
 
     output := cast(*T)buffer.data;
@@ -69,9 +63,9 @@ cleanup_for_serialization :: (element : *$T) {
 
 #scope_file
 
-Handle_Dynamic_Memory_Mode :: enum { 
-    COUNT; 
-    COPY_AND_ENCODE; 
+Handle_Dynamic_Memory_Mode :: enum {
+    COUNT;
+    COPY_AND_ENCODE;
 }
 
 handle_dynamic_memory :: (element: *$T, dynamic_memory_pointer: *u8, $mode: Handle_Dynamic_Memory_Mode, $allow_pointer := true) -> next_dynamic_memory_pointer: *u8 #must {
@@ -109,13 +103,13 @@ handle_dynamic_memory :: (element: *$T, dynamic_memory_pointer: *u8, $mode: Hand
 
                     case .VIEW;
                         a(#string DONE
-                            array_data_size := element.count * size_of(type_of(<<element.data)); 
+                            array_data_size := element.count * size_of(type_of(<<element.data));
                         DONE);
 
                         #if mode == .COPY_AND_ENCODE {
                             a(#string DONE
                                 memcpy(dynamic_memory_pointer, element.data, array_data_size);           // copy original array elements
-                                element.data = xx (cast(u64)dynamic_memory_pointer - cast(u64)element);  // encode the data pointer 
+                                element.data = xx (cast(u64)dynamic_memory_pointer - cast(u64)element);  // encode the data pointer
                                 data_start := cast(type_of(element.data)) dynamic_memory_pointer;        // get a pointer to the data to iterate
                             DONE);
                         } else {
@@ -127,18 +121,18 @@ handle_dynamic_memory :: (element: *$T, dynamic_memory_pointer: *u8, $mode: Hand
                         a(#string DONE
                             dynamic_memory_pointer = align_for_serialization(dynamic_memory_pointer + array_data_size); // commit the dynamic allocation
                             for 0..element.count-1 {
-                                dynamic_memory_pointer = handle_dynamic_memory(data_start + it, dynamic_memory_pointer, mode); 
+                                dynamic_memory_pointer = handle_dynamic_memory(data_start + it, dynamic_memory_pointer, mode);
                             }
                         DONE);
 
                     case .FIXED;
                         a(#string DONE
                             for 0..element.count-1 {
-                                dynamic_memory_pointer = handle_dynamic_memory(element.data + it, dynamic_memory_pointer, mode); 
+                                dynamic_memory_pointer = handle_dynamic_memory(element.data + it, dynamic_memory_pointer, mode);
                             }
                         DONE);
                 }
-            
+
             case .STRUCT;
             struct_info := cast(*Type_Info_Struct)info;
             #if mode == .COUNT {
@@ -153,12 +147,12 @@ handle_dynamic_memory :: (element: *$T, dynamic_memory_pointer: *u8, $mode: Hand
                     replaced_element := serialization_replacement(element);
                     #assert(size_of(T) == size_of(*%1));
                 DONE, replacement_type);
-                
+
                 #if mode == .COUNT {
                     p(#string DONE
                         pointer_to_replaced_element := *replaced_element;
                         dynamic_memory_pointer = handle_dynamic_memory(*pointer_to_replaced_element, dynamic_memory_pointer, mode, allow_pointer = true);
-                    DONE, replacement_type);
+                    DONE);
                 } else {
                     p(#string DONE
                         <<(cast(**%1)element) = *replaced_element;
@@ -170,9 +164,9 @@ handle_dynamic_memory :: (element: *$T, dynamic_memory_pointer: *u8, $mode: Hand
                 for member : struct_info.members {
                     if !(member.flags & .CONSTANT) {
                         p(#string DONE
-                        dynamic_memory_pointer = handle_dynamic_memory(cast(*type_of(T.%1))((cast(*u8)element) + %2), 
+                        dynamic_memory_pointer = handle_dynamic_memory(cast(*type_of(T.%1))((cast(*u8)element) + %2),
                                                                        dynamic_memory_pointer,
-                                                                       mode); 
+                                                                       mode);
                         DONE, member.name, member.offset_in_bytes);
                     }
                 }
@@ -205,7 +199,7 @@ handle_dynamic_memory :: (element: *$T, dynamic_memory_pointer: *u8, $mode: Hand
 
                     a(#string DONE
                         dynamic_memory_pointer = align_for_serialization(dynamic_memory_pointer + element_size); // commit the dynamic allocation
-                        dynamic_memory_pointer = handle_dynamic_memory(element_data, dynamic_memory_pointer, mode); 
+                        dynamic_memory_pointer = handle_dynamic_memory(element_data, dynamic_memory_pointer, mode);
                     }
 
                     process_pointer(element, dynamic_memory_pointer);
@@ -219,7 +213,7 @@ handle_dynamic_memory :: (element: *$T, dynamic_memory_pointer: *u8, $mode: Hand
                     DONE);
                 }
 
-            case .VARIANT; 
+            case .VARIANT;
                 variant_info := cast(*Type_Info_Variant)info;
                 p(#string DONE
                     dynamic_memory_pointer = handle_dynamic_memory(cast(*%1)element, dynamic_memory_pointer, mode, allow_pointer);
@@ -283,12 +277,12 @@ decode_dynamic_memory :: (element : *$T) {
                         if do_decode {
                             a(#string DONE
                                 for 0..element.count-1 {
-                                    inline decode_dynamic_memory(element.data + it); 
+                                    inline decode_dynamic_memory(element.data + it);
                                 }
                             DONE);
                         }
                 }
-            
+
             case .STRUCT;
                 struct_info := cast(*Type_Info_Struct) info;
                 replace, replacement_type := do_serialization_replacement(struct_info);
@@ -296,8 +290,8 @@ decode_dynamic_memory :: (element : *$T) {
                     p(#string DONE
                         #assert(size_of(T) == size_of(*%1));
                         pointer_to_replaced_element : **%1 = cast(**%1)element;
-                        inline decode_dynamic_memory(pointer_to_replaced_element); 
-                        <<element = deserialization_replacement(<<pointer_to_replaced_element); 
+                        inline decode_dynamic_memory(pointer_to_replaced_element);
+                        <<element = deserialization_replacement(<<pointer_to_replaced_element);
                     DONE, replacement_type);
                 }
 
@@ -324,7 +318,7 @@ decode_dynamic_memory :: (element : *$T) {
                 offset := <<(cast(*u64)element);
                 if offset > 0 {
                     <<element = cast(T)(cast(u64)element + <<(cast(*u64)element));
-                    inline decode_dynamic_memory(<<element); 
+                    inline decode_dynamic_memory(<<element);
                 }
                 DONE);
 
@@ -337,7 +331,7 @@ decode_dynamic_memory :: (element : *$T) {
 
         return builder_to_string(b);
     }();
-} 
+}
 
 Serialized_Data_Allocator :: Allocator.{
     proc = (mode: Allocator_Mode, size: s64, old_size: s64, old_memory_pointer: *void, allocator_data: *void) -> *void {
@@ -369,9 +363,9 @@ quick_string_builder :: () #expand {
     `_builder : String_Builder;
     _builder.allocator = __temporary_allocator;
     `defer reset(*_builder);
-    
+
     `b := *_builder;
-    
+
     `p :: (format_string : string, args: ..Any) #expand {
         print_to_builder(*_builder, format_string, ..args);
     } @PrintLike
@@ -387,7 +381,7 @@ get_type_name :: (info : *Type_Info) -> string {
     builder : String_Builder;
     free_buffers(*builder);
     get_type_name_internal(*builder, info);
-    
+
     get_type_name_internal :: (builder : *String_Builder, info : *Type_Info) {
         if info.type == .PROCEDURE {
             info_proc := cast(*Type_Info_Procedure)(info);
@@ -417,7 +411,7 @@ get_type_name :: (info : *Type_Info) -> string {
 
 
 
-// Tady je moje testovací implementace:
+// Old test implementation ----
 
 // size_of_bytes :: (data: *void, type: *Type_Info) -> s64 {
 //     total_size: s64;
@@ -443,8 +437,6 @@ get_type_name :: (info : *Type_Info) -> string {
 
 //     return total_size;
 // }
-
-// // Serializace
 
 // to_bytes_helper :: (data: *void, type: *Type_Info, offset: s64, buffer: []u8) {
 //     if type.type == {
@@ -484,8 +476,6 @@ get_type_name :: (info : *Type_Info) -> string {
 //     return bytes;
 // }
 
-// // Deserilizace
-
 // from_bytes_helper :: (buffer: []u8, offset: s64, data: *void, info: *Type_Info) -> s64 {
 //     if info.type == {
 //         case .STRUCT;
@@ -503,7 +493,7 @@ get_type_name :: (info : *Type_Info) -> string {
 
 //             string_value.count = << cast(*s64) (buffer.data + offset);
 //             string_value.data = buffer.data + offset + count_size;
-            
+
 //             return count_size + string_value.count;
 //         case .ARRAY;
 //             assert(true, "zatím nepodporujeme array");
@@ -521,7 +511,7 @@ get_type_name :: (info : *Type_Info) -> string {
 // from_bytes :: (bytes: []u8, $T: Type) -> T {
 //     result: T;
 
-//     info := type_info(T);           
+//     info := type_info(T);
 //     readed := from_bytes_helper(bytes, 0, *result, info);
 
 //     return result;

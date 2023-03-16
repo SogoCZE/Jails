@@ -1,6 +1,6 @@
 
-/* 
-    --- Base Protocol JSON Structures --- 
+/*
+    --- Base Protocol JSON Structures ---
 */
 
 LSP_Message :: struct {
@@ -24,22 +24,23 @@ LSP_Response_Error :: struct (Data_Type: Type) {
     data: Data_Type;
 }
 
-LSP_Error_Codes :: enum s32 { 
-    PARSE_ERROR             :: -32700;
-    INVALID_REQUEST         :: -32600;
-    METHOD_NOT_FOUND        :: -32601;
-    INVALID_PARAMS          :: -32602;
-    INTERNAL_ERROR          :: -32603;
+LSP_Error_Codes :: enum s32 {
+    PARSE_ERROR                         :: -32700;
+    INVALID_REQUEST                     :: -32600;
+    METHOD_NOT_FOUND                    :: -32601;
+    INVALID_PARAMS                      :: -32602;
+    INTERNAL_ERROR                      :: -32603;
     JSON_RPC_RESERVED_ERROR_RANGE_START :: -32099;
-    SERVER_NOT_INITIALIZED  :: -32002;
-    UNKNOWN_ERROR_CODE      :: -32001;
-    JSON_RPC_RESERVED_ERROR_RANGE_END :: -32000;
-    LSP_RESERVED_ERROR_RANGE_START :: -32899;
-    REQUEST_FAILED          :: -32803;
-    SERVER_CANCELLED        :: -32802;
-    CONTENT_MODIFIED        :: -32801;
-    REQUEST_CANCELLED       :: -32800;
-    LSP_RESERVED_ERROR_RANGE_END :: -32800;
+    SERVER_NOT_INITIALIZED              :: -32002;
+    UNKNOWN_ERROR_CODE                  :: -32001;
+    JSON_RPC_RESERVED_ERROR_RANGE_END   :: -32000;
+
+    LSP_RESERVED_ERROR_RANGE_START      :: -32899;
+    REQUEST_FAILED                      :: -32803;
+    SERVER_CANCELLED                    :: -32802;
+    CONTENT_MODIFIED                    :: -32801;
+    REQUEST_CANCELLED                   :: -32800;
+    LSP_RESERVED_ERROR_RANGE_END        :: -32800;
 }
 
 LSP_Notification_Message :: struct {
@@ -93,7 +94,7 @@ LSP_Range :: struct {
 
 LSP_Text_Document_Position :: struct {
     textDocument: LSP_Text_Document_Identifier;
-    position: LSP_Position; 
+    position: LSP_Position;
 }
 
 LSP_Request_Message_Document_Symbol :: struct {
@@ -103,21 +104,23 @@ LSP_Request_Message_Document_Symbol :: struct {
     }
 }
 
-LSP_Did_Open_Text_Document :: struct { 
+LSP_Did_Open_Text_Document :: struct {
     using request: LSP_Request_Message;
     params: struct {
         textDocument: struct {
             uri: string;
-            languageID: string; 
+            languageID: string;
             version: u32;
             text: string;
         }
     }
 }
 
+LSP_Did_Save_Text_Document :: LSP_Did_Open_Text_Document;
+
 LSP_Content_Change :: struct {
     range: LSP_Range;
-    text: string;   
+    text: string;
 }
 
 LSP_Did_Change_Text_Document :: struct {
@@ -128,7 +131,7 @@ LSP_Did_Change_Text_Document :: struct {
             version: u32;
         }
 
-        contentChanges: []LSP_Content_Change;
+        contentChanges: [] LSP_Content_Change;
     }
 }
 
@@ -205,7 +208,7 @@ LSP_Location_Link :: struct {
 LSP_Diagnostic :: struct {
     range: LSP_Range;
     serverity: *s64; // *LSP_Diagnostic_Severity;
-    code: *string; //NOTE: prý může být i int
+    code: *string; // @NOTE: potentionaly int
     codeDescription: LSP_Code_Description;
     source: *string;
     message: *[]u32; //*[]LSP_Diagnostic_Tag;
@@ -225,7 +228,7 @@ LSP_Diagnostic_Tag :: enum {
     DEPRECATED;
 }
 
-LSP_Diagnostic_Related_Information :: struct { 
+LSP_Diagnostic_Related_Information :: struct {
     location: LSP_Location;
     message: string;
 }
@@ -245,8 +248,8 @@ LSP_Command :: struct {
 
 /* Markup Content */
 
- 
-/* --- TODO: FIX ---
+
+/* --- @todo: FIX ---
 LSP_Markup_Kind :: enum {
     PLAIN_TEXT; @JsonName(plaintext)
     MARKDOWN; @JsonName(markdown)
@@ -335,7 +338,7 @@ LSP_Failure_Handling_Kind :: enum {
     ABORT;
     TRANSACTION;
     UNDO;
-    TEXT_ONLY_TRANSACTIONAL; // 🛑 Je tohle v pohodě s podtržítky? originál je totiž "textOnlyTransactional"
+    TEXT_ONLY_TRANSACTIONAL; // 🛑 textOnlyTransactional
 }
 
 
@@ -346,7 +349,7 @@ LSP_Work_Done_Progess_Begin :: struct {
     title: string;
     cancellable: *bool;
     message: *string;
-    precentage: *u8; // tohle snad nepůjde nad 100? XD 
+    precentage: *u8;
 }
 
 LSP_Work_Done_Progress_Report :: struct {
@@ -376,14 +379,6 @@ LSP_Partial_Result_Params :: struct {
 
 /* Server Lifecycle */
 // 📌
-
-
-
-
-// Neco :: enum {
-//     PRVNI @JsonName(prvni);
-// }
-
 
 LSP_Document_Symbol :: struct {
 
@@ -464,8 +459,8 @@ LSP_Request_Message_Initialize :: struct {
             name: string;
             version: string;
         };
-        
-        rootPath: *string; 
+
+        rootPath: *string;
         rootUri: *string;
         workspaceFolders: *[]Workspace_Folder;
     }
@@ -477,7 +472,7 @@ LSP_Result_Initialize :: struct {
         // semanticTokensProvider := true;
         // documentSymbolProvider := true;
         definitionProvider := true;
-        
+
         completionProvider: struct {
             triggerCharacters := string.[".", ":", "="];
         };
@@ -485,12 +480,12 @@ LSP_Result_Initialize :: struct {
         textDocumentSync: struct {
             openClose := true;
             save := true;
-            change := 2; 
+            change := 2;
         };
     };
 
     serverInfo: struct {
-        name := "jai_lsp";
+        name := "jsl";
         version := VERSION;
     };
 }
@@ -534,7 +529,7 @@ LSP_Completion_Item :: struct {
     kind: u8;
 
     Kind: enum u8 {
-        Text :: 1; 
+        Text :: 1;
         Method :: 2;
         Function :: 3;
         Constructor :: 4;
@@ -668,7 +663,7 @@ lsp_log :: (message : string, data : *void, info : Log_Info) {
 
     if message.data[message.count - 1] == #char "\n" then sent_log.params.message.count -= 1;
 
-    if info.common_flags == { 
+    if info.common_flags == {
         case .ERROR;
             sent_log.params.type = 1;
         case .WARNING;
@@ -677,7 +672,7 @@ lsp_log :: (message : string, data : *void, info : Log_Info) {
             sent_log.params.type = 4;
         case;
             sent_log.params.type = 3;
-    } 
+    }
 
     lsp_send(sent_log);
 }
@@ -685,16 +680,27 @@ lsp_log :: (message : string, data : *void, info : Log_Info) {
 lsp_send :: (data: $T) {
     body := json_write_string(data);
     print("Content-Length: %\r\n\r\n%", body.count, body);
-}  
+}
 
 lsp_respond :: (id: u32, data: $T) {
     Full_Reply :: struct {
-        using request: LSP_Response_Message;
+        using response: LSP_Response_Message;
         result: T;
-    };
+    }
 
     lsp_send(Full_Reply.{
-        request.id=id,
+        response.id=id,
         result=data,
     });
+}
+
+lsp_respond_with_error :: (id: u32, code: LSP_Error_Codes, message: string, data: $T) {
+    reply: struct {
+        using response: LSP_Response_Message;
+        error: LSP_Response_Error(T);
+    };
+
+    reply.id = id;
+    reply.error = .{code, message, data};
+    lsp_send(reply);
 }

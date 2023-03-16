@@ -9,41 +9,85 @@
 #load "../shared/binary_serization.jai";
 #load "../shared/shared.jai";
 
-// Jai -> Plugin (jai_lsp) -> Metaprogram (user) -> main.jai
-
 Plugin :: Metaprogram_Plugin;
 
 DEBUG :: false;
 
-declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarace dle Type_Info_Struct pointru
+declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarations by Type_Info_Struct pointer.
 
-Jai_LSP_Plugin :: struct {
+JLS_Plugin :: struct {
     #as using base: Plugin;
     should_run := true;
-    channel: Write_Channel;
+    write_channel: Write_Channel;
+    read_channel: Read_Channel;
+    modified_files: [..] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
 }
 
 get_plugin :: () -> *Plugin {
-    p := New(Jai_LSP_Plugin);
+    p := New(JLS_Plugin);
 
-    channel_success, channel := writer_connect("jlsp");
-    if !channel_success {
-        log_error("Exiting due to channel opening failure.\n");
+    #if OS != .WINDOWS {
+        POSIX :: #import "POSIX";
+        POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
+    }
+
+    success: bool;
+    success, p.read_channel = reader_create_channel(IPC_CHANNEL_NAME_TO_META, CHANNEL_DATA_BYTES);
+    if !success {
+        log_error("Could not open read channel.");
+        exit(1);
+    }
+
+    success, p.write_channel = writer_connect(IPC_CHANNEL_NAME_FROM_META);
+    if !success {
+        log_error("Could not open write channel.");
         exit(1);
     }
 
     options := get_build_options();
-    
-    send_to_server(*channel, .INITIALIZATION, *Initialization.{
+
+    send_to_server(*p.write_channel, .INITIALIZATION, *Initialization.{
         import_path=options.import_path
     });
+
+
+    // Read all (modified) files from the server
+    received_all_files := false;
+    while !received_all_files {
+        message_success, fatal_error, message := reader_poll_for_message(*p.read_channel);
+        if fatal_error {
+            log_error("Fatal error");
+            exit(1);
+        }
+
+        if !message_success {
+            sleep_milliseconds(1);
+            continue;
+        }
+
+        defer reader_done_with_message(*message);
+
+        success, command, body_bytes := decode_command(message, Server_To_Metaprogram_Protocol_Tag);
+        if !success exit(1);
+
+        if command == {
+            case .MODIFIED_FILE;
+                body_copy := array_copy(body_bytes);
+                file := deserialize(body_copy, Modified_File);
+                log("Got file %. Pretending to use this for something…", file.path);
+                array_add(*p.modified_files, file);
+            case .DONE;
+                log("Received % files", p.modified_files.count);
+                received_all_files = true;
+        }
+    }
+
 
     init(*declarations_by_type_info_struct);
 
     p.message  = message;
     p.shutdown = shutdown;
     p.before_intercept = before_intercept;
-    p.channel  = channel;
 
     return p;
 }
@@ -59,7 +103,7 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
             sleep_milliseconds(1);
             continue;
         }
-        
+
         message.user_write_pointer[0] = cast(u8) command;
         checksum: u8;
 
@@ -72,11 +116,11 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
 
         writer_commit_message(channel, message);
         break;
-    }    
-} 
+    }
+}
 
 before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
-    p := cast(*Jai_LSP_Plugin) _p;
+    p := cast(*JLS_Plugin) _p;
     options := get_build_options(p.workspace);
     options.output_type = .NO_OUTPUT;
     set_build_options(options, p.workspace);
@@ -100,14 +144,14 @@ map_to_declaration:: (code_declarations: []*Code_Declaration, channel: *Write_Ch
     type_instantiations := NewArray(code_declarations.count, s64);
 
     for code_declarations type_instantiations[it_index] = process_declaration(it, channel);
-    
+
     return type_instantiations;
 }
 
 process_procedure_body :: (body: *Code_Procedure_Body, channel: *Write_Channel) {
     body.block.serial = body.serial;
 
-    process_code_block(body.block, channel); 
+    process_code_block(body.block, channel);
 }
 
 process_number :: (type: *Type_Info) -> Base_Type {
@@ -143,7 +187,6 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
 
-    // Posléze pošleme na server
     defer send_to_server(channel, .TYPE_INSTANTIATION, type_inst);
 
     // persons: []Person; | groups_of_persons: [][]Person;
@@ -153,7 +196,7 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
 
         type_inst.serial_to = new_type_array.serial;
         type_inst.type_kind = .ARRAY;
-    
+
         if code_type_inst.inst_flags & .ARRAY_VIEW {
             new_type_array.type = .ARRAY_VIEW;
         } else if code_type_inst.inst_flags & .RESIZABLE {
@@ -179,9 +222,6 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
         if code_type_inst.type_valued_expression.kind == {
             case .IDENT;
                 ident_expression := cast(*Code_Ident) code_type_inst.type_valued_expression;
-                
-                // @todo pokud má struct argumenty jsou všechny declarace v body ANY type
-                // včetně a: int, a: Param - neodkazuje na serial parametru structu
 
                 if ident_expression.resolved_declaration && ident_expression.resolved_declaration.expression && ident_expression.resolved_declaration.expression.location.enclosing_load {
                     type_inst.type_kind = .SERIAL;
@@ -223,7 +263,7 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
 
         return type_inst.serial;
     }
- 
+
     //  age: int; | persons: []Person;
     if code_type_inst.result {
         type_inst.type_kind = .BASE;
@@ -259,7 +299,7 @@ process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Stru
     code_struct.block.serial = _struct.serial;
     _struct.block = process_code_block(code_struct.block, channel);
 
-    send_to_server(channel, .STRUCT, _struct); 
+    send_to_server(channel, .STRUCT, _struct);
 
     return _struct.serial;
 }
@@ -294,7 +334,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
 
     if decl.type_inst {
         return process_type_instantiation(declaration, decl.type_inst, channel);
-    }   
+    }
 
     if decl.expression {
         #if DEBUG then print("decl.expression.kind = %\n", decl.expression.kind);
@@ -312,12 +352,12 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                 _procedure.returns = map_to_declaration(code_procedure_header.returns, channel);
 
                 send_to_server(channel, .PROCEDURE, _procedure);
-                
+
                 return _procedure.serial;
 
             // Person :: struct { name: string; };
-            case .STRUCT; 
-                return process_struct_declaration(declaration, xx decl.expression, channel); 
+            case .STRUCT;
+                return process_struct_declaration(declaration, xx decl.expression, channel);
 
             // FOOD :: enum { APPLE :: 1; };
             case .ENUM;
@@ -332,14 +372,14 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                 } else {
                     _enum.type = process_number(code_enum.internal_type);
                 }
-                
+
                 code_enum.block.serial = _enum.serial;
                 _enum.block = process_code_block(code_enum.block, channel);
 
                 send_to_server(channel, .ENUM, _enum);
 
                 return _enum.serial;
-            
+
             // number := 10; | Jirka := Person.{ name = "Jirka" }; | name := "Jirka"; | numbers := int.[1, 3, 5, 7, 9];
             case .LITERAL;
                 code_literal := cast(*Code_Literal) decl.expression;
@@ -369,7 +409,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
 
                         _expression.serial_to = identExpression.resolved_declaration.serial;
                         #if DEBUG then print("_expression.serial_to = % \n", _expression.serial_to);
-                    case .STRING; 
+                    case .STRING;
                         _expression.base_type = .STRING;
                         #if DEBUG then print("_expression.type = string\n");
                     case .NUMBER;
@@ -383,9 +423,9 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                 }
 
                 send_to_server(channel, .EXPRESSION, _expression);
-        
+
                 return _expression.serial;
-            
+
             // apple := FOOD.Apple;
             case .BINARY_OPERATOR;
                 code_binary_operator := cast(*Code_Binary_Operator) decl.expression;
@@ -411,11 +451,11 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                 send_to_server(channel, .EXPRESSION, _expression);
 
                 return _expression.serial;
-            
-            // number := number2; 
+
+            // number := number2;
             case .IDENT;
                 code_ident:= cast(*Code_Ident) decl.expression;
-              
+
                 _expression := New(Expression);
                 _expression.base = declaration;
                 _expression.kind = .EXPRESSION;
@@ -478,7 +518,7 @@ process_code_for :: (for_statement: *Code_For, channel: *Write_Channel) -> ID {
     our_for_statement.serial = for_statement.serial;
 
     our_for_statement.block = process_code_block(for_statement.block, channel);
-    
+
     if for_statement.ident_decl && for_statement.ident_decl.kind == .DECLARATION {
         iterator_declaration := cast(*Code_Declaration) for_statement.ident_decl;
         if iterator_declaration.name != "it" {
@@ -486,7 +526,7 @@ process_code_for :: (for_statement: *Code_For, channel: *Write_Channel) -> ID {
             #if DEBUG then print("our_for_statement.iterator = %\n", our_for_statement.iterator);
         }
     }
-    
+
     return our_for_statement.serial;
 }
 
@@ -505,7 +545,7 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
             #if DEBUG then print("statement.kind = %\n", statement.kind);
 
             if statement.kind == {
-                case .DECLARATION; 
+                case .DECLARATION;
                     code_declaration := cast(*Code_Declaration) statement;
                     if !code_declaration.expression || code_declaration.expression.kind != .PROCEDURE_HEADER {
                         declarations_serials[it_index] = process_declaration(xx statement, channel);
@@ -513,19 +553,19 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
                         declarations_serials[it_index] = statement.serial;
                     }
 
-                case .BLOCK; 
+                case .BLOCK;
                     declarations_serials[it_index] = process_code_block(xx statement, channel);
 
-                case .WHILE; 
+                case .WHILE;
                     declarations_serials[it_index] = process_code_while(xx statement, channel);
 
-                case .FOR; 
+                case .FOR;
                     declarations_serials[it_index] = process_code_for(xx statement, channel);
 
-                case .DIRECTIVE_STATIC_IF; 
+                case .DIRECTIVE_STATIC_IF;
                     declarations_serials[it_index] = process_code_if(xx statement, channel, true);
 
-                case .IF; 
+                case .IF;
                     declarations_serials[it_index] = process_code_if(xx statement, channel);
             }
         }
@@ -550,13 +590,13 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
     return our_block.serial;
 }
 
-// TODO: nevím jestli tenhle global state dělá moc dobro.
+// @todo: global state - probably not so good.
 files: [..]string;
 
 message :: (_p: *Plugin, message: *Message) {
-    p := cast(*Jai_LSP_Plugin) _p;
+    p := cast(*JLS_Plugin) _p;
 
-    // Získání souborů projektu
+    // Gathering of project files
     if message.kind == .FILE {
         file_message := cast(*Message_File) message;
 
@@ -567,7 +607,7 @@ message :: (_p: *Plugin, message: *Message) {
             project = true;
         }
 
-        send_to_server(*p.channel, .FILE, *Source_File.{path=file_message.fully_pathed_filename, project=project});
+        send_to_server(*p.write_channel, .FILE, *Source_File.{path=file_message.fully_pathed_filename, project=project});
     }
 
     if message.kind == .PHASE {
@@ -584,12 +624,6 @@ message :: (_p: *Plugin, message: *Message) {
 
     for tc.structs {
         if it.expression.serial == 0 continue;
-
-        #if DEBUG {
-            // Bereme věci pouze z mainu
-            filename := get_filename(it.expression);
-            if !contains(filename, FOR_FILE) continue;
-        }
 
         code_struct := cast(*Code_Struct) it.expression;
 
@@ -614,7 +648,7 @@ message :: (_p: *Plugin, message: *Message) {
                 print("declaration location =  %\n", declaration.location);
             }
 
-            process_struct_declaration(declaration, code_struct, *p.channel);
+            process_struct_declaration(declaration, code_struct, *p.write_channel);
         }
         #if DEBUG then print("\n");
     }
@@ -623,27 +657,21 @@ message :: (_p: *Plugin, message: *Message) {
         // @note: compiler catching expression with serial 0 when
         // Person :: struct { name := "Jirka"; }
 
-        
-        if it.expression.serial == 0 continue;
 
-        #if DEBUG {
-            // Bereme věci pouze z mainu
-            filename := get_filename(it.expression);
-            if !contains(filename, FOR_FILE) continue;
-        }
+        if it.expression.serial == 0 continue;
 
         if it.expression.kind == {
             case .DECLARATION;
-                process_declaration(xx it.expression, *p.channel);
+                process_declaration(xx it.expression, *p.write_channel);
             case .PROCEDURE_BODY;
-                process_procedure_body(xx it.expression, *p.channel);
+                process_procedure_body(xx it.expression, *p.write_channel);
             case .DIRECTIVE_IMPORT;
                 import := cast(*Code_Directive_Import) it.expression;
 
                 if import.location.enclosing_load {
 
                     if array_find(files, import.location.enclosing_load.fully_pathed_filename) {
-                        send_to_server(*p.channel, .MODULE_IMPORT, *Module.{ import.name, import.location.enclosing_load.fully_pathed_filename });
+                        send_to_server(*p.write_channel, .MODULE_IMPORT, *Module.{ import.name, import.location.enclosing_load.fully_pathed_filename });
                     }
 
                 }
@@ -655,8 +683,10 @@ message :: (_p: *Plugin, message: *Message) {
 }
 
 shutdown :: (_p: *Plugin) {
-    p := cast(*Jai_LSP_Plugin) _p;
-    writer_disconnect(*p.channel);
+    p := cast(*JLS_Plugin) _p;
+    writer_disconnect(*p.write_channel);
+    reader_release_channel(*p.read_channel);
+
     free(p);
     defer deinit(*declarations_by_type_info_struct);
 }

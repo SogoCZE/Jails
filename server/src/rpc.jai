@@ -60,7 +60,7 @@ get_message :: () -> string, bool {
     body_buffer.data = talloc(body_size);
     body_buffer.count = body_size;
     
-    read_from_stdin(buffer.data + header.count, 2); // TODO: Tohle by nemělo fungovat...
+    read_from_stdin(buffer.data + header.count, 2); // @todo: this is somewhat weird
     if buffer[header.count+1] != #char "\n" {
         body_buffer[0] = buffer[header.count];
         body_buffer[1] = buffer[header.count+1];

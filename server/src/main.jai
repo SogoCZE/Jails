@@ -1,17 +1,16 @@
-// TODO:
+// @TODO:
 // - Code block context
 // - Workspaces
-// - Vylepšit nebo předělat detekci entry pointu
+// - Improve or remake entry point detection
 // - Autocomplete
-//     - procedury (parametry atd)
-//     - structy (membery, atd)
-// - Error reporting (to by mělo být easy)
+//     - procedures (params etc)
+//     - structs (members etc)
+// - Error reporting (that shoud be quite easy)
 
-// #import "Compiler";
 #import "Basic";
 #import "File";
 #import "File_Utilities";
-#import "Jason";
+#import "jason";
 #import "String";
 #import "Shared_Memory_Channel";
 #import "Thread";
@@ -31,20 +30,17 @@
 
 VERSION :: "1.0.0";
 
-PROJECT_FOLDER_PATH :: #run replace(#file, "server/./src/main.jai", "");
-// SANDBOX_PATH :: #run tprint("%/sandbox", PROJECT_FOLDER_PATH); 
-METAPROGRAM_PLUGIN_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH); 
+PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "../..");
+METAPROGRAM_PLUGIN_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
 
-// Tohle je hodně dummy řešení - měli bychom se zamyslet nad lepším.
-// TODO:
 find_entry_file :: (root: string) -> string {
-    
+
     contains_main_procedure :: (file: string) -> bool {
         content := read_entire_file(file);
         return contains(content, "main ::") || contains(content, "main::");
     }
 
-    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Jaké další? 
+    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Maybe build.jai ... etc?
 
     for path: COMMON_MAIN_PATH {
         if file_exists(path) && contains_main_procedure(path) {
@@ -66,8 +62,8 @@ find_entry_file :: (root: string) -> string {
         }
     }
 
-    return ""; // Co když to nenajde?
-} 
+    return ""; // What we gonna do when we do not find any 
+}
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     uri := decl.location.file;
@@ -93,6 +89,19 @@ declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     };
 }
 
+last_change_time: Apollo_Time = APOLLO_TIME_INVALID;
+
+refresh_if_needed :: () {
+    if last_change_time == APOLLO_TIME_INVALID return;
+
+    // @Incomplete: We want to use the last_change_time to debounce.
+    // But since we’re blocking on messages right now, we can’t use a timeout to start recompiling.
+    // So we just use last_change_time as dirty flag.
+
+    success := run_metaprogram_analysis();
+    if !success return;
+}
+
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
     log("Got %", request.method);
 
@@ -103,6 +112,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize);
             if !success {
                 log_error("Unable to parse initialize message");
+                // @Incomplete: report error back!
+                return;
             }
 
             log("Workspace Folders: %", <<body.params.workspaceFolders);
@@ -114,7 +125,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             log("Entry file: %/%", program_cache.working_directory, program_cache.entry);
 
-            run_metaprogram_analysis();
+
+            {
+                success, error_details := run_metaprogram_analysis();
+                if !success {
+                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run LSP metaprogram", error_details);
+                    return;
+                }
+            }
 
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
@@ -123,17 +141,29 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Request_Message_Definition);
             if !success {
                 log_error("Unable to parse textDocument/definition message");
+                return;
             }
 
+            refresh_if_needed();
             handle_goto(body);
 
-        case "textDocument/didSave"; 
-            run_metaprogram_analysis();
+        case "textDocument/didSave";
+            success, body := json_parse_string(raw_request, LSP_Did_Save_Text_Document);
+            if !success {
+                log_error("Unable to parse textDocument/didOpen message");
+                return;
+            }
 
-        case "textDocument/didOpen"; 
+            // @ToDo: Remove all changes from the "modified files" table so we don’t send that file over on ever compile?
+
+            success = run_metaprogram_analysis();
+            if !success return;
+
+        case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document);
             if !success {
                 log_error("Unable to parse textDocument/didOpen message");
+                return;
             }
 
             file_path := body.params.textDocument.uri;
@@ -145,17 +175,22 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);
             if !success {
                 log_error("Unable to parse textDocument/didChange message");
+                return;
             }
 
             file_path := body.params.textDocument.uri;
             edit_file(file_path, body.params.contentChanges);
 
+            last_change_time = current_time_consensus();
+
         case "textDocument/completion";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
             if !success {
                 log_error("Unable to parse textDocument/completion message");
+                return;
             }
 
+            refresh_if_needed();
             handle_completitions(body);
 
     }
@@ -172,13 +207,17 @@ main :: () {
     init_files();
     defer deinit_files();
 
-    thread := thread_create(listen_to_metaprogram);
-    defer thread_deinit(thread);
+    thread := New(Thread);
+    thread_init(thread, listen_to_metaprogram);
+    defer {
+        thread_deinit(thread);
+        free(thread);
+    }
     thread_start(thread);
 
     while !quit {
-        // reset_temporary_storage(); // čistka paměti...
-        
+        reset_temporary_storage();
+
         body, success := get_message();
         if !success {
             log("Failed to read message");
