@@ -1,13 +1,4 @@
-#import "Basic";
-#import "Compiler";
-#import "File";
-#import "String";
-#import "Shared_Memory_Channel";
-#import "Reflection";
-#import "System";
-
-#load "../shared/binary_serization.jai";
-#load "../shared/shared.jai";
+ENABLE_TRACY :: true;
 
 Plugin :: Metaprogram_Plugin;
 
@@ -20,28 +11,35 @@ JLS_Plugin :: struct {
     should_run := true;
     write_channel: Write_Channel;
     read_channel: Read_Channel;
-    modified_files: [..] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
+    modified_files: [] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
 }
 
 get_plugin :: () -> *Plugin {
+    ZoneScoped();
     p := New(JLS_Plugin);
 
     #if OS != .WINDOWS {
-        POSIX :: #import "POSIX";
-        POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
+        {
+            ZoneScoped("shm_unlink");
+            POSIX :: #import "POSIX";
+            POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
+        }
     }
 
-    success: bool;
-    success, p.read_channel = reader_create_channel(IPC_CHANNEL_NAME_TO_META, CHANNEL_DATA_BYTES);
-    if !success {
-        log_error("Could not open read channel.");
-        exit(1);
-    }
+    {
+        ZoneScoped("IPC setup");
+        success: bool;
+        success, p.read_channel = reader_create_channel(IPC_CHANNEL_NAME_TO_META, CHANNEL_DATA_BYTES);
+        if !success {
+            log_error("Could not open read channel.");
+            exit(1);
+        }
 
-    success, p.write_channel = writer_connect(IPC_CHANNEL_NAME_FROM_META);
-    if !success {
-        log_error("Could not open write channel.");
-        exit(1);
+        success, p.write_channel = writer_connect(IPC_CHANNEL_NAME_FROM_META);
+        if !success {
+            log_error("Could not open write channel.");
+            exit(1);
+        }
     }
 
     options := get_build_options();
@@ -52,9 +50,24 @@ get_plugin :: () -> *Plugin {
 
 
     // Read all (modified) files from the server
+    p.modified_files = receive_modified_files(*p.read_channel);
+    log("Received % modified files", p.modified_files.count);
+
+    init(*declarations_by_type_info_struct);
+
+    p.message  = message;
+    p.shutdown = shutdown;
+    p.before_intercept = before_intercept;
+
+    return p;
+}
+
+receive_modified_files :: (channel: *Read_Channel) -> [] Modified_File {
+    ZoneScoped();
+    files: [..] Modified_File;
     received_all_files := false;
     while !received_all_files {
-        message_success, fatal_error, message := reader_poll_for_message(*p.read_channel);
+        message_success, fatal_error, message := reader_poll_for_message(channel);
         if fatal_error {
             log_error("Fatal error");
             exit(1);
@@ -75,49 +88,15 @@ get_plugin :: () -> *Plugin {
                 body_copy := array_copy(body_bytes);
                 file := deserialize(body_copy, Modified_File);
                 log("Got file %. Pretending to use this for something…", file.path);
-                array_add(*p.modified_files, file);
+                array_add(*files, file);
             case .DONE;
-                log("Received % files", p.modified_files.count);
                 received_all_files = true;
         }
     }
 
-
-    init(*declarations_by_type_info_struct);
-
-    p.message  = message;
-    p.shutdown = shutdown;
-    p.before_intercept = before_intercept;
-
-    return p;
+    return files;
 }
 
-send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
-    assert(channel != null);
-
-    data_bytes := serialize(data);
-
-    while true {
-        message_success, message := writer_reserve_message(channel, HEADER_SIZE + data_bytes.count);
-        if !message_success {
-            sleep_milliseconds(1);
-            continue;
-        }
-
-        message.user_write_pointer[0] = cast(u8) command;
-        checksum: u8;
-
-        for byte, index: data_bytes {
-            message.user_write_pointer[HEADER_SIZE + index] = byte;
-            checksum ^= byte;
-        }
-
-        message.user_write_pointer[1] = checksum;
-
-        writer_commit_message(channel, message);
-        break;
-    }
-}
 
 before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
     p := cast(*JLS_Plugin) _p;
@@ -141,6 +120,7 @@ compiler_location_to_our_location :: (using location: Code_Node.Location) -> Dec
 }
 
 map_to_declaration:: (code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
+    ZoneScoped();
     type_instantiations := NewArray(code_declarations.count, s64);
 
     for code_declarations type_instantiations[it_index] = process_declaration(it, channel);
@@ -183,6 +163,7 @@ process_number :: (type: *Type_Info) -> Base_Type {
 }
 
 process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
+    ZoneScoped();
     type_inst := New(Type_Instantiation);
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
@@ -284,6 +265,7 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
 }
 
 process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
+    ZoneScoped(text=declaration.name);
     _struct := New(Struct);
     _struct.base = declaration;
     _struct.kind = .STRUCT;
@@ -305,6 +287,7 @@ process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Stru
 }
 
 process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID {
+    ZoneScoped(text=decl.name);
     declaration := New(Declaration);
     declaration.name = decl.name;
     declaration.serial = decl.serial;
@@ -594,6 +577,7 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
 files: [..]string;
 
 message :: (_p: *Plugin, message: *Message) {
+    ZoneScoped();
     p := cast(*JLS_Plugin) _p;
 
     // Gathering of project files
@@ -683,6 +667,7 @@ message :: (_p: *Plugin, message: *Message) {
 }
 
 shutdown :: (_p: *Plugin) {
+    ZoneScoped();
     p := cast(*JLS_Plugin) _p;
     writer_disconnect(*p.write_channel);
     reader_release_channel(*p.read_channel);
@@ -690,3 +675,45 @@ shutdown :: (_p: *Plugin) {
     free(p);
     defer deinit(*declarations_by_type_info_struct);
 }
+
+send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
+    ZoneScoped(text = enum_value_to_name(command));
+    assert(channel != null);
+
+    data_bytes := serialize(data);
+
+    while true {
+        message_success, message := writer_reserve_message(channel, HEADER_SIZE + data_bytes.count);
+        if !message_success {
+            sleep_milliseconds(1);
+            continue;
+        }
+
+        message.user_write_pointer[0] = cast(u8) command;
+        checksum: u8;
+
+        for byte, index: data_bytes {
+            message.user_write_pointer[HEADER_SIZE + index] = byte;
+            checksum ^= byte;
+        }
+
+        message.user_write_pointer[1] = checksum;
+
+        writer_commit_message(channel, message);
+        break;
+    }
+}
+
+
+#import "Basic";
+#import "Compiler";
+#import "File";
+#import "String";
+#import "Shared_Memory_Channel";
+#import "Reflection";
+#import "System";
+#import "tracy"(enabled = ENABLE_TRACY);
+
+#load "../shared/binary_serization.jai";
+#load "../shared/shared.jai";
+

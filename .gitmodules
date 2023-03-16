@@ -4,3 +4,6 @@
 [submodule "server/modules/unicode_utils"]
 	path = modules/unicode_utils
 	url = git@github.com:rluba/jai-unicode.git
+[submodule "modules/tracy"]
+	path = metaprogram/tracy
+	url = git@github.com:vrcamillo/jai-tracy.git
