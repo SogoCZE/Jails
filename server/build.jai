@@ -6,19 +6,23 @@
 
 // Základní build file
 #run {
+    set_build_options_dc(.{do_output=false});
+
     w := compiler_create_workspace("Target Program");
-    if !w {
-        print("Workspace creation failed.\n");
-        return;
-    }
+
+    make_directory_if_it_does_not_exist("./bin/");
 
     options := get_build_options(w);
+    copy_commonly_propagated_fields(get_build_options(), *options);
     options.output_executable_name = "jlsp";
     options.output_path = "./bin";   
 
-    set_build_options(options, w);
+	import_path: [..] string;
+    array_add(*import_path, .. options.import_path);
+    array_add(*import_path, "../modules");
+    options.import_path = import_path;
 
-	make_directory_if_it_does_not_exist("./bin/");
+    set_build_options(options, w);
 
     compiler_begin_intercept(w);
 
@@ -27,8 +31,6 @@
     message_loop(w, options.compile_time_command_line);
 
     compiler_end_intercept(w);
-
-    set_build_options_dc(.{do_output=false});
 }
 
 message_loop :: (w: Workspace, args: []string) {
@@ -62,6 +64,4 @@ message_loop :: (w: Workspace, args: []string) {
     // }
 
     // run_command(vscode_path, "--profile=lsp_dev", vscode_extension_development_path);
-
-
 }   

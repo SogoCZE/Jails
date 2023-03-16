@@ -6,7 +6,7 @@ Program :: struct {
     import_path: []string;
     entry: string;
     working_directory: string;
-    
+
     files: [..]Source_File;
     modules: [..]Module;
 
@@ -14,7 +14,7 @@ Program :: struct {
 
     declarations: [..]Declaration; // Array všech declarací
     declarations_by_serial: Table(ID, *Declaration); // Declarace dle serial
-    declarations_by_name: Table(string, *Declaration); // Declarace dle jména @SPEED: Pointer vs 
+    declarations_by_name: Table(string, *Declaration); // Declarace dle jména @SPEED: Pointer vs
     // declarations_by_location: Table(string, []Line); // Declarace dle lokace
 }
 
@@ -32,19 +32,20 @@ deinit_cache :: () {
     // deinit(*program_cache.declarations_by_location);
 }
 
-run_metaprogram_analysis :: () {
+run_metaprogram_analysis :: () -> success: bool, error: string {
     if program_cache.declarations_by_serial.count > 0 {
         table_reset(*program_cache.declarations_by_serial);
         table_reset(*program_cache.declarations_by_name);
     }
 
-    result, output, error := run_command("jai", program_cache.entry, "-plug", "jai_lsp", "---", "import_dir", METAPROGRAM_PLUGIN_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
-
-    if error.count != 0 {
-        log("Metaprogram run failed: '%'", error);
+    result, output, error := run_command("jai", program_cache.entry, "-quiet", "-no_color", "-plug", "jai_lsp", "---", "import_dir", METAPROGRAM_PLUGIN_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
+    if result.exit_code != 0 || error {
+        log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
+        return false, error;
     }
 
     log("Cache refreshed! Nodes: %", program_cache.declarations_by_name.count);
+    return true, "";
 }
 
 read_shared_memory :: (channel: Read_Channel) {
@@ -71,7 +72,7 @@ read_shared_memory :: (channel: Read_Channel) {
             }
 
             stored_checksum := message.user_read_pointer[1];
-            
+
             data_bytes := message.user_read_bytes - HEADER_SIZE;
 
             my_checksum: u8;
@@ -101,7 +102,7 @@ read_shared_memory :: (channel: Read_Channel) {
         body_bytes.count = message.user_read_bytes - HEADER_SIZE;
 
         if command == {
-            case .INITIALIZATION; 
+            case .INITIALIZATION;
                 initialization := deserialize(body_bytes, Initialization);
                 program_cache.import_path = initialization.import_path;
 
@@ -146,12 +147,12 @@ path_in_imported_modules_or_files :: (path: string) -> bool {
     }
 
     return false;
-} 
+}
 
 listen_to_metaprogram :: (thread: *Thread) -> s64 {
     #if OS != .WINDOWS {
         POSIX :: #import "POSIX";
-        POSIX.shm_unlink("jlsp"); 
+        POSIX.shm_unlink("jlsp");
     }
 
     // log("Listening to metaprogram!");

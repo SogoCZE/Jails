@@ -11,7 +11,7 @@
 #import "Basic";
 #import "File";
 #import "File_Utilities";
-#import "Jason";
+#import "jason";
 #import "String";
 #import "Shared_Memory_Channel";
 #import "Thread";
@@ -31,20 +31,20 @@
 
 VERSION :: "1.0.0";
 
-PROJECT_FOLDER_PATH :: #run replace(#file, "server/./src/main.jai", "");
-// SANDBOX_PATH :: #run tprint("%/sandbox", PROJECT_FOLDER_PATH); 
-METAPROGRAM_PLUGIN_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH); 
+PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "../..");
+// SANDBOX_PATH :: #run tprint("%/sandbox", PROJECT_FOLDER_PATH);
+METAPROGRAM_PLUGIN_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
 
 // Tohle je hodně dummy řešení - měli bychom se zamyslet nad lepším.
 // TODO:
 find_entry_file :: (root: string) -> string {
-    
+
     contains_main_procedure :: (file: string) -> bool {
         content := read_entire_file(file);
         return contains(content, "main ::") || contains(content, "main::");
     }
 
-    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Jaké další? 
+    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Jaké další?
 
     for path: COMMON_MAIN_PATH {
         if file_exists(path) && contains_main_procedure(path) {
@@ -67,7 +67,7 @@ find_entry_file :: (root: string) -> string {
     }
 
     return ""; // Co když to nenajde?
-} 
+}
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     uri := decl.location.file;
@@ -103,6 +103,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize);
             if !success {
                 log_error("Unable to parse initialize message");
+                // @Incomplete: report error back!
             }
 
             log("Workspace Folders: %", <<body.params.workspaceFolders);
@@ -114,7 +115,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             log("Entry file: %/%", program_cache.working_directory, program_cache.entry);
 
-            run_metaprogram_analysis();
+
+            {
+                success, error_details := run_metaprogram_analysis();
+                if !success {
+                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run LSP metaprogram", error_details);
+                    return;
+                }
+            }
 
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
@@ -127,10 +135,11 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             handle_goto(body);
 
-        case "textDocument/didSave"; 
-            run_metaprogram_analysis();
+        case "textDocument/didSave";
+            success := run_metaprogram_analysis();
+            if !success return;
 
-        case "textDocument/didOpen"; 
+        case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document);
             if !success {
                 log_error("Unable to parse textDocument/didOpen message");
@@ -172,13 +181,17 @@ main :: () {
     init_files();
     defer deinit_files();
 
-    thread := thread_create(listen_to_metaprogram);
-    defer thread_deinit(thread);
+    thread := New(Thread);
+    thread_init(thread, listen_to_metaprogram);
+    defer {
+        thread_deinit(thread);
+        free(thread);
+    }
     thread_start(thread);
 
     while !quit {
         // reset_temporary_storage(); // čistka paměti...
-        
+
         body, success := get_message();
         if !success {
             log("Failed to read message");
