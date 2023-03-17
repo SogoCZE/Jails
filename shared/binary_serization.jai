@@ -11,8 +11,6 @@ serialize :: (input : *$T, allocator: Allocator = context.allocator) -> []u8 #mu
 
     dynamic_memory_required := cast(s64) handle_dynamic_memory(input, null, .COUNT);
 
-    // print("dynamic_memory_required = %, ALIGNED_INPUT_SIZE = %\n", dynamic_memory_required, ALIGNED_INPUT_SIZE);
-
     buffer: []u8;
     buffer.count = ALIGNED_INPUT_SIZE + dynamic_memory_required;
     buffer.data  = alloc(buffer.count, allocator);

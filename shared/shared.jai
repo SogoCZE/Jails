@@ -25,7 +25,7 @@ Protocol_Tag :: enum u8 {  // Is there a message here, or are we done?
     IF_STATEMENT;
     FOR_STATEMENT;
     WHILE_STATEMENT;
-    TYPE_ARRAY; // Musíme to mít zde?
+    TYPE_ARRAY;
 
     MESSAGE_END;
 }
