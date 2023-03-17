@@ -712,7 +712,7 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
 #import "Shared_Memory_Channel";
 #import "Reflection";
 #import "System";
-#import "tracy"(enabled = ENABLE_TRACY);
+#import "tracy"(IMPORT_MODE = .CLIENT, ENABLED = ENABLE_TRACY);
 
 #load "../shared/binary_serization.jai";
 #load "../shared/shared.jai";
