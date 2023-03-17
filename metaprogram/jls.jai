@@ -2,8 +2,6 @@ Plugin :: Metaprogram_Plugin;
 
 DEBUG :: false;
 
-declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarations by Type_Info_Struct pointer.
-
 JLS_Plugin :: struct {
     #as using base: Plugin;
     should_run := true;
@@ -12,6 +10,7 @@ JLS_Plugin :: struct {
     modified_files: [] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
     start: Apollo_Time;
     pool: Pool;
+    declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarations by Type_Info_Struct pointer.
 }
 
 get_plugin :: () -> *Plugin {
@@ -20,8 +19,7 @@ get_plugin :: () -> *Plugin {
 
     set_allocators(*p.pool);
 
-    context.allocator.proc = pool_allocator_proc;
-    context.allocator.data = *p.pool;
+    push_allocator(pool_allocator_proc, *p.pool);
 
     #if OS != .WINDOWS {
         POSIX :: #import "POSIX";
@@ -48,10 +46,10 @@ get_plugin :: () -> *Plugin {
     });
 
     // Read all (modified) files from the server
-    p.modified_files = receive_modified_files(*p.read_channel);
+    p.modified_files = receive_modified_files(p, *p.read_channel);
     log("Received % modified files", p.modified_files.count);
 
-    init(*declarations_by_type_info_struct);
+    init(*p.declarations_by_type_info_struct);
 
     p.message  = message;
     p.shutdown = shutdown;
@@ -60,7 +58,7 @@ get_plugin :: () -> *Plugin {
     return p;
 }
 
-receive_modified_files :: (channel: *Read_Channel) -> [] Modified_File {
+receive_modified_files :: (p: *JLS_Plugin, channel: *Read_Channel) -> [] Modified_File {
     files: [..] Modified_File;
     received_all_files := false;
     while !received_all_files {
@@ -80,14 +78,18 @@ receive_modified_files :: (channel: *Read_Channel) -> [] Modified_File {
         success, command, body_bytes := decode_command(message, Server_To_Metaprogram_Protocol_Tag);
         if !success exit(1);
 
-        if command == {
-            case .MODIFIED_FILE;
-                body_copy := array_copy(body_bytes);
-                file := deserialize(body_copy, Modified_File);
-                log("Got file %. Pretending to use this for something…", file.path);
-                array_add(*files, file);
-            case .DONE;
-                received_all_files = true;
+        {
+            push_allocator(pool_allocator_proc, *p.pool);
+
+            if command == {
+                case .MODIFIED_FILE;
+                    body_copy := array_copy(body_bytes);
+                    file := deserialize(body_copy, Modified_File);
+                    log("Got file %. Pretending to use this for something…", file.path);
+                    array_add(*files, file);
+                case .DONE;
+                    received_all_files = true;
+            }
         }
     }
 
@@ -113,18 +115,18 @@ compiler_location_to_our_location :: (using location: Code_Node.Location) -> Dec
     };
 }
 
-map_to_declaration:: (code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
+map_to_declaration:: (p: *JLS_Plugin, code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
     type_instantiations := NewArray(code_declarations.count, s64);
 
-    for code_declarations type_instantiations[it_index] = process_declaration(it, channel);
+    for code_declarations type_instantiations[it_index] = process_declaration(p, it, channel);
 
     return type_instantiations;
 }
 
-process_procedure_body :: (body: *Code_Procedure_Body, channel: *Write_Channel) {
+process_procedure_body :: (p: *JLS_Plugin, body: *Code_Procedure_Body, channel: *Write_Channel) {
     body.block.serial = body.serial;
 
-    process_code_block(body.block, channel);
+    process_code_block(p, body.block, channel);
 }
 
 process_number :: (type: *Type_Info) -> Base_Type {
@@ -155,7 +157,7 @@ process_number :: (type: *Type_Info) -> Base_Type {
     }
 }
 
-process_type_instantiation :: (base: Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
+process_type_instantiation :: (p: *JLS_Plugin, base: Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
     type_inst: Type_Instantiation;
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
@@ -182,7 +184,7 @@ process_type_instantiation :: (base: Declaration, code_type_inst: *Code_Type_Ins
             #if DEBUG then print("array size = %\n", new_type_array.size);
         }
 
-        new_type_array.type_inst = process_type_instantiation(*Declaration.{serial = code_type_inst.array_element_type.serial}, code_type_inst.array_element_type, channel);
+        new_type_array.type_inst = process_type_instantiation(p, *Declaration.{serial = code_type_inst.array_element_type.serial}, code_type_inst.array_element_type, channel);
         // @todo send Type_Array to server
 
         send_to_server(channel, .TYPE_ARRAY, *new_type_array);
@@ -213,7 +215,7 @@ process_type_instantiation :: (base: Declaration, code_type_inst: *Code_Type_Ins
 
                     #if DEBUG then print("getting serial from struct by pointer %\n", struct_result);
                     // Getting struct-serial by it's defined_type pointer
-                    decl, ok := table_find(*declarations_by_type_info_struct, struct_result);
+                    decl, ok := table_find(*p.declarations_by_type_info_struct, struct_result);
                     if !ok {
                         #if DEBUG print("Pointer not found!\n");
                     } else {
@@ -229,7 +231,7 @@ process_type_instantiation :: (base: Declaration, code_type_inst: *Code_Type_Ins
 
     // age: *int;
     if code_type_inst.pointer_to {
-        pointed_type_instantiation := process_type_instantiation(*Declaration.{serial = code_type_inst.pointer_to.serial}, code_type_inst.pointer_to, channel);
+        pointed_type_instantiation := process_type_instantiation(p, *Declaration.{serial = code_type_inst.pointer_to.serial}, code_type_inst.pointer_to, channel);
         type_inst.type_kind = .POINTER;
         type_inst.serial_to = pointed_type_instantiation;
         #if DEBUG then print("type_inst.pointer_to = %\n", pointed_type_instantiation);
@@ -256,7 +258,7 @@ process_type_instantiation :: (base: Declaration, code_type_inst: *Code_Type_Ins
     return type_inst.serial;
 }
 
-process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
+process_struct_declaration :: (p: *JLS_Plugin, declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
     _struct: Struct;
     _struct.base = declaration;
     _struct.kind = .STRUCT;
@@ -266,11 +268,11 @@ process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Stru
         // Setting serial of struct to defined_type pointer, so we can link afterwards
         // table_set(*declarations_by_type_info_struct, code_struct.defined_type, *_struct);
 
-        _struct.arguments = process_code_block(code_struct.arguments_block, channel, true);
+        _struct.arguments = process_code_block(p, code_struct.arguments_block, channel, true);
     }
 
     code_struct.block.serial = _struct.serial;
-    _struct.block = process_code_block(code_struct.block, channel);
+    _struct.block = process_code_block(p, code_struct.block, channel);
 
     send_to_server(channel, .STRUCT, *_struct);
 
@@ -279,7 +281,7 @@ process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Stru
     return _struct.serial;
 }
 
-process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID {
+process_declaration :: (p: *JLS_Plugin, decl: *Code_Declaration, channel: *Write_Channel) -> ID {
     declaration: Declaration;
     declaration.name = decl.name;
     declaration.serial = decl.serial;
@@ -308,7 +310,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
     }
 
     if decl.type_inst {
-        return process_type_instantiation(declaration, decl.type_inst, channel);
+        return process_type_instantiation(p, declaration, decl.type_inst, channel);
     }
 
     if decl.expression {
@@ -323,8 +325,8 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                 _procedure.base = declaration;
                 _procedure.kind = .PROCEDURE;
                 _procedure.body = code_procedure_header.serial;
-                _procedure.arguments = map_to_declaration(code_procedure_header.arguments, channel);
-                _procedure.returns = map_to_declaration(code_procedure_header.returns, channel);
+                _procedure.arguments = map_to_declaration(p, code_procedure_header.arguments, channel);
+                _procedure.returns = map_to_declaration(p, code_procedure_header.returns, channel);
 
                 send_to_server(channel, .PROCEDURE, *_procedure);
 
@@ -332,7 +334,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
 
             // Person :: struct { name: string; };
             case .STRUCT;
-                return process_struct_declaration(declaration, xx decl.expression, channel);
+                return process_struct_declaration(p, declaration, xx decl.expression, channel);
 
             // FOOD :: enum { APPLE :: 1; };
             case .ENUM;
@@ -349,7 +351,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                 }
 
                 code_enum.block.serial = _enum.serial;
-                _enum.block = process_code_block(code_enum.block, channel);
+                _enum.block = process_code_block(p, code_enum.block, channel);
 
                 send_to_server(channel, .ENUM, *_enum);
 
@@ -370,7 +372,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                         array_element_type.size = code_literal.array_literal_info.array_members.count;
                         #if DEBUG then print("array size = %\n", array_element_type.size);
 
-                        array_element_type.type_inst = process_type_instantiation(declaration, code_type_inst, channel);
+                        array_element_type.type_inst = process_type_instantiation(p, declaration, code_type_inst, channel);
 
                         array_element_type.serial = code_literal.serial;
                         _expression.serial_to = code_literal.serial;
@@ -449,7 +451,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
     return declaration.serial;
 }
 
-process_code_if :: (if_statement: *Code_If, channel: *Write_Channel, is_directive_static := false) -> ID {
+process_code_if :: (p: *JLS_Plugin, if_statement: *Code_If, channel: *Write_Channel, is_directive_static := false) -> ID {
     our_if_statement: If_Statement;
     our_if_statement.serial = if_statement.serial;
 
@@ -457,47 +459,47 @@ process_code_if :: (if_statement: *Code_If, channel: *Write_Channel, is_directiv
         then_blocks := NewArray(if_statement.then_block.statements.count, s64);
         for statement: if_statement.then_block.statements {
             code_case := cast(*Code_Case) statement;
-            then_blocks[it_index] = process_code_block(xx code_case.then_block, channel);
+            then_blocks[it_index] = process_code_block(p, xx code_case.then_block, channel);
         }
 
         our_if_statement.then_blocks = then_blocks;
     } else {
         then_blocks: [1]s64;
-        then_blocks[0] = process_code_block(xx if_statement.then_block, channel);
+        then_blocks[0] = process_code_block(p, xx if_statement.then_block, channel);
         our_if_statement.then_blocks = then_blocks;
     }
 
-    if if_statement.else_block then our_if_statement.else_block = process_code_block(xx if_statement.else_block, channel);
+    if if_statement.else_block then our_if_statement.else_block = process_code_block(p, xx if_statement.else_block, channel);
 
     if is_directive_static then our_if_statement.is_directive_static = true;
 
     return our_if_statement.serial;
 }
 
-process_code_while :: (while_statement: *Code_While, channel: *Write_Channel) -> ID {
+process_code_while :: (p: *JLS_Plugin, while_statement: *Code_While, channel: *Write_Channel) -> ID {
     our_while_statement: While_statement;
     our_while_statement.serial = while_statement.serial;
 
-    our_while_statement.block = process_code_block(while_statement.block, channel);
+    our_while_statement.block = process_code_block(p, while_statement.block, channel);
 
     if while_statement.condition.kind == .DECLARATION {
-        our_while_statement.condition = process_declaration(xx while_statement.condition, channel);
+        our_while_statement.condition = process_declaration(p, xx while_statement.condition, channel);
         #if DEBUG then print("our_while_statement.condition = %\n", our_while_statement.condition);
     }
 
     return our_while_statement.serial;
 }
 
-process_code_for :: (for_statement: *Code_For, channel: *Write_Channel) -> ID {
+process_code_for :: (p: *JLS_Plugin, for_statement: *Code_For, channel: *Write_Channel) -> ID {
     our_for_statement: For_Statement;
     our_for_statement.serial = for_statement.serial;
 
-    our_for_statement.block = process_code_block(for_statement.block, channel);
+    our_for_statement.block = process_code_block(p, for_statement.block, channel);
 
     if for_statement.ident_decl && for_statement.ident_decl.kind == .DECLARATION {
         iterator_declaration := cast(*Code_Declaration) for_statement.ident_decl;
         if iterator_declaration.name != "it" {
-            our_for_statement.iterator = process_declaration(xx iterator_declaration, channel);
+            our_for_statement.iterator = process_declaration(p, xx iterator_declaration, channel);
             #if DEBUG then print("our_for_statement.iterator = %\n", our_for_statement.iterator);
         }
     }
@@ -505,7 +507,7 @@ process_code_for :: (for_statement: *Code_For, channel: *Write_Channel) -> ID {
     return our_for_statement.serial;
 }
 
-process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID {
+process_code_block :: (p: *JLS_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID {
     our_block: Block;
     our_block.serial = block.serial;
     our_block.location = compiler_location_to_our_location(block.location);
@@ -523,25 +525,25 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
                 case .DECLARATION;
                     code_declaration := cast(*Code_Declaration) statement;
                     if !code_declaration.expression || code_declaration.expression.kind != .PROCEDURE_HEADER {
-                        declarations_serials[it_index] = process_declaration(xx statement, channel);
+                        declarations_serials[it_index] = process_declaration(p, xx statement, channel);
                     } else {
                         declarations_serials[it_index] = statement.serial;
                     }
 
                 case .BLOCK;
-                    declarations_serials[it_index] = process_code_block(xx statement, channel);
+                    declarations_serials[it_index] = process_code_block(p, xx statement, channel);
 
                 case .WHILE;
-                    declarations_serials[it_index] = process_code_while(xx statement, channel);
+                    declarations_serials[it_index] = process_code_while(p, xx statement, channel);
 
                 case .FOR;
-                    declarations_serials[it_index] = process_code_for(xx statement, channel);
+                    declarations_serials[it_index] = process_code_for(p, xx statement, channel);
 
                 case .DIRECTIVE_STATIC_IF;
-                    declarations_serials[it_index] = process_code_if(xx statement, channel, true);
+                    declarations_serials[it_index] = process_code_if(p, xx statement, channel, true);
 
                 case .IF;
-                    declarations_serials[it_index] = process_code_if(xx statement, channel);
+                    declarations_serials[it_index] = process_code_if(p, xx statement, channel);
             }
         }
 
@@ -552,8 +554,8 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
         members_serials := NewArray(block.members.count, s64);
         for statement: block.members {
             if statement.kind == {
-                case .DECLARATION; members_serials[it_index] = process_declaration(xx statement, channel);
-                case .BLOCK; members_serials[it_index] = process_code_block(xx statement, channel);
+                case .DECLARATION; members_serials[it_index] = process_declaration(p, xx statement, channel);
+                case .BLOCK; members_serials[it_index] = process_code_block(p, xx statement, channel);
             }
         }
 
@@ -570,6 +572,7 @@ files: [..]string;
 
 message :: (_p: *Plugin, message: *Message) {
     p := cast(*JLS_Plugin) _p;
+    push_allocator(pool_allocator_proc, *p.pool);
 
     // Gathering of project files
     if message.kind == .FILE {
@@ -615,7 +618,7 @@ message :: (_p: *Plugin, message: *Message) {
 
             #if DEBUG then print("Getting location from struct by pointer %\n", code_struct.defined_type.polymorph_source_struct);
             // Getting struct-location by it's defined_type pointer
-            decl, ok := table_find(*declarations_by_type_info_struct, code_struct.defined_type.polymorph_source_struct);
+            decl, ok := table_find(*p.declarations_by_type_info_struct, code_struct.defined_type.polymorph_source_struct);
             if !ok {
                 #if DEBUG then print("Pointer not found!\n");
             } else {
@@ -628,7 +631,7 @@ message :: (_p: *Plugin, message: *Message) {
                 print("declaration location =  %\n", declaration.location);
             }
 
-            process_struct_declaration(declaration, code_struct, *p.write_channel);
+            process_struct_declaration(p, declaration, code_struct, *p.write_channel);
         }
         #if DEBUG then print("\n");
     }
@@ -642,9 +645,9 @@ message :: (_p: *Plugin, message: *Message) {
 
         if it.expression.kind == {
             case .DECLARATION;
-                process_declaration(xx it.expression, *p.write_channel);
+                process_declaration(p, xx it.expression, *p.write_channel);
             case .PROCEDURE_BODY;
-                process_procedure_body(xx it.expression, *p.write_channel);
+                process_procedure_body(p, xx it.expression, *p.write_channel);
             case .DIRECTIVE_IMPORT;
                 import := cast(*Code_Directive_Import) it.expression;
 
@@ -659,7 +662,6 @@ message :: (_p: *Plugin, message: *Message) {
         }
         #if DEBUG then print("\n");
     }
-
 }
 
 shutdown :: (_p: *Plugin) {
@@ -670,7 +672,7 @@ shutdown :: (_p: *Plugin) {
     release(*p.pool);
 
     free(p);
-    defer deinit(*declarations_by_type_info_struct);
+    defer deinit(*p.declarations_by_type_info_struct);
 }
 
 send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
@@ -680,7 +682,7 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
     data_bytes := serialize(data);
 
     while true {
-        message_success, message := writer_reserve_message(channel, HEADER_SIZE + data_bytes.count);
+        message_success, message := writer_reserve_message(channel, JLS_HEADER_SIZE + data_bytes.count);
         if !message_success {
             sleep_milliseconds(1);
             continue;
@@ -695,10 +697,10 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
                 checksum ^= byte;
             }
 
-            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
+            memcpy(*message.user_write_pointer[JLS_HEADER_SIZE], data_bytes.data, data_bytes.count);
             message.user_write_pointer[1] = checksum;
         } else {
-            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
+            memcpy(*message.user_write_pointer[JLS_HEADER_SIZE], data_bytes.data, data_bytes.count);
         }
 
         writer_commit_message(channel, message);

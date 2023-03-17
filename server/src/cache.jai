@@ -98,7 +98,7 @@ read_shared_memory :: (channel: Read_Channel) {
         }
 
         bytes := message.user_read_bytes;
-        if bytes < HEADER_SIZE {
+        if bytes < JLS_HEADER_SIZE {
             log_error("Got a message that is too short (% bytes)! Quitting.", bytes);
             return;
         }
@@ -202,7 +202,7 @@ send_to_metaprogram :: (channel: *Write_Channel, command: Server_To_Metaprogram_
     if data data_bytes = serialize(data);
 
     while true {
-        message_success, message := writer_reserve_message(channel, HEADER_SIZE + data_bytes.count);
+        message_success, message := writer_reserve_message(channel, JLS_HEADER_SIZE + data_bytes.count);
         if !message_success {
             sleep_milliseconds(1);
             continue;
@@ -212,7 +212,7 @@ send_to_metaprogram :: (channel: *Write_Channel, command: Server_To_Metaprogram_
         checksum: u8;
 
         for byte, index: data_bytes {
-            message.user_write_pointer[HEADER_SIZE + index] = byte;
+            message.user_write_pointer[JLS_HEADER_SIZE + index] = byte;
             checksum ^= byte;
         }
 
