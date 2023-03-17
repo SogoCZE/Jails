@@ -26,7 +26,7 @@
 #load "completition.jai";
 #load "goto.jai";
 
-#load "../../shared/binary_serization.jai";
+#load "../../shared/binary_serialization.jai";
 #load "../../shared/shared.jai";
 
 VERSION :: "1.0.0";

@@ -718,6 +718,6 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
 #import "System";
 #import "Pool";
 
-#load "../shared/binary_serization.jai";
+#load "../shared/binary_serialization.jai";
 #load "../shared/shared.jai";
 
