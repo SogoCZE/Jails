@@ -5,6 +5,7 @@
 #import "Shared_Memory_Channel";
 #import "Reflection";
 #import "System";
+#import "Pool";
 
 #load "../shared/binary_serization.jai";
 #load "../shared/shared.jai";
@@ -15,7 +16,6 @@ DEBUG :: false;
 
 declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarations by Type_Info_Struct pointer.
 
-
 JLS_Plugin :: struct {
     #as using base: Plugin;
     should_run := true;
@@ -23,11 +23,17 @@ JLS_Plugin :: struct {
     read_channel: Read_Channel;
     modified_files: [..] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
     start: Apollo_Time;
+    pool: Pool;
 }
 
 get_plugin :: () -> *Plugin {
     p := New(JLS_Plugin);
     p.start = current_time_consensus();
+
+    set_allocators(*p.pool);
+
+    context.allocator.proc = pool_allocator_proc;
+    context.allocator.data = *p.pool;
 
     #if OS != .WINDOWS {
         POSIX :: #import "POSIX";
@@ -107,19 +113,25 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
         }
 
         message.user_write_pointer[0] = cast(u8) command;
-        
-        // @SPEED: checksum is being slow (taking up to 2s when we have aroud 25K nodes)
-        checksum: u8;
-        for byte, index: data_bytes {
-            message.user_write_pointer[HEADER_SIZE + index] = byte;
-            checksum ^= byte;
-        }
 
-        message.user_write_pointer[1] = checksum;
+        // @SPEED: checksum is being slow (taking up to 2s when we have aroud 25K nodes)
+        #if ENABLE_CHECKSUM {
+            checksum: u8;
+
+            for byte, index: data_bytes {
+                checksum ^= byte;
+            }
+
+            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
+            message.user_write_pointer[1] = checksum;
+        } else {
+            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
+        }
 
         writer_commit_message(channel, message);
         break;
     }
+
 }
 
 before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
@@ -694,6 +706,8 @@ shutdown :: (_p: *Plugin) {
     p := cast(*JLS_Plugin) _p;
     writer_disconnect(*p.write_channel);
     reader_release_channel(*p.read_channel);
+
+    release(*p.pool);
 
     free(p);
     defer deinit(*declarations_by_type_info_struct);

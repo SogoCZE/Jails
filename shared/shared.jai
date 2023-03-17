@@ -1,10 +1,17 @@
 #import "Hash_Table";
 
+ENABLE_CHECKSUM :: false;
+
 IPC_CHANNEL_NAME_FROM_META :: "jls_channel_from_meta";
 IPC_CHANNEL_NAME_TO_META   :: "jls_channel_to_meta";
 
 CHANNEL_DATA_BYTES :: 64 * 1024 * 1024; // 64 MB @ToDo: what if we run out of space?
-HEADER_SIZE :: 2;  // 1 byte for message-or-done, 1 byte for the checksum.
+
+#if ENABLE_CHECKSUM {
+    HEADER_SIZE :: 2;  // 1 byte for message tag, 1 byte for the checksum.
+} else {
+    HEADER_SIZE :: 1;  // 1 byte for message tag, no checksum.
+}
 
 Protocol_Tag :: enum u8 {  // Is there a message here, or are we done?
     // UNINITIALIZED :: 0;
@@ -213,23 +220,25 @@ decode_command :: (message: Read_Message, $T: Type) -> bool, T, [] u8 {
         return false, command, .[];
     }
 
-    stored_checksum := message.user_read_pointer[1];
-
     data_bytes := message.user_read_bytes - HEADER_SIZE;
 
-    my_checksum: u8;
-    for 0..data_bytes-1 {
-        my_checksum ^= message.user_read_pointer[it + HEADER_SIZE];
-    }
+    #if ENABLE_CHECKSUM {
+        stored_checksum := message.user_read_pointer[1];
+        my_checksum: u8;
+        
+        for 0..data_bytes-1 {
+            my_checksum ^= message.user_read_pointer[it + HEADER_SIZE];
+        }
 
-    if my_checksum != stored_checksum {
-        log_error("Checksum mismatch in message %: Wanted %, got %. Quitting.\n", command, stored_checksum, my_checksum);
-        return false, command, .[];
-    }
+        if my_checksum != stored_checksum {
+            log_error("Checksum mismatch in message %: Wanted %, got %. Quitting.\n", command, stored_checksum, my_checksum);
+            return false, command, .[];
+        }
+    } 
 
     body_bytes: [] u8 = ---;
     body_bytes.data = message.user_read_pointer + HEADER_SIZE;
-    body_bytes.count = message.user_read_bytes - HEADER_SIZE;
+    body_bytes.count = data_bytes;
 
     return true, command, body_bytes;
 }
