@@ -8,6 +8,7 @@
 // - Error reporting (that shoud be quite easy)
 
 #import "Basic";
+#import "Command_Line";
 #import "File";
 #import "File_Utilities";
 #import "jason";
@@ -62,7 +63,7 @@ find_entry_file :: (root: string) -> string {
         }
     }
 
-    return ""; // What we gonna do when we do not find any 
+    return ""; // What we gonna do when we do not find any
 }
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
@@ -198,8 +199,23 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
 quit := false;
 
+Args :: struct {
+    profile: bool;
+    jai_path: string = #run find_current_jai_path();
+}
+
+args: Args;
+
 main :: () {
     context.logger = lsp_log;
+    success: bool;
+    success, args = parse_arguments(Args);
+    if !success {
+        log_error("Could not parse arguments");
+        exit(1);
+    }
+
+    log("Args are %", args);
 
     init_cache();
     defer deinit_cache();
@@ -234,4 +250,24 @@ main :: () {
     }
 
     log("Shutdown");
+}
+
+find_current_jai_path :: () -> string {
+    Compiler :: #import "Compiler";
+    options := get_build_options();
+    for options.import_path {
+        if find_index_from_left(it, "jai/modules") {
+            modules_path := remove_trailing_slash(it);
+            base_path := remove_trailing_slash(path_strip_filename(modules_path));
+            return base_path;
+        }
+    }
+
+    return "";
+
+    remove_trailing_slash :: (path: string) -> string {
+        result := path;
+        if path[path.count - 1] == #char "/" result.count -= 1;
+        return result;
+    }
 }

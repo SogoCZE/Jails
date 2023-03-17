@@ -1,15 +1,3 @@
-#import "Basic";
-#import "Compiler";
-#import "File";
-#import "String";
-#import "Shared_Memory_Channel";
-#import "Reflection";
-#import "System";
-#import "Pool";
-
-#load "../shared/binary_serization.jai";
-#load "../shared/shared.jai";
-
 Plugin :: Metaprogram_Plugin;
 
 DEBUG :: false;
@@ -21,7 +9,7 @@ JLS_Plugin :: struct {
     should_run := true;
     write_channel: Write_Channel;
     read_channel: Read_Channel;
-    modified_files: [..] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
+    modified_files: [] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
     start: Apollo_Time;
     pool: Pool;
 }
@@ -60,9 +48,23 @@ get_plugin :: () -> *Plugin {
     });
 
     // Read all (modified) files from the server
+    p.modified_files = receive_modified_files(*p.read_channel);
+    log("Received % modified files", p.modified_files.count);
+
+    init(*declarations_by_type_info_struct);
+
+    p.message  = message;
+    p.shutdown = shutdown;
+    p.before_intercept = before_intercept;
+
+    return p;
+}
+
+receive_modified_files :: (channel: *Read_Channel) -> [] Modified_File {
+    files: [..] Modified_File;
     received_all_files := false;
     while !received_all_files {
-        message_success, fatal_error, message := reader_poll_for_message(*p.read_channel);
+        message_success, fatal_error, message := reader_poll_for_message(channel);
         if fatal_error {
             log_error("Fatal error");
             exit(1);
@@ -83,55 +85,13 @@ get_plugin :: () -> *Plugin {
                 body_copy := array_copy(body_bytes);
                 file := deserialize(body_copy, Modified_File);
                 log("Got file %. Pretending to use this for something…", file.path);
-                array_add(*p.modified_files, file);
+                array_add(*files, file);
             case .DONE;
-                log("Received % files", p.modified_files.count);
                 received_all_files = true;
         }
     }
 
-    init(*declarations_by_type_info_struct);
-
-    p.message  = message;
-    p.shutdown = shutdown;
-    p.before_intercept = before_intercept;
-
-    return p;
-}
-
-send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
-    assert(channel != null);
-
-    // @SPEED: When we have around 25K serialization adds around 3s we need to figure why... 
-    data_bytes := serialize(data);
-
-    while true {
-        message_success, message := writer_reserve_message(channel, HEADER_SIZE + data_bytes.count);
-        if !message_success {
-            sleep_milliseconds(1);
-            continue;
-        }
-
-        message.user_write_pointer[0] = cast(u8) command;
-
-        // @SPEED: checksum is being slow (taking up to 2s when we have aroud 25K nodes)
-        #if ENABLE_CHECKSUM {
-            checksum: u8;
-
-            for byte, index: data_bytes {
-                checksum ^= byte;
-            }
-
-            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
-            message.user_write_pointer[1] = checksum;
-        } else {
-            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
-        }
-
-        writer_commit_message(channel, message);
-        break;
-    }
-
+    return files;
 }
 
 before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
@@ -712,3 +672,50 @@ shutdown :: (_p: *Plugin) {
     free(p);
     defer deinit(*declarations_by_type_info_struct);
 }
+
+send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
+    assert(channel != null);
+
+    // @SPEED: When we have around 25K serialization adds around 3s we need to figure why...
+    data_bytes := serialize(data);
+
+    while true {
+        message_success, message := writer_reserve_message(channel, HEADER_SIZE + data_bytes.count);
+        if !message_success {
+            sleep_milliseconds(1);
+            continue;
+        }
+
+        message.user_write_pointer[0] = cast(u8) command;
+        // @SPEED: checksum is being slow (taking up to 2s when we have aroud 25K nodes)
+        #if ENABLE_CHECKSUM {
+            checksum: u8;
+
+            for byte, index: data_bytes {
+                checksum ^= byte;
+            }
+
+            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
+            message.user_write_pointer[1] = checksum;
+        } else {
+            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
+        }
+
+        writer_commit_message(channel, message);
+        break;
+    }
+}
+
+
+#import "Basic";
+#import "Compiler";
+#import "File";
+#import "String";
+#import "Shared_Memory_Channel";
+#import "Reflection";
+#import "System";
+#import "Pool";
+
+#load "../shared/binary_serization.jai";
+#load "../shared/shared.jai";
+
