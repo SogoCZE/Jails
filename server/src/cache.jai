@@ -48,13 +48,13 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
         result, output, error = run_command("jai",
             tprint("%/modules/Default_Metaprogram.jai", args.jai_path), // Tell the Default_Metaprogram (Inception level 0) to compile the Default_Metaprogram (Inception level 1)...
             "-quiet", "-no_color", "-no_cwd", // (+ some basic args for Inception level 0)
-            "-plug", "tracy", "-modules", "-import_dir", METAPROGRAM_PLUGIN_PATH, // ... but use the tracy module to instrument Inception level 1
+            "-plug", "tracy", "-modules", "-import_dir", METAPROGRAM_MODULES_PATH, // ... but use the tracy module to instrument Inception level 1
             "-", program_cache.entry, "-plug", "jls", // ... and tell Inception level 1 to compile the actual entry point while using our JLS metaprogram which will be instrumented by tracy
-            "---", "import_dir", METAPROGRAM_PLUGIN_PATH, // ... and this here tells the compiler the import dir for Inception level 0
+            "---", "import_dir", METAPROGRAM_MODULES_PATH, // ... and this here tells the compiler the import dir for Inception level 0
             working_directory=program_cache.working_directory, capture_and_return_output=true
         );
     } else {
-        result, output, error = run_command("jai", program_cache.entry, "-quiet", "-no_color", "-plug", "jls", "---", "import_dir", METAPROGRAM_PLUGIN_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
+        result, output, error = run_command("jai", program_cache.entry, "-quiet", "-no_color", "-plug", "jls", "---", "import_dir", METAPROGRAM_MODULES_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
     }
     if result.exit_code != 0 || error {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);

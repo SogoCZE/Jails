@@ -32,7 +32,7 @@
 VERSION :: "1.0.0";
 
 PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "../..");
-METAPROGRAM_PLUGIN_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
+METAPROGRAM_MODULES_PATH :: #run tprint("%/metaprogram_modules", PROJECT_FOLDER_PATH);
 
 find_entry_file :: (root: string) -> string {
 
@@ -256,9 +256,10 @@ find_current_jai_path :: () -> string {
     Compiler :: #import "Compiler";
     options := get_build_options();
     for options.import_path {
-        if find_index_from_left(it, "jai/modules") {
+        if find_index_from_left(it, "jai/modules") != -1 {
             modules_path := remove_trailing_slash(it);
             base_path := remove_trailing_slash(path_strip_filename(modules_path));
+            log("% -> %", modules_path, base_path);
             return base_path;
         }
     }
