@@ -10,10 +10,18 @@ JLS_Plugin :: struct {
     write_channel: Write_Channel;
     read_channel: Read_Channel;
     modified_files: [] Modified_File; // @ToDo: Use this to intercept loads and replace files with the content from modified_files, if available
+    start: Apollo_Time;
+    pool: Pool;
 }
 
 get_plugin :: () -> *Plugin {
     p := New(JLS_Plugin);
+    p.start = current_time_consensus();
+
+    set_allocators(*p.pool);
+
+    context.allocator.proc = pool_allocator_proc;
+    context.allocator.data = *p.pool;
 
     #if OS != .WINDOWS {
         POSIX :: #import "POSIX";
@@ -38,7 +46,6 @@ get_plugin :: () -> *Plugin {
     send_to_server(*p.write_channel, .INITIALIZATION, *Initialization.{
         import_path=options.import_path
     });
-
 
     // Read all (modified) files from the server
     p.modified_files = receive_modified_files(*p.read_channel);
@@ -87,7 +94,6 @@ receive_modified_files :: (channel: *Read_Channel) -> [] Modified_File {
     return files;
 }
 
-
 before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
     p := cast(*JLS_Plugin) _p;
     options := get_build_options(p.workspace);
@@ -95,8 +101,6 @@ before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
     set_build_options(options, p.workspace);
 }
 
-
-FOR_FILE :: "main.jai";
 
 compiler_location_to_our_location :: (using location: Code_Node.Location) -> Declaration.Location {
     // DANGER!
@@ -151,16 +155,16 @@ process_number :: (type: *Type_Info) -> Base_Type {
     }
 }
 
-process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
-    type_inst := New(Type_Instantiation);
+process_type_instantiation :: (base: Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
+    type_inst: Type_Instantiation;
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
 
-    defer send_to_server(channel, .TYPE_INSTANTIATION, type_inst);
+    defer send_to_server(channel, .TYPE_INSTANTIATION, *type_inst);
 
     // persons: []Person; | groups_of_persons: [][]Person;
     if code_type_inst.array_element_type {
-        new_type_array := New(Type_Array);
+        new_type_array: Type_Array;
         new_type_array.serial = code_type_inst.array_element_type.serial;
 
         type_inst.serial_to = new_type_array.serial;
@@ -181,7 +185,7 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
         new_type_array.type_inst = process_type_instantiation(*Declaration.{serial = code_type_inst.array_element_type.serial}, code_type_inst.array_element_type, channel);
         // @todo send Type_Array to server
 
-        send_to_server(channel, .TYPE_ARRAY, new_type_array);
+        send_to_server(channel, .TYPE_ARRAY, *new_type_array);
 
         return type_inst.serial;
     }
@@ -211,7 +215,7 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
                     // Getting struct-serial by it's defined_type pointer
                     decl, ok := table_find(*declarations_by_type_info_struct, struct_result);
                     if !ok {
-                        print("Pointer not found!\n");
+                        #if DEBUG print("Pointer not found!\n");
                     } else {
                         type_inst.type_kind = .POINTER;
                         type_inst.serial_to = decl.serial;
@@ -253,14 +257,14 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
 }
 
 process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
-    _struct := New(Struct);
+    _struct: Struct;
     _struct.base = declaration;
     _struct.kind = .STRUCT;
 
     if code_struct.arguments_block {
         #if DEBUG then print("Setting struct to pointer %\n", code_struct.defined_type);
         // Setting serial of struct to defined_type pointer, so we can link afterwards
-        table_set(*declarations_by_type_info_struct, code_struct.defined_type, _struct);
+        // table_set(*declarations_by_type_info_struct, code_struct.defined_type, *_struct);
 
         _struct.arguments = process_code_block(code_struct.arguments_block, channel, true);
     }
@@ -268,13 +272,15 @@ process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Stru
     code_struct.block.serial = _struct.serial;
     _struct.block = process_code_block(code_struct.block, channel);
 
-    send_to_server(channel, .STRUCT, _struct);
+    send_to_server(channel, .STRUCT, *_struct);
+
+    // print("Decl name: %\n", declaration.name);
 
     return _struct.serial;
 }
 
 process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID {
-    declaration := New(Declaration);
+    declaration: Declaration;
     declaration.name = decl.name;
     declaration.serial = decl.serial;
 
@@ -313,14 +319,14 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
             case .PROCEDURE_HEADER;
                 code_procedure_header := cast(*Code_Procedure_Header) decl.expression;
 
-                _procedure := New(Procedure);
+                _procedure: Procedure;
                 _procedure.base = declaration;
                 _procedure.kind = .PROCEDURE;
                 _procedure.body = code_procedure_header.serial;
                 _procedure.arguments = map_to_declaration(code_procedure_header.arguments, channel);
                 _procedure.returns = map_to_declaration(code_procedure_header.returns, channel);
 
-                send_to_server(channel, .PROCEDURE, _procedure);
+                send_to_server(channel, .PROCEDURE, *_procedure);
 
                 return _procedure.serial;
 
@@ -332,7 +338,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
             case .ENUM;
                 code_enum := cast(*Code_Enum) decl.expression;
 
-                _enum := New(Enum);
+                _enum: Enum;
                 _enum.base = declaration;
                 _enum.kind = .ENUM;
 
@@ -345,21 +351,21 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                 code_enum.block.serial = _enum.serial;
                 _enum.block = process_code_block(code_enum.block, channel);
 
-                send_to_server(channel, .ENUM, _enum);
+                send_to_server(channel, .ENUM, *_enum);
 
                 return _enum.serial;
 
             // number := 10; | Jirka := Person.{ name = "Jirka" }; | name := "Jirka"; | numbers := int.[1, 3, 5, 7, 9];
             case .LITERAL;
                 code_literal := cast(*Code_Literal) decl.expression;
-                _expression := New(Expression);
+                _expression: Expression;
                 _expression.base = declaration;
                 _expression.kind = .EXPRESSION;
 
                 if code_literal.value_type == {
                     case .ARRAY;
                         code_type_inst := cast(*Code_Type_Instantiation) code_literal.array_literal_info.element_type;
-                        array_element_type := New(Type_Array);
+                        array_element_type: Type_Array;
                         array_element_type.type = .STATIC;
                         array_element_type.size = code_literal.array_literal_info.array_members.count;
                         #if DEBUG then print("array size = %\n", array_element_type.size);
@@ -369,7 +375,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                         array_element_type.serial = code_literal.serial;
                         _expression.serial_to = code_literal.serial;
 
-                        send_to_server(channel, .TYPE_ARRAY, array_element_type);
+                        send_to_server(channel, .TYPE_ARRAY, *array_element_type);
 
                         #if DEBUG then print("_expression.array_element_type = %\n", _expression.array_element_type);
                     case .STRUCT;
@@ -391,7 +397,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                         #if DEBUG then print("_expression.type = bool\n");
                 }
 
-                send_to_server(channel, .EXPRESSION, _expression);
+                send_to_server(channel, .EXPRESSION, *_expression);
 
                 return _expression.serial;
 
@@ -399,7 +405,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
             case .BINARY_OPERATOR;
                 code_binary_operator := cast(*Code_Binary_Operator) decl.expression;
 
-                _expression := New(Expression);
+                _expression: Expression;
                 _expression.base = declaration;
                 _expression.kind = .EXPRESSION;
 
@@ -417,7 +423,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                     }
                 }
 
-                send_to_server(channel, .EXPRESSION, _expression);
+                send_to_server(channel, .EXPRESSION, *_expression);
 
                 return _expression.serial;
 
@@ -425,7 +431,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
             case .IDENT;
                 code_ident:= cast(*Code_Ident) decl.expression;
 
-                _expression := New(Expression);
+                _expression: Expression;
                 _expression.base = declaration;
                 _expression.kind = .EXPRESSION;
 
@@ -434,7 +440,7 @@ process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID 
                     #if DEBUG then print("_expression.serial_to = %\n", _expression.serial_to);
                 }
 
-                send_to_server(channel, .EXPRESSION, _expression);
+                send_to_server(channel, .EXPRESSION, *_expression);
 
                 return _expression.serial;
         }
@@ -456,7 +462,7 @@ process_code_if :: (if_statement: *Code_If, channel: *Write_Channel, is_directiv
 
         our_if_statement.then_blocks = then_blocks;
     } else {
-        then_blocks := NewArray(1, s64);
+        then_blocks: [1]s64;
         then_blocks[0] = process_code_block(xx if_statement.then_block, channel);
         our_if_statement.then_blocks = then_blocks;
     }
@@ -582,7 +588,12 @@ message :: (_p: *Plugin, message: *Message) {
     if message.kind == .PHASE {
         phase_message := cast(*Message_Phase) message;
         if phase_message.phase != .TYPECHECKED_ALL_WE_CAN return;
-        print("Done, TYPECHECKED_ALL_WE_CAN\n");
+
+        end := current_time_consensus();
+        duration_ms := to_milliseconds(end - p.start);
+
+        print("Done in %ms, TYPECHECKED_ALL_WE_CAN\n", duration_ms);
+
         return;
     }
 
@@ -598,7 +609,7 @@ message :: (_p: *Plugin, message: *Message) {
 
         // person_kind: Person(string);
         if code_struct.arguments_block && code_struct.defined_type && code_struct.defined_type.polymorph_source_struct {
-            declaration := New(Declaration);
+            declaration: Declaration;
             declaration.name = code_struct.defined_type.name;
             declaration.serial = code_struct.serial;
 
@@ -656,6 +667,8 @@ shutdown :: (_p: *Plugin) {
     writer_disconnect(*p.write_channel);
     reader_release_channel(*p.read_channel);
 
+    release(*p.pool);
+
     free(p);
     defer deinit(*declarations_by_type_info_struct);
 }
@@ -663,6 +676,7 @@ shutdown :: (_p: *Plugin) {
 send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
     assert(channel != null);
 
+    // @SPEED: When we have around 25K serialization adds around 3s we need to figure why...
     data_bytes := serialize(data);
 
     while true {
@@ -673,14 +687,19 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
         }
 
         message.user_write_pointer[0] = cast(u8) command;
-        checksum: u8;
+        // @SPEED: checksum is being slow (taking up to 2s when we have aroud 25K nodes)
+        #if ENABLE_CHECKSUM {
+            checksum: u8;
 
-        for byte, index: data_bytes {
-            message.user_write_pointer[HEADER_SIZE + index] = byte;
-            checksum ^= byte;
+            for byte, index: data_bytes {
+                checksum ^= byte;
+            }
+
+            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
+            message.user_write_pointer[1] = checksum;
+        } else {
+            memcpy(*message.user_write_pointer[HEADER_SIZE], data_bytes.data, data_bytes.count);
         }
-
-        message.user_write_pointer[1] = checksum;
 
         writer_commit_message(channel, message);
         break;
@@ -695,6 +714,7 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
 #import "Shared_Memory_Channel";
 #import "Reflection";
 #import "System";
+#import "Pool";
 
 #load "../shared/binary_serization.jai";
 #load "../shared/shared.jai";

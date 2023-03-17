@@ -155,6 +155,7 @@ read_shared_memory :: (channel: Read_Channel) {
 
 add_to_cache :: (bytes: []u8, $type: Type) {
     data := deserialize(bytes, type);
+
     table_set(*program_cache.declarations_by_serial, data.serial, data);
     table_add(*program_cache.declarations_by_name, data.name, data);
     #if type == Block array_add(*program_cache.code_blocks, data);
