@@ -1,5 +1,3 @@
-ENABLE_TRACY :: true;
-
 Plugin :: Metaprogram_Plugin;
 
 DEBUG :: false;
@@ -15,31 +13,24 @@ JLS_Plugin :: struct {
 }
 
 get_plugin :: () -> *Plugin {
-    ZoneScoped();
     p := New(JLS_Plugin);
 
     #if OS != .WINDOWS {
-        {
-            ZoneScoped("shm_unlink");
-            POSIX :: #import "POSIX";
-            POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
-        }
+        POSIX :: #import "POSIX";
+        POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
     }
 
-    {
-        ZoneScoped("IPC setup");
-        success: bool;
-        success, p.read_channel = reader_create_channel(IPC_CHANNEL_NAME_TO_META, CHANNEL_DATA_BYTES);
-        if !success {
-            log_error("Could not open read channel.");
-            exit(1);
-        }
+    success: bool;
+    success, p.read_channel = reader_create_channel(IPC_CHANNEL_NAME_TO_META, CHANNEL_DATA_BYTES);
+    if !success {
+        log_error("Could not open read channel.");
+        exit(1);
+    }
 
-        success, p.write_channel = writer_connect(IPC_CHANNEL_NAME_FROM_META);
-        if !success {
-            log_error("Could not open write channel.");
-            exit(1);
-        }
+    success, p.write_channel = writer_connect(IPC_CHANNEL_NAME_FROM_META);
+    if !success {
+        log_error("Could not open write channel.");
+        exit(1);
     }
 
     options := get_build_options();
@@ -63,7 +54,6 @@ get_plugin :: () -> *Plugin {
 }
 
 receive_modified_files :: (channel: *Read_Channel) -> [] Modified_File {
-    ZoneScoped();
     files: [..] Modified_File;
     received_all_files := false;
     while !received_all_files {
@@ -120,7 +110,6 @@ compiler_location_to_our_location :: (using location: Code_Node.Location) -> Dec
 }
 
 map_to_declaration:: (code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
-    ZoneScoped();
     type_instantiations := NewArray(code_declarations.count, s64);
 
     for code_declarations type_instantiations[it_index] = process_declaration(it, channel);
@@ -163,7 +152,6 @@ process_number :: (type: *Type_Info) -> Base_Type {
 }
 
 process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
-    ZoneScoped();
     type_inst := New(Type_Instantiation);
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
@@ -265,7 +253,6 @@ process_type_instantiation :: (base: *Declaration, code_type_inst: *Code_Type_In
 }
 
 process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
-    ZoneScoped(text=declaration.name);
     _struct := New(Struct);
     _struct.base = declaration;
     _struct.kind = .STRUCT;
@@ -287,7 +274,6 @@ process_struct_declaration :: (declaration: Declaration, code_struct: *Code_Stru
 }
 
 process_declaration :: (decl: *Code_Declaration, channel: *Write_Channel) -> ID {
-    ZoneScoped(text=decl.name);
     declaration := New(Declaration);
     declaration.name = decl.name;
     declaration.serial = decl.serial;
@@ -577,7 +563,6 @@ process_code_block :: (block: *Code_Block, channel: *Write_Channel, process_memb
 files: [..]string;
 
 message :: (_p: *Plugin, message: *Message) {
-    ZoneScoped();
     p := cast(*JLS_Plugin) _p;
 
     // Gathering of project files
@@ -667,7 +652,6 @@ message :: (_p: *Plugin, message: *Message) {
 }
 
 shutdown :: (_p: *Plugin) {
-    ZoneScoped();
     p := cast(*JLS_Plugin) _p;
     writer_disconnect(*p.write_channel);
     reader_release_channel(*p.read_channel);
@@ -677,7 +661,6 @@ shutdown :: (_p: *Plugin) {
 }
 
 send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
-    ZoneScoped(text = enum_value_to_name(command));
     assert(channel != null);
 
     data_bytes := serialize(data);
@@ -712,7 +695,6 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
 #import "Shared_Memory_Channel";
 #import "Reflection";
 #import "System";
-#import "tracy"(IMPORT_MODE = .CLIENT, ENABLED = ENABLE_TRACY);
 
 #load "../shared/binary_serization.jai";
 #load "../shared/shared.jai";
