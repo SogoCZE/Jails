@@ -9,6 +9,19 @@ library_init :: (p: *JLS_Plugin, import_path: [] string) #c_call {
 }
 
 #program_export
+library_deinit :: (p: *JLS_Plugin) #c_call {
+    ctx: Context;
+    push_context ctx {
+        {
+            push_allocator(pool_allocator_proc, *p.pool);
+            deinit(p);
+        }
+        release(*p.pool);
+    }
+}
+
+
+#program_export
 library_handle_message :: (p: *JLS_Plugin, message: *Message) #c_call {
     ctx: Context;
     push_context ctx {
@@ -27,6 +40,10 @@ init :: (p: *JLS_Plugin, import_path: [] string) {
     // Read all (modified) files from the server
     p.modified_files = receive_modified_files(p);
     log("Received % modified files", p.modified_files.count);
+}
+
+deinit :: (p: *JLS_Plugin) {
+    deinit(*p.declarations_by_type_info_struct);
 }
 
 receive_modified_files :: (p: *JLS_Plugin) -> [] Modified_File {
@@ -470,7 +487,7 @@ process_code_for :: (p: *JLS_Plugin, for_statement: *Code_For, channel: *Write_C
     return our_for_statement.serial;
 }
 
-process_code_block :: (p: *JLS_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID {
+process_code_block :: (p: *JLS_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID #dump {
     our_block: Block;
     our_block.serial = block.serial;
     our_block.location = compiler_location_to_our_location(block.location);

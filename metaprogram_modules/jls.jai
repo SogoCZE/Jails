@@ -48,13 +48,13 @@ shutdown :: (_p: *Plugin) {
     writer_disconnect(*p.write_channel);
     reader_release_channel(*p.read_channel);
 
-    release(*p.pool);
+    library_deinit(p);
 
     free(p);
-    defer deinit(*p.declarations_by_type_info_struct);
 }
 
 library_init :: (p: *JLS_Plugin, import_path: [] string) #foreign jls_metaprogram_library;
+library_deinit :: (p: *JLS_Plugin) #foreign jls_metaprogram_library;
 library_handle_message :: (p: *JLS_Plugin, message: *Message) #foreign jls_metaprogram_library;
 
 jls_metaprogram_library :: #library "jls_metaprogram_library";
