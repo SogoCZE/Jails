@@ -4,6 +4,9 @@
 			"path": "metaprogram"
 		},
 		{
+			"path": "metaprogram_modules"
+		},
+		{
 			"path": "shared"
 		},
 		{
@@ -11,6 +14,10 @@
 		},
 		{
 			"path": "vscode_extension"
+		},
+		{
+			"name": "_root",
+			"path": "./"
 		}
 	],
 	"settings": {}
