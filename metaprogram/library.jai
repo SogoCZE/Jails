@@ -487,7 +487,7 @@ process_code_for :: (p: *JLS_Plugin, for_statement: *Code_For, channel: *Write_C
     return our_for_statement.serial;
 }
 
-process_code_block :: (p: *JLS_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID #dump {
+process_code_block :: (p: *JLS_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID {
     our_block: Block;
     our_block.serial = block.serial;
     our_block.location = compiler_location_to_our_location(block.location);

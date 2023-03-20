@@ -51,13 +51,15 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
             "-plug", "tracy", "-modules", "-import_dir", METAPROGRAM_MODULES_PATH, // ... but use the tracy module to instrument Inception level 1
             "-", program_cache.entry, "-plug", "jls", // ... and tell Inception level 1 to compile the actual entry point while using our JLS metaprogram which will be instrumented by tracy
             "---", "import_dir", METAPROGRAM_MODULES_PATH, // ... and this here tells the compiler the import dir for Inception level 0
-            "no_jobs", // @Fixme: There’s currently a very weird crash bug when using jobs. Looks like the jobs are smashing our stack, but in a very reproducible way? -rluba, 2023-03-19
             working_directory=program_cache.working_directory, capture_and_return_output=true
         );
     } else {
-        result, output, error = run_command("jai", program_cache.entry, "-quiet", "-no_color", "-plug", "jls", "---", "import_dir", METAPROGRAM_MODULES_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
+        result, output, error = run_command("jai",
+            program_cache.entry, "-quiet", "-no_color", "-plug", "jls",
+            "---", "import_dir", METAPROGRAM_MODULES_PATH,
+            working_directory=program_cache.working_directory, capture_and_return_output=true);
     }
-    if result.exit_code != 0 || error {
+    if result.exit_code != 0 {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
         return false, error;
     }
@@ -71,8 +73,10 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
     // It needs to wait for a signal from the cache thread that all messages have been received!?
     log("Cache refreshed in %ms! Nodes: %", duration_ms, program_cache.declarations_by_name.count);
 
-    // @Incomplete: Add "verbose" server argumend and only log this in verbose mode!
-    log("Compiler output: %", output);
+    if args.verbose {
+        log("Compiler stdout: %", output);
+        log_error("Compiler stderr: %", error);
+    }
 
     return true, "";
 }

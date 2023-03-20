@@ -130,7 +130,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             {
                 success, error_details := run_metaprogram_analysis();
                 if !success {
-                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run LSP metaprogram", error_details);
+                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run JLS metaprogram", error_details);
                     return;
                 }
             }
@@ -200,6 +200,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 quit := false;
 
 Args :: struct {
+    verbose: bool;
     profile: bool;
     jai_path: string = #run find_current_jai_path();
 }
