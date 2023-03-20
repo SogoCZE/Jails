@@ -1,5 +1,5 @@
 #program_export
-library_init :: (p: *JLS_Plugin, import_path: [] string) #c_call {
+library_init :: (p: *Jails_Plugin, import_path: [] string) #c_call {
     ctx: Context;
     push_context ctx {
         set_allocators(*p.pool);
@@ -9,7 +9,7 @@ library_init :: (p: *JLS_Plugin, import_path: [] string) #c_call {
 }
 
 #program_export
-library_deinit :: (p: *JLS_Plugin) #c_call {
+library_deinit :: (p: *Jails_Plugin) #c_call {
     ctx: Context;
     push_context ctx {
         {
@@ -22,7 +22,7 @@ library_deinit :: (p: *JLS_Plugin) #c_call {
 
 
 #program_export
-library_handle_message :: (p: *JLS_Plugin, message: *Message) #c_call {
+library_handle_message :: (p: *Jails_Plugin, message: *Message) #c_call {
     ctx: Context;
     push_context ctx {
         push_allocator(pool_allocator_proc, *p.pool);
@@ -30,7 +30,7 @@ library_handle_message :: (p: *JLS_Plugin, message: *Message) #c_call {
     }
 }
 
-init :: (p: *JLS_Plugin, import_path: [] string) {
+init :: (p: *Jails_Plugin, import_path: [] string) {
     init(*p.declarations_by_type_info_struct);
 
     send_to_server(*p.write_channel, .INITIALIZATION, *Initialization.{
@@ -42,11 +42,11 @@ init :: (p: *JLS_Plugin, import_path: [] string) {
     log("Received % modified files", p.modified_files.count);
 }
 
-deinit :: (p: *JLS_Plugin) {
+deinit :: (p: *Jails_Plugin) {
     deinit(*p.declarations_by_type_info_struct);
 }
 
-receive_modified_files :: (p: *JLS_Plugin) -> [] Modified_File {
+receive_modified_files :: (p: *Jails_Plugin) -> [] Modified_File {
     files: [..] Modified_File;
     received_all_files := false;
     while !received_all_files {
@@ -95,7 +95,7 @@ compiler_location_to_our_location :: (using location: Code_Node.Location) -> Dec
     };
 }
 
-map_to_declaration:: (p: *JLS_Plugin, code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
+map_to_declaration:: (p: *Jails_Plugin, code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
     type_instantiations := NewArray(code_declarations.count, s64);
 
     for code_declarations type_instantiations[it_index] = process_declaration(p, it, channel);
@@ -103,7 +103,7 @@ map_to_declaration:: (p: *JLS_Plugin, code_declarations: []*Code_Declaration, ch
     return type_instantiations;
 }
 
-process_procedure_body :: (p: *JLS_Plugin, body: *Code_Procedure_Body, channel: *Write_Channel) {
+process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel: *Write_Channel) {
     body.block.serial = body.serial;
 
     process_code_block(p, body.block, channel);
@@ -137,7 +137,7 @@ process_number :: (type: *Type_Info) -> Base_Type {
     }
 }
 
-process_type_instantiation :: (p: *JLS_Plugin, base: Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
+process_type_instantiation :: (p: *Jails_Plugin, base: Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
     type_inst: Type_Instantiation;
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
@@ -238,7 +238,7 @@ process_type_instantiation :: (p: *JLS_Plugin, base: Declaration, code_type_inst
     return type_inst.serial;
 }
 
-process_struct_declaration :: (p: *JLS_Plugin, declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
+process_struct_declaration :: (p: *Jails_Plugin, declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
     _struct: Struct;
     _struct.base = declaration;
     _struct.kind = .STRUCT;
@@ -261,7 +261,7 @@ process_struct_declaration :: (p: *JLS_Plugin, declaration: Declaration, code_st
     return _struct.serial;
 }
 
-process_declaration :: (p: *JLS_Plugin, decl: *Code_Declaration, channel: *Write_Channel) -> ID {
+process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Write_Channel) -> ID {
     declaration: Declaration;
     declaration.name = decl.name;
     declaration.serial = decl.serial;
@@ -431,7 +431,7 @@ process_declaration :: (p: *JLS_Plugin, decl: *Code_Declaration, channel: *Write
     return declaration.serial;
 }
 
-process_code_if :: (p: *JLS_Plugin, if_statement: *Code_If, channel: *Write_Channel, is_directive_static := false) -> ID {
+process_code_if :: (p: *Jails_Plugin, if_statement: *Code_If, channel: *Write_Channel, is_directive_static := false) -> ID {
     our_if_statement: If_Statement;
     our_if_statement.serial = if_statement.serial;
 
@@ -456,7 +456,7 @@ process_code_if :: (p: *JLS_Plugin, if_statement: *Code_If, channel: *Write_Chan
     return our_if_statement.serial;
 }
 
-process_code_while :: (p: *JLS_Plugin, while_statement: *Code_While, channel: *Write_Channel) -> ID {
+process_code_while :: (p: *Jails_Plugin, while_statement: *Code_While, channel: *Write_Channel) -> ID {
     our_while_statement: While_statement;
     our_while_statement.serial = while_statement.serial;
 
@@ -470,7 +470,7 @@ process_code_while :: (p: *JLS_Plugin, while_statement: *Code_While, channel: *W
     return our_while_statement.serial;
 }
 
-process_code_for :: (p: *JLS_Plugin, for_statement: *Code_For, channel: *Write_Channel) -> ID {
+process_code_for :: (p: *Jails_Plugin, for_statement: *Code_For, channel: *Write_Channel) -> ID {
     our_for_statement: For_Statement;
     our_for_statement.serial = for_statement.serial;
 
@@ -487,7 +487,7 @@ process_code_for :: (p: *JLS_Plugin, for_statement: *Code_For, channel: *Write_C
     return our_for_statement.serial;
 }
 
-process_code_block :: (p: *JLS_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID {
+process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID {
     our_block: Block;
     our_block.serial = block.serial;
     our_block.location = compiler_location_to_our_location(block.location);
@@ -547,7 +547,7 @@ process_code_block :: (p: *JLS_Plugin, block: *Code_Block, channel: *Write_Chann
     return our_block.serial;
 }
 
-handle_message :: (p: *JLS_Plugin, message: *Message) {
+handle_message :: (p: *Jails_Plugin, message: *Message) {
     // Gathering of project files
     if message.kind == .FILE {
         file_message := cast(*Message_File) message;
@@ -645,7 +645,7 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
     data_bytes := serialize(data);
 
     while true {
-        message_success, message := writer_reserve_message(channel, JLS_HEADER_SIZE + data_bytes.count);
+        message_success, message := writer_reserve_message(channel, JAILS_HEADER_SIZE + data_bytes.count);
         if !message_success {
             sleep_milliseconds(1);
             continue;
@@ -660,10 +660,10 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
                 checksum ^= byte;
             }
 
-            memcpy(*message.user_write_pointer[JLS_HEADER_SIZE], data_bytes.data, data_bytes.count);
+            memcpy(*message.user_write_pointer[JAILS_HEADER_SIZE], data_bytes.data, data_bytes.count);
             message.user_write_pointer[1] = checksum;
         } else {
-            memcpy(*message.user_write_pointer[JLS_HEADER_SIZE], data_bytes.data, data_bytes.count);
+            memcpy(*message.user_write_pointer[JAILS_HEADER_SIZE], data_bytes.data, data_bytes.count);
         }
 
         writer_commit_message(channel, message);

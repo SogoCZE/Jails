@@ -10,3 +10,6 @@ bin/
 .DS_Store
 *.dSYM
 *.dylib
+
+# Linux
+*.so

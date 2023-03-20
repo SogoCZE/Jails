@@ -2,7 +2,7 @@ DEBUG :: false;
 
 Plugin :: Metaprogram_Plugin;
 
-JLS_Plugin :: struct {
+Jails_Plugin :: struct {
     #as using base: Plugin;
     should_run := true;
     write_channel: Write_Channel;

@@ -1,5 +1,5 @@
 get_plugin :: () -> *Plugin {
-    p := New(JLS_Plugin);
+    p := New(Jails_Plugin);
     p.start = current_time_consensus();
 
     #if OS != .WINDOWS {
@@ -32,19 +32,19 @@ get_plugin :: () -> *Plugin {
 }
 
 before_intercept :: (_p: *Plugin, flags: *Intercept_Flags) {
-    p := cast(*JLS_Plugin) _p;
+    p := cast(*Jails_Plugin) _p;
     options := get_build_options(p.workspace);
     options.output_type = .NO_OUTPUT;
     set_build_options(options, p.workspace);
 }
 
 message :: (_p: *Plugin, message: *Message) {
-    p := cast(*JLS_Plugin) _p;
+    p := cast(*Jails_Plugin) _p;
     library_handle_message(p, message);
 }
 
 shutdown :: (_p: *Plugin) {
-    p := cast(*JLS_Plugin) _p;
+    p := cast(*Jails_Plugin) _p;
     writer_disconnect(*p.write_channel);
     reader_release_channel(*p.read_channel);
 
@@ -53,9 +53,9 @@ shutdown :: (_p: *Plugin) {
     free(p);
 }
 
-library_init :: (p: *JLS_Plugin, import_path: [] string) #foreign jls_metaprogram_library;
-library_deinit :: (p: *JLS_Plugin) #foreign jls_metaprogram_library;
-library_handle_message :: (p: *JLS_Plugin, message: *Message) #foreign jls_metaprogram_library;
+library_init :: (p: *Jails_Plugin, import_path: [] string) #foreign jls_metaprogram_library;
+library_deinit :: (p: *Jails_Plugin) #foreign jls_metaprogram_library;
+library_handle_message :: (p: *Jails_Plugin, message: *Message) #foreign jls_metaprogram_library;
 
 jls_metaprogram_library :: #library "jls_metaprogram_library";
 
