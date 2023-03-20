@@ -12,7 +12,7 @@ let client: LanguageClient;
 export function activate(context: ExtensionContext) {
     var isWin = process.platform === "win32";
     const pathDelimeter = isWin ? "\\" : "/";
-    const devServerPath = __dirname.replace(`vscode_extension${pathDelimeter}out`, `server${pathDelimeter}bin`) + pathDelimeter + "jls" + (isWin ? ".exe" : "");
+    const devServerPath = __dirname.replace(`vscode_extension${pathDelimeter}out`, `server${pathDelimeter}bin`) + pathDelimeter + "jails" + (isWin ? ".exe" : "");
 
     let serverOptions: ServerOptions = {
         command: devServerPath,
@@ -25,7 +25,7 @@ export function activate(context: ExtensionContext) {
     };
 
     client = new LanguageClient(
-        "jls", "Jai Language Server", serverOptions, clientOptions
+        "jails", "Jai Language Server", serverOptions, clientOptions
     );
 
     client.start();
