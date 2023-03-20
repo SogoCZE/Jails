@@ -60,6 +60,7 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
             "---", "import_dir", METAPROGRAM_MODULES_PATH,
             working_directory=program_cache.working_directory, capture_and_return_output=true);
     }
+    
     if result.exit_code != 0 {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
         return false, error;

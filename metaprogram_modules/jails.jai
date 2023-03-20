@@ -53,11 +53,11 @@ shutdown :: (_p: *Plugin) {
     free(p);
 }
 
-library_init :: (p: *Jails_Plugin, import_path: [] string) #foreign jls_metaprogram_library;
-library_deinit :: (p: *Jails_Plugin) #foreign jls_metaprogram_library;
-library_handle_message :: (p: *Jails_Plugin, message: *Message) #foreign jls_metaprogram_library;
+library_init :: (p: *Jails_Plugin, import_path: [] string) #foreign Jails_Metaprogram_Library;
+library_deinit :: (p: *Jails_Plugin) #foreign Jails_Metaprogram_Library;
+library_handle_message :: (p: *Jails_Plugin, message: *Message) #foreign Jails_Metaprogram_Library;
 
-jls_metaprogram_library :: #library "jls_metaprogram_library";
+Jails_Metaprogram_Library :: #library "jails_metaprogram_library";
 
 #load "../shared/binary_serialization.jai";
 #load "../shared/shared.jai";

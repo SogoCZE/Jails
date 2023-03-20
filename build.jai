@@ -43,13 +43,13 @@
         set_build_options(options, w);
 
         compiler_begin_intercept(w);
-        add_build_file("./server/src/main.jai", w); // @ToDo: Move all source to server/ directly
-        message_loop(w, options.compile_time_command_line);
+        add_build_file("./server/main.jai", w); 
+        message_loop(w, options.compile_time_command_line, true);
         compiler_end_intercept(w);
     }
 }
 
-message_loop :: (w: Workspace, args: []string) {
+message_loop :: (w: Workspace, args: []string, server_workspace := false) {
     while true {
         message := compiler_wait_for_message();
         if message.kind != .COMPLETE continue;
@@ -62,9 +62,11 @@ message_loop :: (w: Workspace, args: []string) {
         break;
     }
 
+    if !server_workspace return;
+
     // When we provide -vscode argument automatically launch vscode with our extension installed.
     if args.count > 2 && args[2] == "-vscode" {
-        vscode_extension_directory := join(get_working_directory(), "/../vscode_extension");
+        vscode_extension_directory := join(get_working_directory(), "/vscode_extension");
         vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
 
         print("%\n", vscode_extension_development_path);
@@ -87,7 +89,7 @@ message_loop :: (w: Workspace, args: []string) {
             vscode_path = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code";
         }
 
-        run_command(vscode_path, "--profile=lsp_dev", vscode_extension_development_path);
+        run_command(vscode_path, "--profile=jails_dev", vscode_extension_development_path);
     }
 
 }

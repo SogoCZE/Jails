@@ -7,31 +7,9 @@
 //     - structs (members etc)
 // - Error reporting (that shoud be quite easy)
 
-#import "Basic";
-#import "Command_Line";
-#import "File";
-#import "File_Utilities";
-#import "jason";
-#import "String";
-#import "Shared_Memory_Channel";
-#import "Thread";
-#import "Hash_Table";
-#import "Process";
-#import "Reflection";
-
-#load "rpc.jai";
-#load "lsp_interface.jai";
-#load "cache.jai";
-#load "files.jai";
-#load "completition.jai";
-#load "goto.jai";
-
-#load "../../shared/binary_serialization.jai";
-#load "../../shared/shared.jai";
-
 VERSION :: "1.0.0";
 
-PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "../..");
+PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "..");
 METAPROGRAM_MODULES_PATH :: #run tprint("%/metaprogram_modules", PROJECT_FOLDER_PATH);
 
 find_entry_file :: (root: string) -> string {
@@ -130,7 +108,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             {
                 success, error_details := run_metaprogram_analysis();
                 if !success {
-                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run JLS metaprogram", error_details);
+                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run Jails metaprogram", error_details);
                     return;
                 }
             }
@@ -273,3 +251,25 @@ find_current_jai_path :: () -> string {
         return result;
     }
 }
+
+#load "../shared/binary_serialization.jai";
+#load "../shared/shared.jai";
+
+#import "Basic";
+#import "Command_Line";
+#import "File";
+#import "File_Utilities";
+#import "jason";
+#import "String";
+#import "Shared_Memory_Channel";
+#import "Thread";
+#import "Hash_Table";
+#import "Process";
+#import "Reflection";
+
+#load "rpc.jai";
+#load "lsp_interface.jai";
+#load "cache.jai";
+#load "files.jai";
+#load "completition.jai";
+#load "goto.jai";
