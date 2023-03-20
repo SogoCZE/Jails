@@ -22,7 +22,7 @@
         options := get_build_options(w);
         copy_commonly_propagated_fields(get_build_options(), *options);
         options.output_type = .DYNAMIC_LIBRARY;
-        options.output_executable_name = "jls_metaprogram_library";
+        options.output_executable_name = "jails_metaprogram_library";
         options.output_path = "./metaprogram_modules";
         options.import_path = import_path;
         set_build_options(options, w);
@@ -37,7 +37,7 @@
 
         options := get_build_options(w);
         copy_commonly_propagated_fields(get_build_options(), *options);
-        options.output_executable_name = "jls";
+        options.output_executable_name = "jails";
         options.output_path = "./bin";
         options.import_path = import_path;
         set_build_options(options, w);
