@@ -48,15 +48,18 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
         result, output, error = run_command("jai",
             tprint("%/modules/Default_Metaprogram.jai", args.jai_path), // Tell the Default_Metaprogram (Inception level 0) to compile the Default_Metaprogram (Inception level 1)...
             "-quiet", "-no_color", "-no_cwd", // (+ some basic args for Inception level 0)
-            "-plug", "tracy", "-modules", "-import_dir", METAPROGRAM_PLUGIN_PATH, // ... but use the tracy module to instrument Inception level 1
+            "-plug", "tracy", "-modules", "-import_dir", METAPROGRAM_MODULES_PATH, // ... but use the tracy module to instrument Inception level 1
             "-", program_cache.entry, "-plug", "jls", // ... and tell Inception level 1 to compile the actual entry point while using our JLS metaprogram which will be instrumented by tracy
-            "---", "import_dir", METAPROGRAM_PLUGIN_PATH, // ... and this here tells the compiler the import dir for Inception level 0
+            "---", "import_dir", METAPROGRAM_MODULES_PATH, // ... and this here tells the compiler the import dir for Inception level 0
             working_directory=program_cache.working_directory, capture_and_return_output=true
         );
     } else {
-        result, output, error = run_command("jai", program_cache.entry, "-quiet", "-no_color", "-plug", "jls", "---", "import_dir", METAPROGRAM_PLUGIN_PATH, working_directory=program_cache.working_directory, capture_and_return_output=true);
+        result, output, error = run_command("jai",
+            program_cache.entry, "-quiet", "-no_color", "-plug", "jls",
+            "---", "import_dir", METAPROGRAM_MODULES_PATH,
+            working_directory=program_cache.working_directory, capture_and_return_output=true);
     }
-    if result.exit_code != 0 || error {
+    if result.exit_code != 0 {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
         return false, error;
     }
@@ -70,8 +73,10 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
     // It needs to wait for a signal from the cache thread that all messages have been received!?
     log("Cache refreshed in %ms! Nodes: %", duration_ms, program_cache.declarations_by_name.count);
 
-    // @Incomplete: Add "verbose" server argumend and only log this in verbose mode!
-    log("Compiler output: %", output);
+    if args.verbose {
+        log("Compiler stdout: %", output);
+        log_error("Compiler stderr: %", error);
+    }
 
     return true, "";
 }
@@ -98,7 +103,7 @@ read_shared_memory :: (channel: Read_Channel) {
         }
 
         bytes := message.user_read_bytes;
-        if bytes < HEADER_SIZE {
+        if bytes < JLS_HEADER_SIZE {
             log_error("Got a message that is too short (% bytes)! Quitting.", bytes);
             return;
         }
@@ -202,7 +207,7 @@ send_to_metaprogram :: (channel: *Write_Channel, command: Server_To_Metaprogram_
     if data data_bytes = serialize(data);
 
     while true {
-        message_success, message := writer_reserve_message(channel, HEADER_SIZE + data_bytes.count);
+        message_success, message := writer_reserve_message(channel, JLS_HEADER_SIZE + data_bytes.count);
         if !message_success {
             sleep_milliseconds(1);
             continue;
@@ -212,7 +217,7 @@ send_to_metaprogram :: (channel: *Write_Channel, command: Server_To_Metaprogram_
         checksum: u8;
 
         for byte, index: data_bytes {
-            message.user_write_pointer[HEADER_SIZE + index] = byte;
+            message.user_write_pointer[JLS_HEADER_SIZE + index] = byte;
             checksum ^= byte;
         }
 

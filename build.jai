@@ -9,29 +9,44 @@
 #run {
     set_build_options_dc(.{do_output=false});
 
-    w := compiler_create_workspace("Target Program");
-
     make_directory_if_it_does_not_exist("./bin/");
 
-    options := get_build_options(w);
-    copy_commonly_propagated_fields(get_build_options(), *options);
-    options.output_executable_name = "jls";
-    options.output_path = "./bin";
-
+    root_options := get_build_options();
 	import_path: [..] string;
-    array_add(*import_path, .. options.import_path);
-    array_add(*import_path, "../modules");
-    options.import_path = import_path;
+    array_add(*import_path, .. root_options.import_path);
+    array_add(*import_path, "./modules");
 
-    set_build_options(options, w);
+    {
+        w := compiler_create_workspace("Metaprogram library");
 
-    compiler_begin_intercept(w);
+        options := get_build_options(w);
+        copy_commonly_propagated_fields(get_build_options(), *options);
+        options.output_type = .DYNAMIC_LIBRARY;
+        options.output_executable_name = "jls_metaprogram_library";
+        options.output_path = "./metaprogram_modules";
+        options.import_path = import_path;
+        set_build_options(options, w);
 
-    add_build_file("./src/main.jai", w);
+        compiler_begin_intercept(w);
+        add_build_file("./metaprogram/library.jai", w);
+        message_loop(w, options.compile_time_command_line);
+        compiler_end_intercept(w);
+    }
+    {
+        w := compiler_create_workspace("Server");
 
-    message_loop(w, options.compile_time_command_line);
+        options := get_build_options(w);
+        copy_commonly_propagated_fields(get_build_options(), *options);
+        options.output_executable_name = "jls";
+        options.output_path = "./bin";
+        options.import_path = import_path;
+        set_build_options(options, w);
 
-    compiler_end_intercept(w);
+        compiler_begin_intercept(w);
+        add_build_file("./server/src/main.jai", w); // @ToDo: Move all source to server/ directly
+        message_loop(w, options.compile_time_command_line);
+        compiler_end_intercept(w);
+    }
 }
 
 message_loop :: (w: Workspace, args: []string) {

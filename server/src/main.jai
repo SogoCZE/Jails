@@ -26,13 +26,13 @@
 #load "completition.jai";
 #load "goto.jai";
 
-#load "../../shared/binary_serization.jai";
+#load "../../shared/binary_serialization.jai";
 #load "../../shared/shared.jai";
 
 VERSION :: "1.0.0";
 
 PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "../..");
-METAPROGRAM_PLUGIN_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
+METAPROGRAM_MODULES_PATH :: #run tprint("%/metaprogram_modules", PROJECT_FOLDER_PATH);
 
 find_entry_file :: (root: string) -> string {
 
@@ -130,7 +130,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             {
                 success, error_details := run_metaprogram_analysis();
                 if !success {
-                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run LSP metaprogram", error_details);
+                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run JLS metaprogram", error_details);
                     return;
                 }
             }
@@ -200,6 +200,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 quit := false;
 
 Args :: struct {
+    verbose: bool;
     profile: bool;
     jai_path: string = #run find_current_jai_path();
 }
@@ -256,9 +257,10 @@ find_current_jai_path :: () -> string {
     Compiler :: #import "Compiler";
     options := get_build_options();
     for options.import_path {
-        if find_index_from_left(it, "jai/modules") {
+        if find_index_from_left(it, "jai/modules") != -1 {
             modules_path := remove_trailing_slash(it);
             base_path := remove_trailing_slash(path_strip_filename(modules_path));
+            log("% -> %", modules_path, base_path);
             return base_path;
         }
     }
