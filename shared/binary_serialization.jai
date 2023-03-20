@@ -1,4 +1,5 @@
 // This is slightly modified version of this module https://github.com/osor-io/osor_serialization.
+// LICENSE: https://github.com/osor-io/osor_serialization/blob/main/LICENSE
 // I don't know if this is ideal but it worked so far.
 // @SPEED: how fast it is?
 
@@ -24,7 +25,7 @@ serialize :: (input : *$T, allocator: Allocator = context.allocator) -> []u8 #mu
     memcpy(output, input, size_of(type_of(<<input)));
 
     dynamic_memory_pointer := handle_dynamic_memory(output, dynamic_memory.data, .COPY_AND_ENCODE);
-    // assert(dynamic_memory_pointer == dynamic_memory.data + dynamic_memory.count) @todo: Why is this screaming only with the Pool Allocator?;
+    assert(dynamic_memory_pointer == dynamic_memory.data + dynamic_memory.count);
 
     return buffer;
 }
@@ -354,7 +355,7 @@ do_serialization_replacement :: (struct_info : *Type_Info_Struct) -> bool, Type 
 }
 
 align_for_serialization :: (value : $T) -> T {
-    return (value + 15) & (~15);
+    return (value + 7) & (~7);
 }
 
 quick_string_builder :: () #expand {
