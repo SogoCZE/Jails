@@ -77,11 +77,10 @@ Declaration :: struct {
         l0, c0, l1, c1: s32;
     }
 
+    serial: ID;
     flags: Our_Declaration_Flags;
-
     kind: Protocol_Tag;
     name: string;
-    serial: ID;
     location: Location;
 }
 
@@ -242,44 +241,3 @@ decode_command :: (message: Read_Message, $T: Type) -> bool, T, [] u8 {
 
     return true, command, body_bytes;
 }
-
-// OLD --------
-
-// Procedure_Call :: struct {
-//     #as using base: Node;
-//     base.kind = .PROCEDURE_CALL;
-
-//     arguments: []Node;
-// }
-
-// Indent :: struct {
-//     #as using base: Node;
-//     base.kind = .INDENT;
-
-//     serial_to: s64;
-// }
-
-// Literal :: struct {
-//     #as using base: Node;
-//     base.kind = .LITERAL;
-
-//     value_type: type_of(Code_Literal.value_type);
-// }
-
-// Declaration :: struct {
-//     #as using base: Node;
-//     base.kind = .DECLARATION;
-
-//     type_inst: *Node;  // In     name : A = B;     this is A.
-//     expression: *Node; // In     name : A = B;     this is B.
-// }
-
-// file, line, column;
-
-// lines := find_in_table(*project.nodes_by_location, file);
-
-// for node: lines[line] {
-//     if node.location.c0 >= column && node.location.c1 <= column {
-
-//     }
-// }

@@ -492,10 +492,6 @@ process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Cha
     our_block.serial = block.serial;
     our_block.location = compiler_location_to_our_location(block.location);
 
-    if block.serial == 0 && our_block.location.file == "/Users/patriksmely/Documents/Projekty/jai_lsp_meta/sandbox/main.jai" {
-        print("Block at: % (%)\n", our_block.location, block.serial);
-    }
-
     if block.statements {
         declarations_serials := NewArray(block.statements.count, s64);
         for statement: block.statements {
@@ -641,7 +637,6 @@ handle_message :: (p: *Jails_Plugin, message: *Message) {
 send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
     assert(channel != null);
 
-    // @SPEED: When we have around 25K serialization adds around 3s we need to figure why...
     data_bytes := serialize(data);
 
     while true {
@@ -652,7 +647,6 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
         }
 
         message.user_write_pointer[0] = cast(u8) command;
-        // @SPEED: checksum is being slow (taking up to 2s when we have aroud 25K nodes)
         #if ENABLE_CHECKSUM {
             checksum: u8;
 

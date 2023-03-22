@@ -163,9 +163,12 @@ read_shared_memory :: (channel: Read_Channel) {
 add_to_cache :: (bytes: []u8, $type: Type) {
     data := deserialize(bytes, type);
 
-    table_set(*program_cache.declarations_by_serial, data.serial, data);
-    table_add(*program_cache.declarations_by_name, data.name, data);
-    #if type == Block array_add(*program_cache.code_blocks, data);
+    #if type == Block {
+        array_add(*program_cache.code_blocks, data);
+    } else {
+        table_set(*program_cache.declarations_by_serial, data.serial, data);
+        table_add(*program_cache.declarations_by_name, data.name, data);
+    }
 }
 
 path_in_imported_modules_or_files :: (path: string) -> bool {
@@ -179,6 +182,42 @@ path_in_imported_modules_or_files :: (path: string) -> bool {
     }
 
     return false;
+}
+
+// Find nearest block by line, char and file
+// @todo: make this more robust and cleaver (this is initial experimental implementation)
+find_block :: (line: s32, char: s32, file: string) -> *Block {
+    nearest_block: *Block;
+
+    is_in_range :: (loc: Declaration.Location, line: s32, char: s32) -> bool {
+        if loc.l0 > line || loc.l1 < line return false;
+
+        if loc.l0 == line && loc.c0 > char return false;
+        if loc.l1 == line && loc.c1 < char return false;
+        
+        return true;
+    }
+
+    for * block: program_cache.code_blocks {
+        if block.serial == 0 continue;
+        if block.location.file != file continue;
+
+        // if !contains(block.location.file, "main.jai") continue;
+        // log("block: %:% - %:% (%) vs %:%", block.location.l0, block.location.c0, block.location.l1, block.location.c1, block.location.file, line, char);
+
+        // If the location is not present in the block we skip.
+        if !is_in_range(block.location, line, char) continue;
+
+        // If we are not smaller than so far nearest block we skip.
+        if nearest_block {
+            if !is_in_range(nearest_block.location, block.location.l0, block.location.c0) continue;
+            if !is_in_range(nearest_block.location, block.location.l1, block.location.c1) continue;
+        }
+
+        nearest_block = block;
+    }
+
+    return nearest_block;
 }
 
 listen_to_metaprogram :: (thread: *Thread) -> s64 {

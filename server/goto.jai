@@ -40,6 +40,7 @@ handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string,
     });
 }
 
+// @todo: Consider using a compiler for goto resolution based on a clicked symbol (index all symbols - procedure calls, identifiers, type instantiation...)
 handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
     file_without_uri_prefix := replace(file, "file://", "");
@@ -57,6 +58,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
     word := find_word_in_file(file, request.params.position);
+    word_block := find_block(xx (request.params.position.line+1), xx (request.params.position.character+1), file_without_uri_prefix);
 
     decls := table_find_multiple(*program_cache.declarations_by_name, word);
     if decls.count == 0 {
@@ -68,11 +70,18 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     locations: [..]LSP_Location;
 
     for decl: decls {
-        // if !(decl.flags & .IS_GLOBAL) continue;
         if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
+        
+        if !(decl.flags & .IS_GLOBAL) {
+            decl_block := find_block(decl.location.l0, decl.location.c0, decl.location.file);
+            if !decl_block || !word_block || decl_block.serial != word_block.serial continue;
+        }
+
         array_add(*locations, declaration_to_lsp_location(decl));
     }
 
+    // @todo: filter overloaded procedure
+    
     lsp_respond(request.id, locations);
     array_free(locations);
 }
