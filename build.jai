@@ -1,11 +1,3 @@
-#import "Basic";
-#import "Compiler";
-#import "File";
-#import "String";
-#import "Process";
-#import "System";
-
-// Basic build file
 #run {
     set_build_options_dc(.{do_output=false});
 
@@ -93,3 +85,10 @@ message_loop :: (w: Workspace, args: []string, server_workspace := false) {
     }
 
 }
+
+#import "Basic";
+#import "Compiler";
+#import "File";
+#import "String";
+#import "Process";
+#import "System";

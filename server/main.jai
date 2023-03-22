@@ -187,6 +187,7 @@ args: Args;
 
 main :: () {
     context.logger = lsp_log;
+
     success: bool;
     success, args = parse_arguments(Args);
     if !success {

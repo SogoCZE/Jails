@@ -70,7 +70,7 @@ Initialization :: struct {
     import_path: []string;
 }
 
-// Struktury
+// LSP AST Structures
 Declaration :: struct {
     Location :: struct {
         file: string;
