@@ -32,6 +32,7 @@ library_handle_message :: (p: *Jails_Plugin, message: *Message) #c_call {
 
 init :: (p: *Jails_Plugin, import_path: [] string) {
     init(*p.declarations_by_type_info_struct);
+    init(*p.procedure_header_to_declaration);
 
     send_to_server(*p.write_channel, .INITIALIZATION, *Initialization.{
         import_path=import_path
@@ -44,6 +45,7 @@ init :: (p: *Jails_Plugin, import_path: [] string) {
 
 deinit :: (p: *Jails_Plugin) {
     deinit(*p.declarations_by_type_info_struct);
+    deinit(*p.procedure_header_to_declaration);
 }
 
 receive_modified_files :: (p: *Jails_Plugin) -> [] Modified_File {
@@ -104,9 +106,14 @@ map_to_declaration:: (p: *Jails_Plugin, code_declarations: []*Code_Declaration, 
 }
 
 process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel: *Write_Channel) {
-    body.block.serial = body.serial;
+    body.block.serial = body.header.serial;
 
-    process_code_block(p, body.block, channel);
+    procedure_decl_serial, ok := table_find(*p.procedure_header_to_declaration, body.header.serial);
+    if !ok {
+        log_error("Cannot find procedure decl serial.");
+    }
+
+    process_code_block(p, body.block, channel, procedure_decl_serial);
 }
 
 process_number :: (type: *Type_Info) -> Base_Type {
@@ -165,7 +172,6 @@ process_type_instantiation :: (p: *Jails_Plugin, base: Declaration, code_type_in
         }
 
         new_type_array.type_inst = process_type_instantiation(p, *Declaration.{serial = code_type_inst.array_element_type.serial}, code_type_inst.array_element_type, channel);
-        // @todo send Type_Array to server
 
         send_to_server(channel, .TYPE_ARRAY, *new_type_array);
 
@@ -248,15 +254,13 @@ process_struct_declaration :: (p: *Jails_Plugin, declaration: Declaration, code_
         // Setting serial of struct to defined_type pointer, so we can link afterwards
         // table_set(*declarations_by_type_info_struct, code_struct.defined_type, *_struct);
 
-        _struct.arguments = process_code_block(p, code_struct.arguments_block, channel, true);
+        _struct.arguments = process_code_block(p, code_struct.arguments_block, channel, declaration.serial, true);
     }
 
     code_struct.block.serial = _struct.serial;
-    _struct.block = process_code_block(p, code_struct.block, channel);
+    _struct.block = process_code_block(p, code_struct.block, channel, declaration.serial,);
 
     send_to_server(channel, .STRUCT, *_struct);
-
-    // print("Decl name: %\n", declaration.name);
 
     return _struct.serial;
 }
@@ -268,15 +272,9 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
 
     declaration_flags: Our_Declaration_Flags;
 
-    if decl.flags & .IS_GLOBAL {
-        declaration_flags = declaration_flags | .IS_GLOBAL;
-    }
-    if decl.flags & .SCOPE_FILE {
-        declaration_flags = declaration_flags | .SCOPE_FILE;
-    }
-    if decl.flags & .IS_IMPORTED {
-        declaration_flags = declaration_flags | .IS_IMPORTED;
-    }
+    if decl.flags & .IS_GLOBAL   declaration_flags |= .IS_GLOBAL;
+    if decl.flags & .SCOPE_FILE  declaration_flags |= .SCOPE_FILE;
+    if decl.flags & .IS_IMPORTED declaration_flags |= .IS_IMPORTED;
 
     declaration.flags = declaration_flags;
 
@@ -308,6 +306,8 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                 _procedure.arguments = map_to_declaration(p, code_procedure_header.arguments, channel);
                 _procedure.returns = map_to_declaration(p, code_procedure_header.returns, channel);
 
+                table_set(*p.procedure_header_to_declaration, code_procedure_header.serial, declaration.serial);
+
                 send_to_server(channel, .PROCEDURE, *_procedure);
 
                 return _procedure.serial;
@@ -331,7 +331,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                 }
 
                 code_enum.block.serial = _enum.serial;
-                _enum.block = process_code_block(p, code_enum.block, channel);
+                _enum.block = process_code_block(p, code_enum.block, channel, declaration.serial);
 
                 send_to_server(channel, .ENUM, *_enum);
 
@@ -439,17 +439,17 @@ process_code_if :: (p: *Jails_Plugin, if_statement: *Code_If, channel: *Write_Ch
         then_blocks := NewArray(if_statement.then_block.statements.count, s64);
         for statement: if_statement.then_block.statements {
             code_case := cast(*Code_Case) statement;
-            then_blocks[it_index] = process_code_block(p, xx code_case.then_block, channel);
+            then_blocks[it_index] = process_code_block(p, xx code_case.then_block, channel, our_if_statement.serial);
         }
 
         our_if_statement.then_blocks = then_blocks;
     } else {
         then_blocks: [1]s64;
-        then_blocks[0] = process_code_block(p, xx if_statement.then_block, channel);
+        then_blocks[0] = process_code_block(p, xx if_statement.then_block, channel, our_if_statement.serial);
         our_if_statement.then_blocks = then_blocks;
     }
 
-    if if_statement.else_block then our_if_statement.else_block = process_code_block(p, xx if_statement.else_block, channel);
+    if if_statement.else_block then our_if_statement.else_block = process_code_block(p, xx if_statement.else_block, channel, our_if_statement.serial);
 
     if is_directive_static then our_if_statement.is_directive_static = true;
 
@@ -460,7 +460,7 @@ process_code_while :: (p: *Jails_Plugin, while_statement: *Code_While, channel: 
     our_while_statement: While_statement;
     our_while_statement.serial = while_statement.serial;
 
-    our_while_statement.block = process_code_block(p, while_statement.block, channel);
+    our_while_statement.block = process_code_block(p, while_statement.block, channel, our_while_statement.serial);
 
     if while_statement.condition.kind == .DECLARATION {
         our_while_statement.condition = process_declaration(p, xx while_statement.condition, channel);
@@ -474,7 +474,7 @@ process_code_for :: (p: *Jails_Plugin, for_statement: *Code_For, channel: *Write
     our_for_statement: For_Statement;
     our_for_statement.serial = for_statement.serial;
 
-    our_for_statement.block = process_code_block(p, for_statement.block, channel);
+    our_for_statement.block = process_code_block(p, for_statement.block, channel, our_for_statement.serial);
 
     if for_statement.ident_decl && for_statement.ident_decl.kind == .DECLARATION {
         iterator_declaration := cast(*Code_Declaration) for_statement.ident_decl;
@@ -487,9 +487,10 @@ process_code_for :: (p: *Jails_Plugin, for_statement: *Code_For, channel: *Write
     return our_for_statement.serial;
 }
 
-process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Channel, process_members := false) -> ID {
+process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Channel, parent: ID, process_members := false) -> ID {
     our_block: Block;
     our_block.serial = block.serial;
+    our_block.parent = parent;
     our_block.location = compiler_location_to_our_location(block.location);
 
     if block.statements {
@@ -507,7 +508,7 @@ process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Cha
                     }
 
                 case .BLOCK;
-                    declarations_serials[it_index] = process_code_block(p, xx statement, channel);
+                    declarations_serials[it_index] = process_code_block(p, xx statement, channel, block.serial);
 
                 case .WHILE;
                     declarations_serials[it_index] = process_code_while(p, xx statement, channel);
@@ -531,7 +532,7 @@ process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Cha
         for statement: block.members {
             if statement.kind == {
                 case .DECLARATION; members_serials[it_index] = process_declaration(p, xx statement, channel);
-                case .BLOCK; members_serials[it_index] = process_code_block(p, xx statement, channel);
+                case .BLOCK; members_serials[it_index] = process_code_block(p, xx statement, channel, block.serial);
             }
         }
 

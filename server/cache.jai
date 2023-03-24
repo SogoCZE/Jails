@@ -165,6 +165,7 @@ add_to_cache :: (bytes: []u8, $type: Type) {
 
     #if type == Block {
         array_add(*program_cache.code_blocks, data);
+        // table_set(*program_cache.declarations_by_serial, data.serial, data);
     } else {
         table_set(*program_cache.declarations_by_serial, data.serial, data);
         table_add(*program_cache.declarations_by_name, data.name, data);

@@ -1,4 +1,5 @@
 
+// This handles clicking on import or load.
 handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string, module: bool, pos: LSP_Position) {
     start_of_path := find_index_from_left(line, "\"");
     end_of_path := find_index_from_right(line, "\"");
@@ -40,7 +41,7 @@ handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string,
     });
 }
 
-// @todo: Consider using a compiler for goto resolution based on a clicked symbol (index all symbols - procedure calls, identifiers, type instantiation...)
+// @todo: Consider using a compiler for goto resolution based on a clicked symbol (index all symbols - procedure calls, expressions, type instantiation...)
 handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
     file_without_uri_prefix := replace(file, "file://", "");
@@ -69,19 +70,42 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     locations: [..]LSP_Location;
 
-    for decl: decls {
-        if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
-        
-        if !(decl.flags & .IS_GLOBAL) {
+    // Scope related
+    if word_block {
+        for decl: decls {
+            if decl.flags & .IS_GLOBAL continue;
+            
             decl_block := find_block(decl.location.l0, decl.location.c0, decl.location.file);
-            if !decl_block || !word_block || decl_block.serial != word_block.serial continue;
+
+            if !decl_block || decl_block.serial != word_block.serial continue;
+
+            lsp_respond(request.id, declaration_to_lsp_location(decl));
+            return;
         }
 
+        // Look into arguments of procedure or struct
+        word_block_parent, ok := table_find(*program_cache.declarations_by_serial, word_block.parent);
+        if ok && word_block_parent.kind == .PROCEDURE {
+            procedure := cast(*Procedure) word_block_parent;
+
+            for argument_id: procedure.arguments {
+                argument, ok := table_find(*program_cache.declarations_by_serial, argument_id);
+
+                if argument.name == word {
+                    lsp_respond(request.id, declaration_to_lsp_location(argument));
+                    return;
+                }
+            }
+        }
+    }
+
+    // Globals
+    for decl: decls {
+        if !(decl.flags & .IS_GLOBAL) continue;
+        if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
         array_add(*locations, declaration_to_lsp_location(decl));
     }
 
-    // @todo: filter overloaded procedure
-    
     lsp_respond(request.id, locations);
     array_free(locations);
 }

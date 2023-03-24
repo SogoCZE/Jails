@@ -77,11 +77,13 @@ Declaration :: struct {
         l0, c0, l1, c1: s32;
     }
 
+
     serial: ID;
     flags: Our_Declaration_Flags;
     kind: Protocol_Tag;
     name: string;
     location: Location;
+    
 }
 
 
@@ -120,6 +122,7 @@ Type_Array :: struct {
 Block :: struct {
     #as using base: Declaration;
     base.kind = .BLOCK;
+    parent: ID;
 
     declarations: []ID;
     members: []ID;

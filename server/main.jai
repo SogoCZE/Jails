@@ -52,7 +52,7 @@ declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     }
 
     decrement_or_zero :: inline (number: int) -> u32 {
-        if number == 0 return 0;
+        if number <= 0 return 0;
         return xx (number-1);
     }
 
