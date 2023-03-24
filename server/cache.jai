@@ -3,6 +3,8 @@ Line :: struct {
 }
 
 Program :: struct {
+    channel_id: u64;
+
     import_path: []string;
     entry: string;
     working_directory: string;
@@ -22,6 +24,9 @@ Program :: struct {
 program_cache: Program;
 
 init_cache :: () {
+    random_seed(current_time_monotonic().low);
+    program_cache.channel_id = random_get() % 100000; // @TODO: is this ok?
+
     init(*program_cache.declarations_by_serial);
     init(*program_cache.declarations_by_name);
     // init(*program_cache.declarations_by_location);
@@ -65,6 +70,7 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
         }
     }
 
+    array_add(*command, tprint("%", program_cache.channel_id)); // Add unique shared memory channel ID @TOOD: is there way how to more easily transform u64 to string?
     array_add(*command, "---", "import_dir", METAPROGRAM_MODULES_PATH); // Import dir for the initial Default_Metaprogram so that it can find our plugins (tracy for Inception level 0 if we’re profiling or Jails if we’re not profiling).
 
     result, output, error = run_command(..command, working_directory=program_cache.working_directory, capture_and_return_output=true);
@@ -126,7 +132,7 @@ read_shared_memory :: (channel: Read_Channel) {
                 initialization := deserialize(body_bytes, Initialization);
                 program_cache.import_path = initialization.import_path;
                 write_channel_success: bool;
-                write_channel_success, write_channel = writer_connect(IPC_CHANNEL_NAME_TO_META);
+                write_channel_success, write_channel = writer_connect(tprint("%-%", IPC_CHANNEL_NAME_TO_META, program_cache.channel_id));
                 if !write_channel_success {
                     log_error("Could not open write channel to metaprogram.");
                     return;
@@ -211,9 +217,6 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
         if block.serial == 0 continue;
         if block.location.file != file continue;
 
-        // if !contains(block.location.file, "main.jai") continue;
-        // log("block: %:% - %:% (%) vs %:%", block.location.l0, block.location.c0, block.location.l1, block.location.c1, block.location.file, line, char);
-
         // If the location is not present in the block we skip.
         if !is_in_range(block.location, line, char) continue;
 
@@ -235,9 +238,9 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
         POSIX.shm_unlink(IPC_CHANNEL_NAME_FROM_META);
     }
 
-    // log("Listening to metaprogram!");
+    log("Opening %", tprint("%-%", IPC_CHANNEL_NAME_FROM_META, program_cache.channel_id));
 
-    success, channel := reader_create_channel(IPC_CHANNEL_NAME_FROM_META, CHANNEL_DATA_BYTES);
+    success, channel := reader_create_channel(tprint("%-%", IPC_CHANNEL_NAME_FROM_META, program_cache.channel_id), CHANNEL_DATA_BYTES);
     if !success {
         // log_error("Exiting due to channel creation failure.\n");
         return -1;

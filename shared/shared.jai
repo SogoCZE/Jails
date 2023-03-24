@@ -2,8 +2,8 @@
 
 ENABLE_CHECKSUM :: false;
 
-IPC_CHANNEL_NAME_FROM_META :: "jails_channel_from_meta";
-IPC_CHANNEL_NAME_TO_META   :: "jails_channel_to_meta";
+IPC_CHANNEL_NAME_FROM_META :: "jails_from";
+IPC_CHANNEL_NAME_TO_META   :: "jails_to";
 
 CHANNEL_DATA_BYTES :: 64 * 1024 * 1024; // 64 MB @ToDo: what if we run out of space?
 

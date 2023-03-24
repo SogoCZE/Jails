@@ -7,20 +7,25 @@ get_plugin :: () -> *Plugin {
         POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
     }
 
+    options := get_build_options();
+
+    // @TODO: This is dangerous!
+    last := options.compile_time_command_line[options.compile_time_command_line.count-1];
+
     success: bool;
-    success, p.read_channel = reader_create_channel(IPC_CHANNEL_NAME_TO_META, CHANNEL_DATA_BYTES);
+    success, p.read_channel = reader_create_channel(join(IPC_CHANNEL_NAME_TO_META, last, separator="-"), CHANNEL_DATA_BYTES);
     if !success {
         log_error("Could not open read channel.");
         exit(1);
     }
 
-    success, p.write_channel = writer_connect(IPC_CHANNEL_NAME_FROM_META);
+    success, p.write_channel = writer_connect(join(IPC_CHANNEL_NAME_FROM_META, last, separator="-"));
     if !success {
         log_error("Could not open write channel.");
         exit(1);
     }
 
-    options := get_build_options();
+
 
     p.message  = message;
     p.shutdown = shutdown;
