@@ -110,6 +110,8 @@ process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel
 }
 
 process_number :: (type: *Type_Info) -> Base_Type {
+    if !type return .UNINITIALIZED; // Can happen for polymorphic types (eg. an enum’s internal_type if the enum is declared inside a polymorphic struct)
+
     if type.type == {
         case .INTEGER;
             info_integer := cast(*Type_Info_Integer) type;
