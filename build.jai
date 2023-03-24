@@ -12,9 +12,13 @@
     make_directory_if_it_does_not_exist("./bin/");
 
     root_options := get_build_options();
+    args := root_options.compile_time_command_line;
 	import_path: [..] string;
     array_add(*import_path, .. root_options.import_path);
     array_add(*import_path, "./modules");
+
+    profile_server := array_find(args, "-profile_server");
+    launch_vscode := array_find(args, "-vscode");
 
     {
         w := compiler_create_workspace("Metaprogram library");
@@ -29,7 +33,7 @@
 
         compiler_begin_intercept(w);
         add_build_file("./metaprogram/library.jai", w);
-        message_loop(w, options.compile_time_command_line);
+        message_loop(w, args, null);
         compiler_end_intercept(w);
     }
     {
@@ -42,30 +46,32 @@
         options.import_path = import_path;
         set_build_options(options, w);
 
-        compiler_begin_intercept(w);
-        add_build_file("./server/main.jai", w); 
-        message_loop(w, options.compile_time_command_line, true);
-        compiler_end_intercept(w);
-    }
-}
+        tracy: *Metaprogram_Plugin;
+        if profile_server {
+            log("Adding tracy plugin");
+            Tracy :: #import "tracy";
+            tracy = Tracy.get_plugin();
+            tracy.workspace = w;
 
-message_loop :: (w: Workspace, args: []string, server_workspace := false) {
-    while true {
-        message := compiler_wait_for_message();
-        if message.kind != .COMPLETE continue;
-
-        complete := cast(*Message_Complete) message;
-        if complete.error_code != .NONE {
-            return;
+            assert(tracy.handle_one_option != null);
+            tracy.handle_one_option(tracy, .["-modules"], 0);
         }
 
-        break;
+        flags: Intercept_Flags;
+        if tracy && tracy.before_intercept tracy.before_intercept(tracy, *flags);
+
+        compiler_begin_intercept(w, flags);
+        if tracy && tracy.add_source tracy.add_source(tracy);
+        add_build_file("./server/main.jai", w);
+        message_loop(w, args, tracy);
+        compiler_end_intercept(w);
+
+        if tracy && tracy.finish tracy.finish(tracy);
+        if tracy && tracy.shutdown tracy.shutdown(tracy);
     }
 
-    if !server_workspace return;
-
-    // When we provide -vscode argument automatically launch vscode with our extension installed.
-    if args.count > 2 && args[2] == "-vscode" {
+    if launch_vscode {
+        // When we provide -vscode argument automatically launch vscode with our extension installed.
         vscode_extension_directory := join(get_working_directory(), "/vscode_extension");
         vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
 
@@ -91,5 +97,19 @@ message_loop :: (w: Workspace, args: []string, server_workspace := false) {
 
         run_command(vscode_path, "--profile=jails_dev", vscode_extension_development_path);
     }
+}
 
+message_loop :: (w: Workspace, args: []string, tracy: *Metaprogram_Plugin) {
+    while true {
+        message := compiler_wait_for_message();
+        if tracy && tracy.message tracy.message(tracy, message);
+        if message.kind != .COMPLETE continue;
+
+        complete := cast(*Message_Complete) message;
+        if complete.error_code != .NONE {
+            return;
+        }
+
+        break;
+    }
 }
