@@ -19,6 +19,7 @@ find_entry_file :: (root: string) -> string {
         return contains(content, "main ::") || contains(content, "main::");
     }
 
+    // @Fixme: This does not take the root into account!
     COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Maybe build.jai ... etc?
 
     for path: COMMON_MAIN_PATH {
@@ -42,6 +43,19 @@ find_entry_file :: (root: string) -> string {
     }
 
     return ""; // What we gonna do when we do not find any
+}
+
+// @ToDo: This is a very, very temporary solution:
+find_local_modules :: (root: string) -> string {
+    DIRS_TO_CHECK :: string.["modules", "Local_Modules"];
+    for DIRS_TO_CHECK {
+        modules_path := sprint("%/%", root, it);
+        if is_directory(modules_path) return modules_path;
+
+        free(modules_path);
+    }
+
+    return "";
 }
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
@@ -99,8 +113,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("Root URI: %", <<body.params.rootUri);
             log("Root Path: %", <<body.params.rootPath);
 
-            program_cache.working_directory = <<body.params.rootPath;
-            program_cache.entry = find_entry_file(program_cache.working_directory);
+            program_cache.working_directory       = <<body.params.rootPath;
+            program_cache.entry                   = find_entry_file(program_cache.working_directory);
+            program_cache.local_modules_directory = find_local_modules(program_cache.working_directory);
 
             log("Entry file: %/%", program_cache.working_directory, program_cache.entry);
 
