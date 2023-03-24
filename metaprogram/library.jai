@@ -85,9 +85,12 @@ receive_modified_files :: (p: *Jails_Plugin) -> [] Modified_File {
 }
 
 compiler_location_to_our_location :: (using location: Code_Node.Location) -> Declaration.Location {
+    filename: string;
+    if enclosing_load filename = enclosing_load.fully_pathed_filename;
+
     // DANGER!
     return .{
-        enclosing_load.fully_pathed_filename,
+        filename,
         l0,
         c0,
         l1,
