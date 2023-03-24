@@ -87,9 +87,12 @@ receive_modified_files :: (p: *Jails_Plugin) -> [] Modified_File {
 }
 
 compiler_location_to_our_location :: (using location: Code_Node.Location) -> Declaration.Location {
+    filename: string;
+    if enclosing_load filename = enclosing_load.fully_pathed_filename;
+
     // DANGER!
     return .{
-        enclosing_load.fully_pathed_filename,
+        filename,
         l0,
         c0,
         l1,
@@ -117,6 +120,8 @@ process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel
 }
 
 process_number :: (type: *Type_Info) -> Base_Type {
+    if !type return .UNINITIALIZED; // Can happen for polymorphic types (eg. an enum’s internal_type if the enum is declared inside a polymorphic struct)
+
     if type.type == {
         case .INTEGER;
             info_integer := cast(*Type_Info_Integer) type;

@@ -6,9 +6,10 @@ Program :: struct {
     import_path: []string;
     entry: string;
     working_directory: string;
+    local_modules_directory: string;
 
     files: [..]Source_File;
-    modules: [..]Module;
+    modules: [..] Module;
 
     code_blocks: [..]Block;
 
@@ -44,23 +45,30 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
     result: Process_Result;
     output: string;
     error: string;
+
+    command: [..] string;
+    array_add(*command, "jai");
     if args.profile {
-        result, output, error = run_command("jai",
+        array_add(*command,
             tprint("%/modules/Default_Metaprogram.jai", args.jai_path), // Tell the Default_Metaprogram (Inception level 0) to compile the Default_Metaprogram (Inception level 1)...
             "-quiet", "-no_color", "-no_cwd", // (+ some basic args for Inception level 0)
             "-plug", "tracy", "-modules", "-import_dir", METAPROGRAM_MODULES_PATH, // ... but use the tracy module to instrument Inception level 1
-            "-", program_cache.entry, "-plug", "jails", // ... and tell Inception
-            // level 1 to compile the actual entry point while using our JAILS metaprogram which will be instrumented by tracy
-            "---", "import_dir", METAPROGRAM_MODULES_PATH, // ... and this here tells the compiler the import dir for Inception level 0
-            working_directory=program_cache.working_directory, capture_and_return_output=true
         );
+        if program_cache.local_modules_directory {
+            array_add(*command, "-import_dir", program_cache.local_modules_directory);
+        }
+        array_add(*command, "-", program_cache.entry, "-plug", "jails"); // ... and tell Inception level 1 to compile the actual entry point while using our JAILS metaprogram which will be instrumented by tracy
     } else {
-        result, output, error = run_command("jai",
-            program_cache.entry, "-quiet", "-no_color", "-plug", "jails",
-            "---", "import_dir", METAPROGRAM_MODULES_PATH,
-            working_directory=program_cache.working_directory, capture_and_return_output=true);
+        array_add(*command, program_cache.entry, "-quiet", "-no_color", "-plug", "jails");
+        if program_cache.local_modules_directory {
+            array_add(*command, "-import_dir", program_cache.local_modules_directory);
+        }
     }
-    
+
+    array_add(*command, "---", "import_dir", METAPROGRAM_MODULES_PATH); // Import dir for the initial Default_Metaprogram so that it can find our plugins (tracy for Inception level 0 if we’re profiling or Jails if we’re not profiling).
+
+    result, output, error = run_command(..command, working_directory=program_cache.working_directory, capture_and_return_output=true);
+
     if result.exit_code != 0 {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
         return false, error;
@@ -195,7 +203,7 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
 
         if loc.l0 == line && loc.c0 > char return false;
         if loc.l1 == line && loc.c1 < char return false;
-        
+
         return true;
     }
 
