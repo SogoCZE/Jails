@@ -38,7 +38,9 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
     // So this needs to take a lock or something!
     if program_cache.declarations_by_serial.count > 0 {
         table_reset(*program_cache.declarations_by_serial);
-        table_reset(*program_cache.declarations_by_name);
+        table_reset(*program_cache.declarations_by_serial);
+        array_reset(*program_cache.declarations);
+        array_reset(*program_cache.code_blocks);
     }
 
     start := current_time_consensus();
