@@ -2,30 +2,29 @@ get_plugin :: () -> *Plugin {
     p := New(Jails_Plugin);
     p.start = current_time_consensus();
 
-    #if OS != .WINDOWS {
-        POSIX :: #import "POSIX";
-        POSIX.shm_unlink(IPC_CHANNEL_NAME_TO_META);
-    }
-
     options := get_build_options();
 
-    // @TODO: This is dangerous!
-    last := options.compile_time_command_line[options.compile_time_command_line.count-1];
+    channel_id := options.compile_time_command_line[options.compile_time_command_line.count-1]; // @TODO: This is dangerous!
+    channel_to_meta := join(IPC_CHANNEL_NAME_TO_META, channel_id, separator="-");
+    channel_from_meta := join(IPC_CHANNEL_NAME_FROM_META, channel_id, separator="-");
+
+    #if OS != .WINDOWS {
+        POSIX :: #import "POSIX";
+        POSIX.shm_unlink(channel_to_meta.data);
+    }
 
     success: bool;
-    success, p.read_channel = reader_create_channel(join(IPC_CHANNEL_NAME_TO_META, last, separator="-"), CHANNEL_DATA_BYTES);
+    success, p.read_channel = reader_create_channel(channel_to_meta, CHANNEL_DATA_BYTES);
     if !success {
         log_error("Could not open read channel.");
         exit(1);
     }
 
-    success, p.write_channel = writer_connect(join(IPC_CHANNEL_NAME_FROM_META, last, separator="-"));
+    success, p.write_channel = writer_connect(channel_from_meta);
     if !success {
         log_error("Could not open write channel.");
         exit(1);
     }
-
-
 
     p.message  = message;
     p.shutdown = shutdown;

@@ -473,9 +473,9 @@ LSP_Result_Initialize :: struct {
         // documentSymbolProvider := true;
         definitionProvider := true;
 
-        completionProvider: struct {
-            triggerCharacters := string.[".", ":", "="];
-        };
+        // completionProvider: struct {
+        //     triggerCharacters := string.[".", ":", "="];
+        // };
 
         textDocumentSync: struct {
             openClose := true;

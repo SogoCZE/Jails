@@ -1,5 +1,5 @@
 // @TODO:
-// - Code block context
+// - Code block context (in progress)
 // - Workspaces
 // - Improve or remake entry point detection
 // - Autocomplete
@@ -178,19 +178,20 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             last_change_time = current_time_consensus();
 
         case "textDocument/completion";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
-            if !success {
-                log_error("Unable to parse textDocument/completion message");
-                return;
-            }
+            // success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
+            // if !success {
+            //     log_error("Unable to parse textDocument/completion message");
+            //     return;
+            // }
 
-            refresh_if_needed();
-            handle_completitions(body);
+            // refresh_if_needed();
+            // handle_completitions(body);
 
     }
 }
 
 quit := false;
+
 
 Args :: struct {
     verbose: bool;
@@ -280,6 +281,7 @@ find_current_jai_path :: () -> string {
 #import "Shared_Memory_Channel";
 #import "Thread";
 #import "Hash_Table";
+#import "Random";
 #import "Process";
 #import "Reflection";
 

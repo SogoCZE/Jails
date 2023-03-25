@@ -70,7 +70,7 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
         }
     }
 
-    array_add(*command, tprint("%", program_cache.channel_id)); // Add unique shared memory channel ID @TOOD: is there way how to more easily transform u64 to string?
+    array_add(*command, "-", "-channel_id", tprint("%", program_cache.channel_id)); // Add unique shared memory channel ID @TOOD: is there way how to more easily transform u64 to string? @TODO: test this with the tracy pipeline.
     array_add(*command, "---", "import_dir", METAPROGRAM_MODULES_PATH); // Import dir for the initial Default_Metaprogram so that it can find our plugins (tracy for Inception level 0 if we’re profiling or Jails if we’re not profiling).
 
     result, output, error = run_command(..command, working_directory=program_cache.working_directory, capture_and_return_output=true);
@@ -220,6 +220,10 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
         // If the location is not present in the block we skip.
         if !is_in_range(block.location, line, char) continue;
 
+        // Skip if, while, empty ... blocks
+        parent, parent_exists := table_find(*program_cache.declarations_by_serial, block.parent);
+        if !parent_exists continue;
+
         // If we are not smaller than so far nearest block we skip.
         if nearest_block {
             if !is_in_range(nearest_block.location, block.location.l0, block.location.c0) continue;
@@ -233,14 +237,14 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
 }
 
 listen_to_metaprogram :: (thread: *Thread) -> s64 {
+    channel_name := tprint("%-%", IPC_CHANNEL_NAME_FROM_META, program_cache.channel_id);
+
     #if OS != .WINDOWS {
         POSIX :: #import "POSIX";
-        POSIX.shm_unlink(IPC_CHANNEL_NAME_FROM_META);
+        POSIX.shm_unlink(channel_name.data);
     }
 
-    log("Opening %", tprint("%-%", IPC_CHANNEL_NAME_FROM_META, program_cache.channel_id));
-
-    success, channel := reader_create_channel(tprint("%-%", IPC_CHANNEL_NAME_FROM_META, program_cache.channel_id), CHANNEL_DATA_BYTES);
+    success, channel := reader_create_channel(channel_name, CHANNEL_DATA_BYTES);
     if !success {
         // log_error("Exiting due to channel creation failure.\n");
         return -1;

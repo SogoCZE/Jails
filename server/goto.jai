@@ -76,7 +76,6 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
             if decl.flags & .IS_GLOBAL continue;
             
             decl_block := find_block(decl.location.l0, decl.location.c0, decl.location.file);
-
             if !decl_block || decl_block.serial != word_block.serial continue;
 
             lsp_respond(request.id, declaration_to_lsp_location(decl));

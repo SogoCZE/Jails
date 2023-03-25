@@ -1,8 +1,8 @@
 {
-  "name": "jai_language_server",
+  "name": "jails",
   "displayName": "Jai Language Server",
   "description": "Language Server for Jai",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "Patrik Smělý",
   "author": "Patrik Smělý",
   "main": "./out/extension.js",
@@ -16,7 +16,7 @@
   "scripts": {
     "compile": "tsc -b",
     "watch": "tsc --watch",
-    "pack": "cp ../server/bin/* ./out/ && vsce package"
+    "pack": "cp ../bin/jails ./out/ && vsce package"
   },
   "license": "MIT",
   "engines": {
