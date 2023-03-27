@@ -5,7 +5,7 @@ Line :: struct {
 Program :: struct {
     channel_id: u64;
 
-    previously_errored_files: []string;
+    previously_errored_file: string;
 
     import_path: []string;
     entry: string;
@@ -38,37 +38,30 @@ deinit_cache :: () {
 }
 
 reset_diagnostics :: () {
-    for file: program_cache.previously_errored_files {
-        log("sending empty diagnostics to reset file %", file);
-        lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
-            method="textDocument/publishDiagnostics",
-            params = .{
-                uri = file,
-                diagnostics = LSP_Diagnostic.[]
-            }
-        }); 
-    }
+    lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
+        method="textDocument/publishDiagnostics",
+        params = .{
+            uri = program_cache.previously_errored_file,
+            diagnostics = LSP_Diagnostic.[]
+        }
+    }); 
 }
 
+// Currently, parse only the first error (I am not sure if the compiler can even print more than one error at a time)
 send_compiler_errors_as_diagnostics :: (output: string) {
     lines := split(output, "\n");
 
-    files: Table(string, *[..]LSP_Diagnostic);
-    init(*files);
-    defer { 
-        for diagnostics: files array_free(<<diagnostics);
-        deinit(*files);
-    }
+    file: string;
+    diagnostic: LSP_Diagnostic;
 
+    // Get the first error
     for output_line: lines {
         if !contains(output_line, ": Error:") continue;
 
-        log("[error]: %", output_line);
-
         parts := split(output_line, ":");
-        if parts.count < 4 continue;
+        if parts.count < 3 continue;
 
-        file := parts[0];
+        file = parts[0];
 
         line_and_character := split(parts[1], ",");
         if line_and_character.count < 2 continue;
@@ -79,50 +72,51 @@ send_compiler_errors_as_diagnostics :: (output: string) {
         character, c_ok := parse_int(*line_and_character[1], u32);
         if !c_ok continue;
 
-        message := trim(parts[3]);
+        builder: String_Builder;
+        append(*builder, trim(parts[3]));
+        if parts.count > 3 {
+            for 4..parts.count-1 {
+                append(*builder, ":");
+                append(*builder, parts[it]);
+            }
+        }
         
-        diagnostic: LSP_Diagnostic;
-
-        diagnostic.message = message;
+        diagnostic.message = builder_to_string(*builder);
         diagnostic.serverity = xx LSP_Diagnostic_Severity.ERROR;
 
         diagnostic.range.start.line = line-1;
         diagnostic.range.start.character = character-1;
-        diagnostic.range.end.line = line-1;
-        diagnostic.range.end.character = character;
+    }
 
-        file_diagnostics, exists := table_find(*files, file);
-        if !exists {
-            diagnostics := New([..]LSP_Diagnostic);
-            array_add(diagnostics, diagnostic);
-            table_set(*files, file, diagnostics);
-            continue;
+    highlight_found := false;
+    highlighted_chars: u32;
+
+    for line: lines {
+        if highlight_found || !contains(line, #char "^") continue;
+        
+        for char: cast([]u8) line {
+            if char != #char "^" continue;
+            highlighted_chars += 1;
         }
 
-        array_add(file_diagnostics, diagnostic);
+        highlight_found = true;
     }
 
-    errored_files := NewArray(files.count, string);
-    index := 0;
+    diagnostic.range.end.line = diagnostic.range.start.line;
+    diagnostic.range.end.character = diagnostic.range.start.character+highlighted_chars;
 
-    for diagnostics, file: files {
-        errored_files[index] = file;
+    diagnostics: [1]LSP_Diagnostic;
+    diagnostics[0] = diagnostic;
 
-        log("Sended % file with %", file, diagnostics.count);
+    lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
+        method="textDocument/publishDiagnostics",
+        params = .{
+            uri = file,
+            diagnostics = diagnostics
+        }
+    });
 
-        lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
-            method="textDocument/publishDiagnostics",
-            params = .{
-                uri = file,
-                diagnostics = <<diagnostics
-            }
-        });
-
-        index += 1;
-    }
-
-    array_free(program_cache.previously_errored_files);
-    program_cache.previously_errored_files = errored_files;
+    program_cache.previously_errored_file = file;
 }
 
 run_metaprogram_analysis :: (send_diagnostics := false) -> success: bool, error: string {
