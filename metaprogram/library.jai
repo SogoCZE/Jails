@@ -120,8 +120,6 @@ process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel
 }
 
 process_number :: (type: *Type_Info) -> Base_Type {
-    if !type return .UNINITIALIZED; // Can happen for polymorphic types (eg. an enum’s internal_type if the enum is declared inside a polymorphic struct)
-
     if type.type == {
         case .INTEGER;
             info_integer := cast(*Type_Info_Integer) type;
@@ -329,9 +327,10 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                 _enum.base = declaration;
                 _enum.kind = .ENUM;
 
-                if code_enum.internal_type_inst != null {
+                // Can be null for polymorphic types (eg. an enum’s internal_type if the enum is declared inside a polymorphic struct)
+                if code_enum.internal_type_inst {
                     _enum.type = process_number(code_enum.internal_type_inst.result);
-                } else {
+                } else if code_enum.internal_type {
                     _enum.type = process_number(code_enum.internal_type);
                 }
 
@@ -369,7 +368,10 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                         code_type_inst := cast(*Code_Type_Instantiation) code_literal.struct_literal_info.type_expression;
                         identExpression := cast(*Code_Ident) code_type_inst.type_valued_expression;
 
-                        _expression.serial_to = identExpression.resolved_declaration.serial;
+                        if identExpression.resolved_declaration {
+                            _expression.serial_to = identExpression.resolved_declaration.serial;
+                        }
+                        
                         #if DEBUG then print("_expression.serial_to = % \n", _expression.serial_to);
                     case .STRING;
                         _expression.base_type = .STRING;
