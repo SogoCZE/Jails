@@ -196,6 +196,7 @@ quit := false;
 Args :: struct {
     verbose: bool;
     profile: bool;
+    channel_id: u64;
     jai_path: string = #run find_current_jai_path();
 }
 
@@ -212,6 +213,13 @@ main :: () {
     }
 
     log("Args are %", args);
+
+    if args.channel_id == 0 {
+        random_seed(current_time_monotonic().low);
+        program_cache.channel_id = random_get() % 100000; // @TODO: is this ok?
+    } else {
+        program_cache.channel_id = args.channel_id;
+    }
 
     init_cache();
     defer deinit_cache();

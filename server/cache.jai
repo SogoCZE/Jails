@@ -24,9 +24,6 @@ Program :: struct {
 program_cache: Program;
 
 init_cache :: () {
-    random_seed(current_time_monotonic().low);
-    program_cache.channel_id = random_get() % 100000; // @TODO: is this ok?
-
     init(*program_cache.declarations_by_serial);
     init(*program_cache.declarations_by_name);
     // init(*program_cache.declarations_by_location);
