@@ -618,7 +618,6 @@ handle_message :: (p: *Jails_Plugin, message: *Message) {
         // @note: compiler catching expression with serial 0 when
         // Person :: struct { name := "Jirka"; }
 
-
         if it.expression.serial == 0 continue;
 
         if it.expression.kind == {

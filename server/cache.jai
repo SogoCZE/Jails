@@ -5,6 +5,8 @@ Line :: struct {
 Program :: struct {
     channel_id: u64;
 
+    previously_errored_files: []string;
+
     import_path: []string;
     entry: string;
     working_directory: string;
@@ -35,7 +37,95 @@ deinit_cache :: () {
     // deinit(*program_cache.declarations_by_location);
 }
 
-run_metaprogram_analysis :: () -> success: bool, error: string {
+reset_diagnostics :: () {
+    for file: program_cache.previously_errored_files {
+        log("sending empty diagnostics to reset file %", file);
+        lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
+            method="textDocument/publishDiagnostics",
+            params = .{
+                uri = file,
+                diagnostics = LSP_Diagnostic.[]
+            }
+        }); 
+    }
+}
+
+send_compiler_errors_as_diagnostics :: (output: string) {
+    lines := split(output, "\n");
+
+    files: Table(string, *[..]LSP_Diagnostic);
+    init(*files);
+    defer { 
+        for diagnostics: files array_free(<<diagnostics);
+        deinit(*files);
+    }
+
+    for output_line: lines {
+        if !contains(output_line, ": Error:") continue;
+
+        log("[error]: %", output_line);
+
+        parts := split(output_line, ":");
+        if parts.count < 4 continue;
+
+        file := parts[0];
+
+        line_and_character := split(parts[1], ",");
+        if line_and_character.count < 2 continue;
+
+        line, l_ok := parse_int(*line_and_character[0], u32);
+        if !l_ok continue;
+
+        character, c_ok := parse_int(*line_and_character[1], u32);
+        if !c_ok continue;
+
+        message := trim(parts[3]);
+        
+        diagnostic: LSP_Diagnostic;
+
+        diagnostic.message = message;
+        diagnostic.serverity = xx LSP_Diagnostic_Severity.ERROR;
+
+        diagnostic.range.start.line = line-1;
+        diagnostic.range.start.character = character-1;
+        diagnostic.range.end.line = line-1;
+        diagnostic.range.end.character = character;
+
+        file_diagnostics, exists := table_find(*files, file);
+        if !exists {
+            diagnostics := New([..]LSP_Diagnostic);
+            array_add(diagnostics, diagnostic);
+            table_set(*files, file, diagnostics);
+            continue;
+        }
+
+        array_add(file_diagnostics, diagnostic);
+    }
+
+    errored_files := NewArray(files.count, string);
+    index := 0;
+
+    for diagnostics, file: files {
+        errored_files[index] = file;
+
+        log("Sended % file with %", file, diagnostics.count);
+
+        lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
+            method="textDocument/publishDiagnostics",
+            params = .{
+                uri = file,
+                diagnostics = <<diagnostics
+            }
+        });
+
+        index += 1;
+    }
+
+    array_free(program_cache.previously_errored_files);
+    program_cache.previously_errored_files = errored_files;
+}
+
+run_metaprogram_analysis :: (send_diagnostics := false) -> success: bool, error: string {
     // @Stability @Incomplete: This modifies structs also modified by the cache thread!!
     // So this needs to take a lock or something!
     table_reset(*program_cache.declarations_by_name);
@@ -72,8 +162,17 @@ run_metaprogram_analysis :: () -> success: bool, error: string {
 
     result, output, error = run_command(..command, working_directory=program_cache.working_directory, capture_and_return_output=true);
 
+    if send_diagnostics {
+       reset_diagnostics();
+    }
+
     if result.exit_code != 0 {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
+        
+        if send_diagnostics { 
+            send_compiler_errors_as_diagnostics(error);
+        }
+
         return false, error;
     }
 

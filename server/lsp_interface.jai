@@ -7,6 +7,12 @@ LSP_Message :: struct {
     jsonrpc: string = "2.0";
 }
 
+LSP_Client_Message :: struct(T: Type) {
+    using base: LSP_Message;
+    method: string;
+    params: T;
+}
+
 LSP_Response_Message :: struct {
     using base: LSP_Message;
     id: u32;
@@ -205,15 +211,21 @@ LSP_Location_Link :: struct {
 
 /* Diagnostic */
 
+LSP_Publish_Diagnostics :: struct {
+    uri: string;
+    diagnostics: []LSP_Diagnostic;
+}
+
 LSP_Diagnostic :: struct {
     range: LSP_Range;
     serverity: *s64; // *LSP_Diagnostic_Severity;
-    code: *string; // @NOTE: potentionaly int
-    codeDescription: LSP_Code_Description;
-    source: *string;
-    message: *[]u32; //*[]LSP_Diagnostic_Tag;
-    relatedInformation: *[]LSP_Diagnostic_Related_Information;
-    data: *Any;
+    // code: *string; // @NOTE: potentionaly int
+    // codeDescription: LSP_Code_Description;
+    // source: *string;
+    message: string; 
+    // tags: *[]LSP_Diagnostic_Tag; //
+    // relatedInformation: *[]LSP_Diagnostic_Related_Information;
+    // data: *Any;
 }
 
 LSP_Diagnostic_Severity :: enum {

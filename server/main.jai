@@ -123,8 +123,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             {
                 success, error_details := run_metaprogram_analysis();
                 if !success {
-                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run Jails metaprogram", error_details);
-                    return;
+                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run initial Jails metaprogram run", error_details);
+                    // return; We cant return here because LSP client is waiting for response - if he wont get one the editor thinks the LSP crashed...
                 }
             }
 
@@ -150,7 +150,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             // @ToDo: Remove all changes from the "modified files" table so we don’t send that file over on ever compile?
 
-            success = run_metaprogram_analysis();
+            success = run_metaprogram_analysis(true);
             if !success return;
 
         case "textDocument/didOpen";
