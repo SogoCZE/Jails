@@ -8,7 +8,7 @@ handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string,
 
     uri: string;
     if module {
-        modules_path := program_cache.import_path[1]; 
+        modules_path := server.import_path[1]; 
         uri = tprint("%/%/module.jai", modules_path, path);
         if !file_exists(uri) {
            uri = tprint("%/%.jai", modules_path, path);
@@ -46,7 +46,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
     file_without_uri_prefix := replace(file, "file://", "");
 
-    line := find_line_in_file(file, request.params.position);
+    line := find_line_in_modified_file(file, request.params.position);
 
     if contains(line, "#import") {
         handle_import_or_load(request, line, true, request.params.position);
@@ -58,12 +58,12 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    word := find_word_in_file(file, request.params.position);
+    word := find_word_in_modified_file(file, request.params.position);
     word_block := find_block(xx (request.params.position.line+1), xx (request.params.position.character+1), file_without_uri_prefix);
 
-    decls := table_find_multiple(*program_cache.declarations_by_name, word);
+    decls := table_find_multiple(*server.program.declarations_by_name, word);
     if decls.count == 0 {
-        log("Not found! (%) - Current cached nodes %.", word, program_cache.declarations_by_name.count);
+        log("Not found! (%) - Current cached nodes %.", word, server.program.declarations_by_name.count);
         lsp_respond(request.id, null);
         return;
     }
@@ -83,12 +83,12 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         }
 
         // Look into arguments of procedure or struct
-        word_block_parent, ok := table_find(*program_cache.declarations_by_serial, word_block.parent);
+        word_block_parent, ok := table_find(*server.program.declarations_by_serial, word_block.parent);
         if ok && word_block_parent.kind == .PROCEDURE {
             procedure := cast(*Procedure) word_block_parent;
 
             for argument_id: procedure.arguments {
-                argument, ok := table_find(*program_cache.declarations_by_serial, argument_id);
+                argument, ok := table_find(*server.program.declarations_by_serial, argument_id);
 
                 if argument.name == word {
                     lsp_respond(request.id, declaration_to_lsp_location(argument));

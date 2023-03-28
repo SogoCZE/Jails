@@ -1,35 +1,30 @@
-// @ToDo: Give these more distinguished names! (modified_files?)
-file_lock: Mutex;
-files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?)
-// @ToDo: Keep track of a modified flag per file
-
-init_files :: () {
-    init(*file_lock);
-    init(*files);
+init_modified_files :: () {
+    init(*server.modified_files_lock);
+    init(*server.modified_files);
 }
 
-deinit_files :: () {
-    destroy(*file_lock);
-    deinit(*files);
+deinit_modified_files :: () {
+    destroy(*server.modified_files_lock);
+    deinit(*server.modified_files);
 }
 
-create_file :: (file_path: string, content: string) {
+create_modified_file :: (file_path: string, content: string) {
     content_dynamic: [..]u8;
 
     array_copy(*content_dynamic, cast([]u8) content);
     free(content);
 
-    lock(*file_lock);
-    defer unlock(*file_lock);
-    table_set(*files, file_path, content_dynamic);
-    // dump_files();
+    lock(*server.modified_files_lock);
+    defer unlock(*server.modified_files_lock);
+    table_set(*server.modified_files, file_path, content_dynamic);
+    // dump_server_modified_files();
 }
 
-edit_file :: (file_path: string, changes: []LSP_Content_Change) {
-    lock(*file_lock);
-    defer unlock(*file_lock);
+edit_modified_file :: (file_path: string, changes: []LSP_Content_Change) {
+    lock(*server.modified_files_lock);
+    defer unlock(*server.modified_files_lock);
 
-    content := table_find_pointer(*files, file_path);
+    content := table_find_pointer(*server.modified_files, file_path);
     if !content {
         log_error("File is not in the cache %", file_path);
         return;
@@ -40,23 +35,23 @@ edit_file :: (file_path: string, changes: []LSP_Content_Change) {
         to := change.range.end;
         apply_change(content, from, to, xx change.text);
     }
-
-    // dump_files();
 }
 
-remove_file :: (file_path: string) {
-    lock(*file_lock);
-    defer unlock(*file_lock);
-    found := table_remove(*files, file_path);
+remove_modified_file :: (file_path: string) {
+    lock(*server.modified_files_lock);
+    defer unlock(*server.modified_files_lock);
+
+    found := table_remove(*server.modified_files, file_path);
     if !found {
-        log_error("Tried to remove file % but it was not in the modified files table!", file_path);
+        log_error("Tried to remove file % but it was not in the modified server.modified_files table!", file_path);
     }
 }
 
-find_range_in_file :: (file: string, range: LSP_Range) -> string {
-    lock(*file_lock);
-    defer unlock(*file_lock);
-    content, ok := table_find(*files, file);
+find_range_in_modified_file :: (file: string, range: LSP_Range) -> string {
+    lock(*server.modified_files_lock);
+    defer unlock(*server.modified_files_lock);
+
+    content, ok := table_find(*server.modified_files, file);
     if !ok {
         return "";
     }
@@ -87,10 +82,10 @@ find_range_in_file :: (file: string, range: LSP_Range) -> string {
     return to_string(*content[start_index], end_index-start_index);
 }
 
-find_line_in_file :: (file: string, position: LSP_Position) -> string {
-    lock(*file_lock);
-    defer unlock(*file_lock);
-    content, ok := table_find(*files, file);
+find_line_in_modified_file :: (file: string, position: LSP_Position) -> string {
+    lock(*server.modified_files_lock);
+    defer unlock(*server.modified_files_lock);
+    content, ok := table_find(*server.modified_files, file);
     if !ok {
         return "";
     }
@@ -99,7 +94,7 @@ find_line_in_file :: (file: string, position: LSP_Position) -> string {
     start_index: int = -1;
     end_index := content.count;
 
-    // @SPEED: This searching could be probably done faster if we had files stored as array of lines instead of file content. 
+    // @SPEED: This searching could be probably done faster if we had server.modified_files stored as array of lines instead of file content. 
     for char: content {
         if char == #char "\n" {
             final_line += 1;
@@ -127,10 +122,10 @@ find_line_in_file :: (file: string, position: LSP_Position) -> string {
     return to_string(*content[start_index], end_index-start_index);
 }
 
-find_word_in_file :: (file: string, position: LSP_Position) -> string {
-    lock(*file_lock);
-    defer unlock(*file_lock);
-    content, ok := table_find(*files, file);
+find_word_in_modified_file :: (file: string, position: LSP_Position) -> string {
+    lock(*server.modified_files_lock);
+    defer unlock(*server.modified_files_lock);
+    content, ok := table_find(*server.modified_files, file);
     if !ok {
         return "";
     }
@@ -138,7 +133,7 @@ find_word_in_file :: (file: string, position: LSP_Position) -> string {
     final_line: int;
     pointer_index: int = -1;
 
-    // @SPEED: This searching could be probably done faster if we had files stored as array of lines instead of file content. 
+    // @SPEED: This searching could be probably done faster if we had server.modified_files stored as array of lines instead of file content. 
     for char: content {
         if char == #char "\n" {
             final_line += 1;
@@ -273,13 +268,14 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
 
 }
 
-dump_files :: () {
-    lock(*file_lock);
-    defer unlock(*file_lock);
-    for content, file: files {
-        just_filename := path_filename(file);
-        write_entire_file(tprint("%/server/bin/files_dump/%", PROJECT_FOLDER_PATH, just_filename), cast(string) content);
-    }
-}
+// dump_modified_files :: () {
+//     lock(*server.modified_server.modified_files_lock);
+//     defer unlock(*server.modified_server.modified_files_lock);
+
+//     for content, file: server.modified_files {
+//         just_filename := path_filename(file);
+//         write_entire_file(tprint("%/server/bin/server.modified_files_dump/%", PROJECT_FOLDER_PATH, just_filename), cast(string) content);
+//     }
+// }
 
 #import "Thread";

@@ -1,16 +1,40 @@
-// @TODO:
-// - Code block context (in progress)
-// - Workspaces
-// - Improve or remake entry point detection
-// - Autocomplete
-//     - procedures (params etc)
-//     - structs (members etc)
-// - Error reporting (that shoud be quite easy)
-
 VERSION :: "1.0.0";
 
 PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "..");
 METAPROGRAM_MODULES_PATH :: #run tprint("%/metaprogram_modules", PROJECT_FOLDER_PATH);
+
+Args :: struct {
+    verbose: bool;
+    profile: bool;
+    channel_id: u64;
+    jai_path: string = #run find_current_jai_path();
+}
+
+Server :: struct {
+    args: Args;
+
+    last_refresh_time: Apollo_Time = APOLLO_TIME_INVALID;
+
+    modified_files_lock: Mutex;
+    modified_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
+    
+    import_path: []string;
+    entry: string;
+    working_directory: string;
+    local_modules_directory: string;
+
+    previously_errored_file: string;
+
+    program_a: Program;
+    program_b: Program;
+
+    work_program: *Program;
+    program: *Program;
+
+    quit := false;
+}
+
+server: Server;
 
 find_entry_file :: (root: string) -> string {
 
@@ -82,16 +106,14 @@ declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     };
 }
 
-last_change_time: Apollo_Time = APOLLO_TIME_INVALID;
+refresh_program_if_needed :: () {
+    if server.last_refresh_time == APOLLO_TIME_INVALID return;
 
-refresh_if_needed :: () {
-    if last_change_time == APOLLO_TIME_INVALID return;
-
-    // @Incomplete: We want to use the last_change_time to debounce.
+    // @Incomplete: We want to use the server.last_refresh_time to debounce.
     // But since we’re blocking on messages right now, we can’t use a timeout to start recompiling.
-    // So we just use last_change_time as dirty flag.
+    // So we just use server.last_refresh_time as dirty flag.
 
-    success := run_metaprogram_analysis();
+    success := refresh_program();
     if !success return;
 }
 
@@ -100,7 +122,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
     if request.method == {
         case "shutdown";
-            quit = true;
+            server.quit = true;
         case "initialize";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize);
             if !success {
@@ -113,15 +135,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("Root URI: %", <<body.params.rootUri);
             log("Root Path: %", <<body.params.rootPath);
 
-            program_cache.working_directory       = <<body.params.rootPath;
-            program_cache.entry                   = find_entry_file(program_cache.working_directory);
-            program_cache.local_modules_directory = find_local_modules(program_cache.working_directory);
+            server.working_directory       = <<body.params.rootPath;
+            server.entry                   = find_entry_file(server.working_directory);
+            server.local_modules_directory = find_local_modules(server.working_directory);
 
-            log("Entry file: %/%", program_cache.working_directory, program_cache.entry);
-
+            log("Entry file: %/%", server.working_directory, server.entry);
 
             {
-                success, error_details := run_metaprogram_analysis();
+                success, error_details := refresh_program();
                 if !success {
                     lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run initial Jails metaprogram run", error_details);
                     // return; We cant return here because LSP client is waiting for response - if he wont get one the editor thinks the LSP crashed...
@@ -138,7 +159,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
-            refresh_if_needed();
+            // refresh_program_if_needed();
             handle_goto(body);
 
         case "textDocument/didSave";
@@ -150,7 +171,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             // @ToDo: Remove all changes from the "modified files" table so we don’t send that file over on ever compile?
 
-            success = run_metaprogram_analysis(true);
+            success = refresh_program(true);
             if !success return;
 
         case "textDocument/didOpen";
@@ -163,7 +184,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := body.params.textDocument.uri;
             content := body.params.textDocument.text;
 
-            create_file(file_path, content);
+            create_modified_file(file_path, content);
 
         case "textDocument/didChange";
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);
@@ -173,9 +194,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             file_path := body.params.textDocument.uri;
-            edit_file(file_path, body.params.contentChanges);
+            edit_modified_file(file_path, body.params.contentChanges);
 
-            last_change_time = current_time_consensus();
+            server.last_refresh_time = current_time_consensus();
 
         case "textDocument/completion";
             // success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
@@ -184,48 +205,40 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             //     return;
             // }
 
-            // refresh_if_needed();
+            // refresh_program_if_needed();
             // handle_completitions(body);
 
     }
 }
 
-quit := false;
-
-
-Args :: struct {
-    verbose: bool;
-    profile: bool;
-    channel_id: u64;
-    jai_path: string = #run find_current_jai_path();
-}
-
-args: Args;
-
 main :: () {
     context.logger = lsp_log;
 
     success: bool;
-    success, args = parse_arguments(Args);
+    success, server.args = parse_arguments(Args);
     if !success {
         log_error("Could not parse arguments");
         exit(1);
     }
 
-    log("Args are %", args);
+    log("Args are %", server.args);
 
-    if args.channel_id == 0 {
+    if server.args.channel_id == 0 {
         random_seed(current_time_monotonic().low);
-        program_cache.channel_id = random_get() % 100000; // @TODO: is this ok?
-    } else {
-        program_cache.channel_id = args.channel_id;
+        server.args.channel_id = random_get() % 100000; // @TODO: is this ok?
     }
 
-    init_cache();
-    defer deinit_cache();
+    init_program(server.program_a);
+    defer deinit_program(server.program_a);
 
-    init_files();
-    defer deinit_files();
+    init_program(server.program_b);
+    defer deinit_program(server.program_b);
+
+    server.work_program = *server.program_b;
+    server.program = *server.program_a;
+
+    init_modified_files();
+    defer deinit_modified_files();
 
     thread := New(Thread);
     thread_init(thread, listen_to_metaprogram);
@@ -235,7 +248,7 @@ main :: () {
     }
     thread_start(thread);
 
-    while !quit {
+    while !server.quit {
         reset_temporary_storage();
 
         body, success := get_message();
@@ -295,7 +308,8 @@ find_current_jai_path :: () -> string {
 
 #load "rpc.jai";
 #load "lsp_interface.jai";
-#load "cache.jai";
-#load "files.jai";
+#load "program.jai";
+#load "modified_files.jai";
+
 #load "completition.jai";
 #load "goto.jai";

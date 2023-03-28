@@ -1,4 +1,4 @@
-handle_completitions :: (request: LSP_Request_Message_Completion) {
+handle_completitions :: (server: Server, request: LSP_Request_Message_Completion) {
     file_without_uri_prefix := replace(request.params.textDocument.uri, "file://", "");
 
     cursor_pos := request.params.position;
@@ -6,7 +6,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
     completions: [..]LSP_Completion_Item;
 
-    for decl: program_cache.declarations_by_name {
+    for decl: server.program.declarations_by_name {
         if decl.kind != .PROCEDURE continue;
 
         if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
@@ -22,7 +22,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         lsp_location := declaration_to_lsp_location(decl);
 
         // @todo: fix this (does not currently work for not opened files)
-        peeked_procedure := find_range_in_file(decl.location.file, lsp_location.range);
+        peeked_procedure := find_range_in_modified_file(decl.location.file, lsp_location.range);
 
         array_add(*completions, .{
             label=procedure.name,
