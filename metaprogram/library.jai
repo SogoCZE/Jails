@@ -113,7 +113,7 @@ process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel
 
     procedure_decl_serial, ok := table_find(*p.procedure_header_to_declaration, body.header.serial);
     if !ok {
-        log_error("Cannot find procedure decl serial.");
+        log_error("Cannot find procedure decl serial for header serial %.", body.header.serial);
     }
 
     process_code_block(p, body.block, channel, procedure_decl_serial);
@@ -371,7 +371,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                         if identExpression.resolved_declaration {
                             _expression.serial_to = identExpression.resolved_declaration.serial;
                         }
-                        
+
                         #if DEBUG then print("_expression.serial_to = % \n", _expression.serial_to);
                     case .STRING;
                         _expression.base_type = .STRING;

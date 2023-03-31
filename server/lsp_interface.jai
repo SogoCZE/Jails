@@ -218,11 +218,11 @@ LSP_Publish_Diagnostics :: struct {
 
 LSP_Diagnostic :: struct {
     range: LSP_Range;
-    serverity: *s64; // *LSP_Diagnostic_Severity;
+    serverity: s64; // *LSP_Diagnostic_Severity;
     // code: *string; // @NOTE: potentionaly int
     // codeDescription: LSP_Code_Description;
     // source: *string;
-    message: string; 
+    message: string;
     // tags: *[]LSP_Diagnostic_Tag; //
     // relatedInformation: *[]LSP_Diagnostic_Related_Information;
     // data: *Any;
