@@ -251,7 +251,9 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
         }
 
         if !message_success {
-            sleep_milliseconds(1);
+            // @ToDo: We should probably not busy-loop here all the time.
+            // Instead we could use a semaphore to only wait for messages after kicking of a compile command.
+            sleep_milliseconds(10);
             continue;
         }
 
