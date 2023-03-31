@@ -221,8 +221,6 @@ main :: () {
         exit(1);
     }
 
-    log("Args are %", server.args);
-
     if server.args.channel_id == 0 {
         #if OS == .WINDOWS {
             process_id := cast(u64) GetProcessId();
@@ -231,6 +229,8 @@ main :: () {
         }
         server.args.channel_id = process_id;
     }
+
+    log("Args are %", server.args);
 
     init_program(server.program_a);
     defer deinit_program(server.program_a);
