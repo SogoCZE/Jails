@@ -47,6 +47,7 @@
 
             assert(tracy.handle_one_option != null);
             tracy.handle_one_option(tracy, .["-modules"], 0);
+            tracy.handle_one_option(tracy, .["-min_size", "0"], 0);
         }
 
         flags: Intercept_Flags;

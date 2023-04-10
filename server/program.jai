@@ -5,7 +5,7 @@ Program :: struct {
     declarations: [..]Declaration;
     declarations_by_serial: Table(ID, *Declaration);
     declarations_by_name: Table(string, *Declaration);
-    
+
     code_blocks: [..]Block;
 }
 
@@ -84,7 +84,7 @@ reset_diagnostics :: () {
             uri = server.previously_errored_file,
             diagnostics = LSP_Diagnostic.[]
         }
-    }); 
+    });
 }
 
 // Currently, parse only the first error (maybe parsing multiple errors is not that useful because Jai mostly report one error at a time)
@@ -122,7 +122,7 @@ send_compiler_errors_as_diagnostics :: (output: string) {
                 append(*builder, parts[it]);
             }
         }
-        
+
         diagnostic.message = builder_to_string(*builder);
         diagnostic.serverity = xx LSP_Diagnostic_Severity.ERROR;
 
@@ -135,7 +135,7 @@ send_compiler_errors_as_diagnostics :: (output: string) {
 
     for line: lines {
         if highlight_found || !contains(line, #char "^") continue;
-        
+
         for char: cast([]u8) line {
             if char != #char "^" continue;
             highlighted_chars += 1;
@@ -199,8 +199,8 @@ refresh_program :: (send_diagnostics := false) -> success: bool, error: string {
 
     if result.exit_code != 0 {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
-        
-        if send_diagnostics { 
+
+        if send_diagnostics {
             send_compiler_errors_as_diagnostics(error);
         }
 
@@ -253,7 +253,9 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
         }
 
         if !message_success {
-            sleep_milliseconds(1);
+            // @ToDo: We should probably not busy-loop here all the time.
+            // Instead we could use a semaphore to only wait for messages after kicking of a compile command.
+            sleep_milliseconds(10);
             continue;
         }
 
@@ -278,7 +280,7 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
 
                 write_channel_success: bool;
                 write_channel_success, write_channel = writer_connect(tprint("%-%", IPC_CHANNEL_NAME_TO_META, server.args.channel_id));
-                
+
                 if !write_channel_success {
                     log_error("Could not open write channel to metaprogram.");
                     return -1;
@@ -291,7 +293,7 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
                 {
                     lock(*server.modified_files_lock);
                     defer unlock(*server.modified_files_lock);
-                    
+
                     for server.modified_files {
                         message: Modified_File;
                         message.path = it_index;

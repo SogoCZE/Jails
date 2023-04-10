@@ -360,7 +360,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                         if identExpression.resolved_declaration {
                             _expression.serial_to = identExpression.resolved_declaration.serial;
                         }
-                        
+
                         #if DEBUG then print("_expression.serial_to = % \n", _expression.serial_to);
                     case .STRING;
                         _expression.base_type = .STRING;

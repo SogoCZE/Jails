@@ -17,7 +17,7 @@ Server :: struct {
 
     modified_files_lock: Mutex;
     modified_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
-    
+
     import_path: []string;
     entry: string;
     working_directory: string;
@@ -221,12 +221,16 @@ main :: () {
         exit(1);
     }
 
-    log("Args are %", server.args);
-
     if server.args.channel_id == 0 {
-        random_seed(current_time_monotonic().low);
-        server.args.channel_id = random_get() % 100000; // @TODO: is this ok?
+        #if OS == .WINDOWS {
+            process_id := cast(u64) GetProcessId();
+        } else {
+            process_id := cast(u64) getpid();
+        }
+        server.args.channel_id = process_id;
     }
+
+    log("Args are %", server.args);
 
     init_program(server.program_a);
     defer deinit_program(server.program_a);
@@ -313,3 +317,8 @@ find_current_jai_path :: () -> string {
 
 #load "completition.jai";
 #load "goto.jai";
+#if OS == .WINDOWS {
+    #import "Windows";
+} else {
+    #import "POSIX";
+}
