@@ -4,7 +4,7 @@ handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string,
     start_of_path := find_index_from_left(line, "\"");
     end_of_path := find_index_from_right(line, "\"");
 
-    path := slice(line, start_of_path+1, end_of_path-start_of_path-1);
+    path := slice(line, start_of_path + 1, end_of_path - start_of_path - 1);
 
     uri: string;
     if module {
@@ -70,6 +70,9 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     locations: [..]LSP_Location;
 
+    log("Clicked on % (%)", word, decls.count);
+
+
     // Scope related
     if word_block {
         for decl: decls {
@@ -82,13 +85,17 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
             return;
         }
 
+        log("Got word block!");
+
         // Look into arguments of procedure or struct
         word_block_parent, ok := table_find(*server.program.declarations_by_serial, word_block.parent);
-        if ok && word_block_parent.kind == .PROCEDURE {
+        if ok {
             procedure := cast(*Procedure) word_block_parent;
 
             for argument_id: procedure.arguments {
                 argument, ok := table_find(*server.program.declarations_by_serial, argument_id);
+
+                log("Argument: %", argument.name);
 
                 if argument.name == word {
                     lsp_respond(request.id, declaration_to_lsp_location(argument));

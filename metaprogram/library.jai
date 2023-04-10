@@ -100,23 +100,12 @@ compiler_location_to_our_location :: (using location: Code_Node.Location) -> Dec
     };
 }
 
-map_to_declaration:: (p: *Jails_Plugin, code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
+map_to_declaration :: (p: *Jails_Plugin, code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
     type_instantiations := NewArray(code_declarations.count, s64);
 
     for code_declarations type_instantiations[it_index] = process_declaration(p, it, channel);
 
     return type_instantiations;
-}
-
-process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel: *Write_Channel) {
-    body.block.serial = body.header.serial;
-
-    procedure_decl_serial, ok := table_find(*p.procedure_header_to_declaration, body.header.serial);
-    if !ok {
-        log_error("Cannot find procedure decl serial.");
-    }
-
-    process_code_block(p, body.block, channel, procedure_decl_serial);
 }
 
 process_number :: (type: *Type_Info) -> Base_Type {
@@ -432,6 +421,13 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                 send_to_server(channel, .EXPRESSION, *_expression);
 
                 return _expression.serial;
+
+            case;
+                _expression: Expression;
+                _expression.base = declaration;
+                _expression.kind = .EXPRESSION;
+
+                send_to_server(channel, .EXPRESSION, *_expression);
         }
     }
 
@@ -492,6 +488,17 @@ process_code_for :: (p: *Jails_Plugin, for_statement: *Code_For, channel: *Write
     }
 
     return our_for_statement.serial;
+}
+
+process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel: *Write_Channel) {
+    body.block.serial = body.header.serial;
+
+    procedure_decl_serial, ok := table_find(*p.procedure_header_to_declaration, body.header.serial);
+    if !ok {
+        log_error("Cannot find procedure decl serial (%)", body.header.serial);
+    }
+
+    process_code_block(p, body.block, channel, procedure_decl_serial);
 }
 
 process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Channel, parent: ID, process_members := false) -> ID {
@@ -614,9 +621,21 @@ handle_message :: (p: *Jails_Plugin, message: *Message) {
         #if DEBUG then print("\n");
     }
 
+    for tc.procedure_headers {
+        code_procedure_header := cast(*Code_Procedure_Header) it.expression;
+
+        // if code_procedure_header.procedure_flags & .POLYMORPHIC {
+        //     table_set(*p.procedure_header_to_declaration, code_procedure_header.serial, declaration.serial);
+        // }
+
+        if !code_procedure_header.polymorph_source_header continue; 
+        // print("(%): polymorph_source_header: %\n", code_procedure_header.serial, code_procedure_header.polymorph_source_header);
+    }
+
     for tc.all {
         // @note: compiler catching expression with serial 0 when
         // Person :: struct { name := "Jirka"; }
+
 
         if it.expression.serial == 0 continue;
 

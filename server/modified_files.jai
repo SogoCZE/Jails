@@ -154,7 +154,7 @@ find_word_in_modified_file :: (file: string, position: LSP_Position) -> string {
     end_index := content.count;
 
     is_seperation :: (char: u8) -> bool {
-        return is_any(char, " \n\t;*.[](){}=:#\",!");
+        return is_any(char, " \n\t;*.[](){}=:#\",!+-/");
     }
 
     // Start search

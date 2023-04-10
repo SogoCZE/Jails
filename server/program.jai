@@ -87,7 +87,9 @@ reset_diagnostics :: () {
     }); 
 }
 
-// Currently, parse only the first error
+// Currently, parse only the first error (maybe parsing multiple errors is not that useful because Jai mostly report one error at a time)
+// @TODO: Make it work with multiple errors
+// @todo: add support for warnings
 send_compiler_errors_as_diagnostics :: (output: string) {
     lines := split(output, "\n");
 
