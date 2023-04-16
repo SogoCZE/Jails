@@ -348,6 +348,8 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                         array_element_type.type_inst = process_type_instantiation(p, declaration, code_type_inst, channel);
 
                         array_element_type.serial = code_literal.serial;
+
+                        _expression.type_kind = .ARRAY;
                         _expression.serial_to = code_literal.serial;
 
                         send_to_server(channel, .TYPE_ARRAY, *array_element_type);
@@ -358,6 +360,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                         identExpression := cast(*Code_Ident) code_type_inst.type_valued_expression;
 
                         if identExpression.resolved_declaration {
+                            _expression.type_kind = .SERIAL;
                             _expression.serial_to = identExpression.resolved_declaration.serial;
                         }
 
@@ -495,7 +498,8 @@ process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel
 
     procedure_decl_serial, ok := table_find(*p.procedure_header_to_declaration, body.header.serial);
     if !ok {
-        log_error("Cannot find procedure decl serial (%)", body.header.serial);
+        // log_error("Cannot find procedure decl serial (%)", body.header.serial);
+        return;
     }
 
     process_code_block(p, body.block, channel, procedure_decl_serial);

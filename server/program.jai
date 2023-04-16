@@ -2,11 +2,11 @@ Program :: struct {
     imported_modules: [..]Module;
     imported_files: [..]Source_File;
 
-    declarations: [..]Declaration;
     declarations_by_serial: Table(ID, *Declaration);
     declarations_by_name: Table(string, *Declaration);
 
-    code_blocks: [..]Block;
+    code_blocks: [..]*Block;
+    code_blocks_by_serial: Table(ID, *Block);
 }
 
 init_program :: (program: Program) {
@@ -25,7 +25,6 @@ reset_program :: (program: Program) {
     array_reset(*program.imported_modules);
     array_reset(*program.imported_files);
     array_reset(*program.code_blocks);
-    array_reset(*program.declarations);
 }
 
 path_in_imported_modules_or_files :: (path: string) -> bool {
@@ -39,6 +38,121 @@ path_in_imported_modules_or_files :: (path: string) -> bool {
 
     return false;
 }
+
+find_struct_or_enum_member :: (base: *Declaration, name: string) -> *Declaration {
+    block: *Block;
+
+    if base.kind == {
+        case .ENUM; block = get_block(cast(*Enum) base);
+        case .STRUCT; block = get_block(cast(*Struct) base);
+
+        case; return null;
+    }
+
+    if !block return null;
+
+    for get_block_declarations(block) {
+        log("name % %", it.name, it.location);
+        if it.name != name continue;
+        return it;
+    }
+
+    return null;
+}
+
+get_block :: (_struct: *Struct) -> *Block {
+    block, ok := table_find(*server.program.code_blocks_by_serial, _struct.block);
+    if !ok return null;
+    return block;
+}
+
+get_block :: (_enum: *Enum) -> *Block {
+    block, ok := table_find(*server.program.code_blocks_by_serial, _enum.block);
+    if !ok return null;
+    return block;
+}
+
+get_block :: (procedure: *Procedure) -> *Block {
+    block, ok := table_find(*server.program.code_blocks_by_serial, procedure.body);
+    if !ok return null;
+    return block;
+}
+
+get_type_declaration :: (base_type_or_serial_to: Base_Type_Or_Serial_To) -> *Declaration {
+    if base_type_or_serial_to.type_kind == {
+        case .BASE; #through;
+        case .ARRAY; return null; // @TODO: What do we do about this one??
+
+        case .SERIAL; return get_declaration(base_type_or_serial_to.serial_to);
+        case .POINTER; 
+            decl := get_declaration(base_type_or_serial_to.serial_to);
+            assert(decl != null && decl.kind == .TYPE_INSTANTIATION);
+            return get_type_declaration((cast(*Type_Instantiation) decl).type);
+    }
+
+    return null;
+}
+
+get_block_declarations :: (block: *Block) -> []*Declaration {
+    declarations := NewArray(block.declarations.count, *Declaration);
+    for block.declarations {
+        decl := get_declaration(it);
+        assert(decl != null);
+        declarations[it_index] = decl;
+    }
+    return declarations;
+}
+
+get_declaration :: (serial: ID) -> *Declaration {
+    decl, ok := table_find(*server.program.declarations_by_serial, serial);
+    if !ok return null;
+    return decl;
+}
+
+find_declarations :: (name: string, available_from_file: string, available_from_block: *Block) -> []*Declaration {
+    decls := table_find_multiple(*server.program.declarations_by_name, name);
+    if decls.count == 0 {
+        return .[];
+    }
+
+    declarations: [..]*Declaration;
+
+    // Scope related
+    if available_from_block {
+        for decl: decls {
+            if decl.flags & .IS_GLOBAL continue;
+            
+            decl_block := find_block(decl.location.l0, decl.location.c0, decl.location.file);
+            if !decl_block || decl_block.serial != available_from_block.serial continue;
+
+            array_add(*declarations, decl);
+        }
+
+        // Look into arguments of procedure or struct
+        available_from_block_parent, ok := table_find(*server.program.declarations_by_serial, available_from_block.parent);
+        if ok {
+            procedure := cast(*Procedure) available_from_block_parent;
+
+            for argument_id: procedure.arguments {
+                argument, ok := table_find(*server.program.declarations_by_serial, argument_id);
+
+                if argument.name == name {
+                    array_add(*declarations, argument);
+                }
+            }
+        }
+    }
+
+    // Globals
+    for decl: decls {
+        if !(decl.flags & .IS_GLOBAL) continue;
+        if decl.flags & .SCOPE_FILE && available_from_file != decl.location.file continue;
+        array_add(*declarations, decl);
+    }
+
+    return declarations;
+}
+
 
 // Find nearest block by line, char and file
 // @todo: make this more robust and cleaver (this is initial experimental implementation)
@@ -54,7 +168,7 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
         return true;
     }
 
-    for * block: server.program.code_blocks {
+    for block: server.program.code_blocks {
         if block.serial == 0 continue;
         if block.location.file != file continue;
 
@@ -330,7 +444,7 @@ add_to_program :: (bytes: []u8, $type: Type) {
 
     #if type == Block {
         array_add(*server.work_program.code_blocks, data);
-        // table_set(*program_cache.declarations_by_serial, data.serial, data);
+        table_set(*server.work_program.code_blocks_by_serial, data.serial, data);
     } else {
         table_set(*server.work_program.declarations_by_serial, data.serial, data);
         table_add(*server.work_program.declarations_by_name, data.name, data);

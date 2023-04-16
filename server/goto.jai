@@ -41,7 +41,7 @@ handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string,
     });
 }
 
-// @todo: Consider using a compiler for goto resolution based on a clicked symbol (index all symbols - procedure calls, expressions, type instantiation...)
+// @TODO: Consider using a compiler for goto resolution based on a clicked symbol (index all symbols - procedure calls, expressions, type instantiation...)
 handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
     file_without_uri_prefix := replace(file, "file://", "");
@@ -58,60 +58,60 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    word := find_word_in_modified_file(file, request.params.position);
-    word_block := find_block(xx (request.params.position.line+1), xx (request.params.position.character+1), file_without_uri_prefix);
-
-    decls := table_find_multiple(*server.program.declarations_by_name, word);
-    if decls.count == 0 {
-        log("Not found! (%) - Current cached nodes %.", word, server.program.declarations_by_name.count);
+    path := get_cursor_context(file, request.params.position);
+    if path.count == 0 {
         lsp_respond(request.id, null);
         return;
     }
 
+    base_symbol := path[0];
+    base_symbol_block := find_block(xx (request.params.position.line+1), xx (request.params.position.character+1), file_without_uri_prefix);
+
     locations: [..]LSP_Location;
+    defer array_free(locations);
 
-    log("Clicked on % (%)", word, decls.count);
+    declarations := find_declarations(base_symbol, file_without_uri_prefix, base_symbol_block);
+    defer array_free(declarations);
 
+    log("Clicked on % (%)", path, declarations.count);
 
-    // Scope related
-    if word_block {
-        for decl: decls {
-            if decl.flags & .IS_GLOBAL continue;
-            
-            decl_block := find_block(decl.location.l0, decl.location.c0, decl.location.file);
-            if !decl_block || decl_block.serial != word_block.serial continue;
+    // Struct or Enum members
+    if path.count > 1 {
 
-            lsp_respond(request.id, declaration_to_lsp_location(decl));
-            return;
-        }
+        for decl: declarations {
+            current_declaration := decl;
 
-        log("Got word block!");
+            for part: path {
+                if it_index == 0 continue; // skip the first one...
 
-        // Look into arguments of procedure or struct
-        word_block_parent, ok := table_find(*server.program.declarations_by_serial, word_block.parent);
-        if ok {
-            procedure := cast(*Procedure) word_block_parent;
+                member_decl: *Declaration;
 
-            for argument_id: procedure.arguments {
-                argument, ok := table_find(*server.program.declarations_by_serial, argument_id);
+                if current_declaration.kind == {
+                    case .ENUM; #through;
+                    case .STRUCT; member_decl = find_struct_or_enum_member(current_declaration, part);
 
-                log("Argument: %", argument.name);
+                    case .EXPRESSION;
+                        type := get_type_declaration((cast(*Expression) current_declaration).type);
+                        if !type break;
+                        member_decl = find_struct_or_enum_member(type, part);
 
-                if argument.name == word {
-                    lsp_respond(request.id, declaration_to_lsp_location(argument));
-                    return;
+                    case .TYPE_INSTANTIATION;
+                        type := get_type_declaration((cast(*Type_Instantiation) current_declaration).type);
+                        if !type break;
+                        member_decl = find_struct_or_enum_member(type, part);
                 }
-            }
-        }
-    }
 
-    // Globals
-    for decl: decls {
-        if !(decl.flags & .IS_GLOBAL) continue;
-        if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
-        array_add(*locations, declaration_to_lsp_location(decl));
+                if !member_decl break;
+
+                current_declaration = member_decl;
+            }
+
+            array_add(*locations, declaration_to_lsp_location(current_declaration));
+        }
+
+    } else {
+        for declarations array_add(*locations, declaration_to_lsp_location(it));
     }
 
     lsp_respond(request.id, locations);
-    array_free(locations);
 }

@@ -122,61 +122,16 @@ find_line_in_modified_file :: (file: string, position: LSP_Position) -> string {
     return to_string(*content[start_index], end_index-start_index);
 }
 
-find_word_in_modified_file :: (file: string, position: LSP_Position) -> string {
+get_modified_file :: (name: string) -> []u8 {
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
-    content, ok := table_find(*server.modified_files, file);
+
+    content, ok := table_find(*server.modified_files, name);
     if !ok {
-        return "";
+        return .[];
     }
 
-    final_line: int;
-    pointer_index: int = -1;
-
-    // @SPEED: This searching could be probably done faster if we had server.modified_files stored as array of lines instead of file content. 
-    for char: content {
-        if char == #char "\n" {
-            final_line += 1;
-        }
-
-        if final_line == position.line {
-            pointer_index = it_index + position.character;
-            break;
-        }
-    }
-
-    if pointer_index == -1 {
-        return "";
-    }
-
-    // Word search
-    start_index := 0;
-    end_index := content.count;
-
-    is_seperation :: (char: u8) -> bool {
-        return is_any(char, " \n\t;*.[](){}=:#\",!+-/");
-    }
-
-    // Start search
-    for < index: pointer_index..0 {
-        char := content[index];
-        if is_seperation(char) {
-            start_index = index+1;
-            break;
-        }
-    }
-
-    // End search
-    for index: pointer_index..content.count-1 {
-        char := content[index];
-        if is_seperation(char) {
-            end_index = index;
-            break;
-        }
-    }
-
-
-    return to_string(*content[start_index], end_index-start_index);
+    return content;
 }
 
 #scope_file

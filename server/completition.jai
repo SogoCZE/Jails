@@ -21,7 +21,7 @@ handle_completitions :: (server: Server, request: LSP_Request_Message_Completion
 
         lsp_location := declaration_to_lsp_location(decl);
 
-        // @todo: fix this (does not currently work for not opened files)
+        // @TODO: fix this (does not currently work for not opened files)
         peeked_procedure := find_range_in_modified_file(decl.location.file, lsp_location.range);
 
         array_add(*completions, .{

@@ -84,10 +84,7 @@ find_local_modules :: (root: string) -> string {
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     uri := decl.location.file;
-
-    #if OS == .WINDOWS {
-        uri = slice(uri, 3, uri.count-1);
-    }
+    #if OS == .WINDOWS then uri = slice(uri, 3, uri.count-1);
 
     decrement_or_zero :: inline (number: int) -> u32 {
         if number <= 0 return 0;
@@ -95,10 +92,10 @@ declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     }
 
     range: LSP_Range;
-    range.start.line = decrement_or_zero(decl.location.l0);
+    range.start.line      = decrement_or_zero(decl.location.l0);
     range.start.character = decrement_or_zero(decl.location.c0);
-    range.end.line = decrement_or_zero(decl.location.l1);
-    range.end.character = decrement_or_zero(decl.location.c1);
+    range.end.line        = ifx decl.location.l1 < decl.location.l0 then decrement_or_zero(decl.location.l0) else decrement_or_zero(decl.location.l1);
+    range.end.character   = ifx decl.location.c1 < decl.location.c0 then decrement_or_zero(decl.location.c0) else decrement_or_zero(decl.location.c1);
 
     return .{
         uri=uri,
@@ -314,9 +311,11 @@ find_current_jai_path :: () -> string {
 #load "lsp_interface.jai";
 #load "program.jai";
 #load "modified_files.jai";
+#load "cursor_context.jai";
 
 #load "completition.jai";
 #load "goto.jai";
+
 #if OS == .WINDOWS {
     #import "Windows";
 } else {
