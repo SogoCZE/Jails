@@ -1,6 +1,7 @@
 # vscode_extension
 node_modules/
 out/
+*.vsix
 
 # Jai
 .build/
@@ -10,6 +11,12 @@ bin/
 .DS_Store
 *.dSYM
 *.dylib
+
+# Windows
+*.dll
+*.exp
+*.lib
+*.pdb
 
 # Linux
 *.so

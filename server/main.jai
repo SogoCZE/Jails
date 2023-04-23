@@ -220,7 +220,7 @@ main :: () {
 
     if server.args.channel_id == 0 {
         #if OS == .WINDOWS {
-            process_id := cast(u64) GetProcessId();
+            process_id := cast(u64) GetCurrentProcessId();
         } else {
             process_id := cast(u64) getpid();
         }

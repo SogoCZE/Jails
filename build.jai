@@ -40,14 +40,14 @@
 
         tracy: *Metaprogram_Plugin;
         if profile_server {
-            log("Adding tracy plugin");
+            /*log("Adding tracy plugin");
             Tracy :: #import "tracy";
             tracy = Tracy.get_plugin();
             tracy.workspace = w;
 
             assert(tracy.handle_one_option != null);
             tracy.handle_one_option(tracy, .["-modules"], 0);
-            tracy.handle_one_option(tracy, .["-min_size", "0"], 0);
+            tracy.handle_one_option(tracy, .["-min_size", "0"], 0);*/
         }
 
         flags: Intercept_Flags;

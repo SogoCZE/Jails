@@ -1,9 +1,9 @@
 [submodule "server/modules/jason"]
 	path = modules/jason
-	url = git@github.com:rluba/jason.git
+	url = https://github.com/rluba/jason.git
 [submodule "server/modules/unicode_utils"]
 	path = modules/unicode_utils
-	url = git@github.com:rluba/jai-unicode.git
+	url = https://github.com/rluba/jai-unicode.git
 [submodule "modules/tracy"]
 	path = metaprogram_modules/tracy
-	url = git@github.com:rluba/jai-tracy.git
+	url = https://github.com/rluba/jai-tracy.git
