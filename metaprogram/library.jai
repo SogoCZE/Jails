@@ -34,13 +34,13 @@ init :: (p: *Jails_Plugin, import_path: [] string) {
     init(*p.declarations_by_type_info_struct);
     init(*p.procedure_header_to_declaration);
 
-    send_to_server(*p.write_channel, .INITIALIZATION, *Initialization.{
+    send_to_server(p, .INITIALIZATION, *Initialization.{
         import_path=import_path
     });
 
     // Read all (modified) files from the server
-    p.modified_files = receive_modified_files(p);
-    log("Received % modified files", p.modified_files.count);
+    // p.modified_files = receive_modified_files(p);
+    // log("Received % modified files", p.modified_files.count);
 }
 
 deinit :: (p: *Jails_Plugin) {
@@ -65,7 +65,7 @@ receive_modified_files :: (p: *Jails_Plugin) -> [] Modified_File {
 
         defer reader_done_with_message(*message);
 
-        success, command, body_bytes := decode_command(message, Server_To_Metaprogram_Protocol_Tag);
+        success, workspace_index, command, body_bytes := decode_mesage_header(message, Server_To_Metaprogram_Protocol_Tag);
         if !success exit(1);
 
         {
@@ -100,10 +100,10 @@ compiler_location_to_our_location :: (using location: Code_Node.Location) -> Dec
     };
 }
 
-map_to_declaration :: (p: *Jails_Plugin, code_declarations: []*Code_Declaration, channel: *Write_Channel) -> []s64 {
+map_to_declaration :: (p: *Jails_Plugin, code_declarations: []*Code_Declaration) -> []s64 {
     type_instantiations := NewArray(code_declarations.count, s64);
 
-    for code_declarations type_instantiations[it_index] = process_declaration(p, it, channel);
+    for code_declarations type_instantiations[it_index] = process_declaration(p, it);
 
     return type_instantiations;
 }
@@ -136,12 +136,12 @@ process_number :: (type: *Type_Info) -> Base_Type {
     }
 }
 
-process_type_instantiation :: (p: *Jails_Plugin, base: Declaration, code_type_inst: *Code_Type_Instantiation, channel: *Write_Channel) -> ID {
+process_type_instantiation :: (p: *Jails_Plugin, base: Declaration, code_type_inst: *Code_Type_Instantiation) -> ID {
     type_inst: Type_Instantiation;
     type_inst.base = base;
     type_inst.kind = .TYPE_INSTANTIATION;
 
-    defer send_to_server(channel, .TYPE_INSTANTIATION, *type_inst);
+    defer send_to_server(p, .TYPE_INSTANTIATION, *type_inst);
 
     // persons: []Person; | groups_of_persons: [][]Person;
     if code_type_inst.array_element_type {
@@ -163,9 +163,9 @@ process_type_instantiation :: (p: *Jails_Plugin, base: Declaration, code_type_in
             #if DEBUG then print("array size = %\n", new_type_array.size);
         }
 
-        new_type_array.type_inst = process_type_instantiation(p, *Declaration.{serial = code_type_inst.array_element_type.serial}, code_type_inst.array_element_type, channel);
+        new_type_array.type_inst = process_type_instantiation(p, *Declaration.{serial = code_type_inst.array_element_type.serial}, code_type_inst.array_element_type);
 
-        send_to_server(channel, .TYPE_ARRAY, *new_type_array);
+        send_to_server(p, .TYPE_ARRAY, *new_type_array);
 
         return type_inst.serial;
     }
@@ -209,7 +209,7 @@ process_type_instantiation :: (p: *Jails_Plugin, base: Declaration, code_type_in
 
     // age: *int;
     if code_type_inst.pointer_to {
-        pointed_type_instantiation := process_type_instantiation(p, *Declaration.{serial = code_type_inst.pointer_to.serial}, code_type_inst.pointer_to, channel);
+        pointed_type_instantiation := process_type_instantiation(p, *Declaration.{serial = code_type_inst.pointer_to.serial}, code_type_inst.pointer_to);
         type_inst.type_kind = .POINTER;
         type_inst.serial_to = pointed_type_instantiation;
         #if DEBUG then print("type_inst.pointer_to = %\n", pointed_type_instantiation);
@@ -236,7 +236,7 @@ process_type_instantiation :: (p: *Jails_Plugin, base: Declaration, code_type_in
     return type_inst.serial;
 }
 
-process_struct_declaration :: (p: *Jails_Plugin, declaration: Declaration, code_struct: *Code_Struct, channel: *Write_Channel) -> ID {
+process_struct_declaration :: (p: *Jails_Plugin, declaration: Declaration, code_struct: *Code_Struct) -> ID {
     _struct: Struct;
     _struct.base = declaration;
     _struct.kind = .STRUCT;
@@ -246,18 +246,18 @@ process_struct_declaration :: (p: *Jails_Plugin, declaration: Declaration, code_
         // Setting serial of struct to defined_type pointer, so we can link afterwards
         // table_set(*declarations_by_type_info_struct, code_struct.defined_type, *_struct);
 
-        _struct.arguments = process_code_block(p, code_struct.arguments_block, channel, declaration.serial, true);
+        _struct.arguments = process_code_block(p, code_struct.arguments_block, declaration.serial, true);
     }
 
     code_struct.block.serial = _struct.serial;
-    _struct.block = process_code_block(p, code_struct.block, channel, declaration.serial,);
+    _struct.block = process_code_block(p, code_struct.block, declaration.serial,);
 
-    send_to_server(channel, .STRUCT, *_struct);
+    send_to_server(p, .STRUCT, *_struct);
 
     return _struct.serial;
 }
 
-process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Write_Channel) -> ID {
+process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration) -> ID {
     declaration: Declaration;
     declaration.name = decl.name;
     declaration.serial = decl.serial;
@@ -280,7 +280,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
     }
 
     if decl.type_inst {
-        return process_type_instantiation(p, declaration, decl.type_inst, channel);
+        return process_type_instantiation(p, declaration, decl.type_inst);
     }
 
     if decl.expression {
@@ -295,18 +295,18 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                 _procedure.base = declaration;
                 _procedure.kind = .PROCEDURE;
                 _procedure.body = code_procedure_header.serial;
-                _procedure.arguments = map_to_declaration(p, code_procedure_header.arguments, channel);
-                _procedure.returns = map_to_declaration(p, code_procedure_header.returns, channel);
+                _procedure.arguments = map_to_declaration(p, code_procedure_header.arguments);
+                _procedure.returns = map_to_declaration(p, code_procedure_header.returns);
 
                 table_set(*p.procedure_header_to_declaration, code_procedure_header.serial, declaration.serial);
 
-                send_to_server(channel, .PROCEDURE, *_procedure);
+                send_to_server(p, .PROCEDURE, *_procedure);
 
                 return _procedure.serial;
 
             // Person :: struct { name: string; };
             case .STRUCT;
-                return process_struct_declaration(p, declaration, xx decl.expression, channel);
+                return process_struct_declaration(p, declaration, xx decl.expression);
 
             // FOOD :: enum { APPLE :: 1; };
             case .ENUM;
@@ -324,9 +324,9 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                 }
 
                 code_enum.block.serial = _enum.serial;
-                _enum.block = process_code_block(p, code_enum.block, channel, declaration.serial);
+                _enum.block = process_code_block(p, code_enum.block, declaration.serial);
 
-                send_to_server(channel, .ENUM, *_enum);
+                send_to_server(p, .ENUM, *_enum);
 
                 return _enum.serial;
 
@@ -345,14 +345,14 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                         array_element_type.size = code_literal.array_literal_info.array_members.count;
                         #if DEBUG then print("array size = %\n", array_element_type.size);
 
-                        array_element_type.type_inst = process_type_instantiation(p, declaration, code_type_inst, channel);
+                        array_element_type.type_inst = process_type_instantiation(p, declaration, code_type_inst);
 
                         array_element_type.serial = code_literal.serial;
 
                         _expression.type_kind = .ARRAY;
                         _expression.serial_to = code_literal.serial;
 
-                        send_to_server(channel, .TYPE_ARRAY, *array_element_type);
+                        send_to_server(p, .TYPE_ARRAY, *array_element_type);
 
                         #if DEBUG then print("_expression.array_element_type = %\n", _expression.array_element_type);
                     case .STRUCT;
@@ -378,7 +378,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                         #if DEBUG then print("_expression.type = bool\n");
                 }
 
-                send_to_server(channel, .EXPRESSION, *_expression);
+                send_to_server(p, .EXPRESSION, *_expression);
 
                 return _expression.serial;
 
@@ -404,7 +404,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                     }
                 }
 
-                send_to_server(channel, .EXPRESSION, *_expression);
+                send_to_server(p, .EXPRESSION, *_expression);
 
                 return _expression.serial;
 
@@ -421,7 +421,7 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                     #if DEBUG then print("_expression.serial_to = %\n", _expression.serial_to);
                 }
 
-                send_to_server(channel, .EXPRESSION, *_expression);
+                send_to_server(p, .EXPRESSION, *_expression);
 
                 return _expression.serial;
 
@@ -430,14 +430,14 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration, channel: *Wri
                 _expression.base = declaration;
                 _expression.kind = .EXPRESSION;
 
-                send_to_server(channel, .EXPRESSION, *_expression);
+                send_to_server(p, .EXPRESSION, *_expression);
         }
     }
 
     return declaration.serial;
 }
 
-process_code_if :: (p: *Jails_Plugin, if_statement: *Code_If, channel: *Write_Channel, is_directive_static := false) -> ID {
+process_code_if :: (p: *Jails_Plugin, if_statement: *Code_If, is_directive_static := false) -> ID {
     our_if_statement: If_Statement;
     our_if_statement.serial = if_statement.serial;
 
@@ -445,47 +445,47 @@ process_code_if :: (p: *Jails_Plugin, if_statement: *Code_If, channel: *Write_Ch
         then_blocks := NewArray(if_statement.then_block.statements.count, s64);
         for statement: if_statement.then_block.statements {
             code_case := cast(*Code_Case) statement;
-            then_blocks[it_index] = process_code_block(p, xx code_case.then_block, channel, our_if_statement.serial);
+            then_blocks[it_index] = process_code_block(p, xx code_case.then_block, our_if_statement.serial);
         }
 
         our_if_statement.then_blocks = then_blocks;
     } else {
         then_blocks: [1]s64;
-        then_blocks[0] = process_code_block(p, xx if_statement.then_block, channel, our_if_statement.serial);
+        then_blocks[0] = process_code_block(p, xx if_statement.then_block, our_if_statement.serial);
         our_if_statement.then_blocks = then_blocks;
     }
 
-    if if_statement.else_block then our_if_statement.else_block = process_code_block(p, xx if_statement.else_block, channel, our_if_statement.serial);
+    if if_statement.else_block then our_if_statement.else_block = process_code_block(p, xx if_statement.else_block, our_if_statement.serial);
 
     if is_directive_static then our_if_statement.is_directive_static = true;
 
     return our_if_statement.serial;
 }
 
-process_code_while :: (p: *Jails_Plugin, while_statement: *Code_While, channel: *Write_Channel) -> ID {
+process_code_while :: (p: *Jails_Plugin, while_statement: *Code_While) -> ID {
     our_while_statement: While_statement;
     our_while_statement.serial = while_statement.serial;
 
-    our_while_statement.block = process_code_block(p, while_statement.block, channel, our_while_statement.serial);
+    our_while_statement.block = process_code_block(p, while_statement.block, our_while_statement.serial);
 
     if while_statement.condition.kind == .DECLARATION {
-        our_while_statement.condition = process_declaration(p, xx while_statement.condition, channel);
+        our_while_statement.condition = process_declaration(p, xx while_statement.condition);
         #if DEBUG then print("our_while_statement.condition = %\n", our_while_statement.condition);
     }
 
     return our_while_statement.serial;
 }
 
-process_code_for :: (p: *Jails_Plugin, for_statement: *Code_For, channel: *Write_Channel) -> ID {
+process_code_for :: (p: *Jails_Plugin, for_statement: *Code_For) -> ID {
     our_for_statement: For_Statement;
     our_for_statement.serial = for_statement.serial;
 
-    our_for_statement.block = process_code_block(p, for_statement.block, channel, our_for_statement.serial);
+    our_for_statement.block = process_code_block(p, for_statement.block, our_for_statement.serial);
 
     if for_statement.ident_decl && for_statement.ident_decl.kind == .DECLARATION {
         iterator_declaration := cast(*Code_Declaration) for_statement.ident_decl;
         if iterator_declaration.name != "it" {
-            our_for_statement.iterator = process_declaration(p, xx iterator_declaration, channel);
+            our_for_statement.iterator = process_declaration(p, xx iterator_declaration);
             #if DEBUG then print("our_for_statement.iterator = %\n", our_for_statement.iterator);
         }
     }
@@ -493,7 +493,7 @@ process_code_for :: (p: *Jails_Plugin, for_statement: *Code_For, channel: *Write
     return our_for_statement.serial;
 }
 
-process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel: *Write_Channel) {
+process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body) {
     body.block.serial = body.header.serial;
 
     procedure_decl_serial, ok := table_find(*p.procedure_header_to_declaration, body.header.serial);
@@ -502,10 +502,10 @@ process_procedure_body :: (p: *Jails_Plugin, body: *Code_Procedure_Body, channel
         return;
     }
 
-    process_code_block(p, body.block, channel, procedure_decl_serial);
+    process_code_block(p, body.block, procedure_decl_serial);
 }
 
-process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Channel, parent: ID, process_members := false) -> ID {
+process_code_block :: (p: *Jails_Plugin, block: *Code_Block, parent: ID, process_members := false) -> ID {
     our_block: Block;
     our_block.serial = block.serial;
     our_block.parent = parent;
@@ -520,25 +520,25 @@ process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Cha
                 case .DECLARATION;
                     code_declaration := cast(*Code_Declaration) statement;
                     if !code_declaration.expression || code_declaration.expression.kind != .PROCEDURE_HEADER {
-                        declarations_serials[it_index] = process_declaration(p, xx statement, channel);
+                        declarations_serials[it_index] = process_declaration(p, xx statement);
                     } else {
                         declarations_serials[it_index] = statement.serial;
                     }
 
                 case .BLOCK;
-                    declarations_serials[it_index] = process_code_block(p, xx statement, channel, block.serial);
+                    declarations_serials[it_index] = process_code_block(p, xx statement, block.serial);
 
                 case .WHILE;
-                    declarations_serials[it_index] = process_code_while(p, xx statement, channel);
+                    declarations_serials[it_index] = process_code_while(p, xx statement);
 
                 case .FOR;
-                    declarations_serials[it_index] = process_code_for(p, xx statement, channel);
+                    declarations_serials[it_index] = process_code_for(p, xx statement);
 
                 case .DIRECTIVE_STATIC_IF;
-                    declarations_serials[it_index] = process_code_if(p, xx statement, channel, true);
+                    declarations_serials[it_index] = process_code_if(p, xx statement, true);
 
                 case .IF;
-                    declarations_serials[it_index] = process_code_if(p, xx statement, channel);
+                    declarations_serials[it_index] = process_code_if(p, xx statement);
             }
         }
 
@@ -549,15 +549,15 @@ process_code_block :: (p: *Jails_Plugin, block: *Code_Block, channel: *Write_Cha
         members_serials := NewArray(block.members.count, s64);
         for statement: block.members {
             if statement.kind == {
-                case .DECLARATION; members_serials[it_index] = process_declaration(p, xx statement, channel);
-                case .BLOCK; members_serials[it_index] = process_code_block(p, xx statement, channel, block.serial);
+                case .DECLARATION; members_serials[it_index] = process_declaration(p, xx statement);
+                case .BLOCK; members_serials[it_index] = process_code_block(p, xx statement, block.serial);
             }
         }
 
         our_block.members = members_serials;
     }
 
-    send_to_server(channel, .BLOCK, *our_block);
+    send_to_server(p, .BLOCK, *our_block);
 
     return our_block.serial;
 }
@@ -574,7 +574,7 @@ handle_message :: (p: *Jails_Plugin, message: *Message) {
             project = true;
         }
 
-        send_to_server(*p.write_channel, .FILE, *Source_File.{path=file_message.fully_pathed_filename, project=project});
+        send_to_server(p, .FILE, *Source_File.{path=file_message.fully_pathed_filename, project=project});
     }
 
     if message.kind == .PHASE {
@@ -620,7 +620,7 @@ handle_message :: (p: *Jails_Plugin, message: *Message) {
                 print("declaration location =  %\n", declaration.location);
             }
 
-            process_struct_declaration(p, declaration, code_struct, *p.write_channel);
+            process_struct_declaration(p, declaration, code_struct);
         }
         #if DEBUG then print("\n");
     }
@@ -645,16 +645,16 @@ handle_message :: (p: *Jails_Plugin, message: *Message) {
 
         if it.expression.kind == {
             case .DECLARATION;
-                process_declaration(p, xx it.expression, *p.write_channel);
+                process_declaration(p, xx it.expression);
             case .PROCEDURE_BODY;
-                process_procedure_body(p, xx it.expression, *p.write_channel);
+                process_procedure_body(p, xx it.expression);
             case .DIRECTIVE_IMPORT;
                 import := cast(*Code_Directive_Import) it.expression;
 
                 if import.location.enclosing_load {
 
                     if array_find(p.files, import.location.enclosing_load.fully_pathed_filename) {
-                        send_to_server(*p.write_channel, .MODULE_IMPORT, *Module.{ import.name, import.location.enclosing_load.fully_pathed_filename });
+                        send_to_server(p, .MODULE_IMPORT, *Module.{ import.name, import.location.enclosing_load.fully_pathed_filename });
                     }
 
                 }
@@ -664,19 +664,20 @@ handle_message :: (p: *Jails_Plugin, message: *Message) {
     }
 }
 
-send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
-    assert(channel != null);
+send_to_server :: (p: *Jails_Plugin, command: Protocol_Tag, data: *$T) {
+    // assert(p.write_channel != null);
 
     data_bytes := serialize(data);
 
     while true {
-        message_success, message := writer_reserve_message(channel, JAILS_HEADER_SIZE + data_bytes.count);
+        message_success, message := writer_reserve_message(*p.write_channel, JAILS_HEADER_SIZE + data_bytes.count);
         if !message_success {
             sleep_milliseconds(1);
             continue;
         }
 
-        message.user_write_pointer[0] = cast(u8) command;
+        message.user_write_pointer[0] = p.jails_workspace;
+        message.user_write_pointer[1] = cast(u8) command;
         #if ENABLE_CHECKSUM {
             checksum: u8;
 
@@ -690,7 +691,7 @@ send_to_server :: (channel: *Write_Channel, command: Protocol_Tag, data: *$T) {
             memcpy(*message.user_write_pointer[JAILS_HEADER_SIZE], data_bytes.data, data_bytes.count);
         }
 
-        writer_commit_message(channel, message);
+        writer_commit_message(*p.write_channel, message);
         break;
     }
 }

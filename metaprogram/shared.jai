@@ -14,6 +14,7 @@ Jails_Plugin :: struct {
     declarations_by_type_info_struct: Table(*Type_Info_Struct, *Struct); // Declarations by Type_Info_Struct pointer.
     procedure_header_to_declaration: Table(ID, ID); // Serial of Declaration by serial of procedure header.
     files: [..]string;
+    jails_workspace: u8;
 }
 
 #import "Basic";

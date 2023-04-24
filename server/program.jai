@@ -12,46 +12,93 @@ Program :: struct {
 init_program :: (program: Program) {
     init(*program.declarations_by_serial);
     init(*program.declarations_by_name);
+    init(*program.code_blocks_by_serial);
 }
 
 deinit_program :: (program: Program) {
     deinit(*program.declarations_by_serial);
     deinit(*program.declarations_by_name);
+    deinit(*program.code_blocks_by_serial);
 }
 
 reset_program :: (program: Program) {
     table_reset(*program.declarations_by_name);
     table_reset(*program.declarations_by_serial);
+    table_reset(*program.code_blocks_by_serial);
+
     array_reset(*program.imported_modules);
     array_reset(*program.imported_files);
     array_reset(*program.code_blocks);
 }
 
-path_in_imported_modules_or_files :: (path: string) -> bool {
-    for module: server.program.imported_modules {
+Project_Workspace :: struct {
+    index: u8;
+    
+    entry: string;
+    working_directory: string;
+    local_modules_directory: string;
+    
+    last_refresh_time: Apollo_Time = APOLLO_TIME_INVALID;
+
+    import_path: []string;
+
+    previously_errored_file: string;
+
+    program_a: Program;
+    program_b: Program;
+
+    work_program: *Program;
+    program: *Program;   
+}
+
+init_workspace :: (workspace: *Project_Workspace, entry: string, index: u8, local_modules_directory: string = "") {
+    workspace.index = index;
+    workspace.entry = entry;
+    workspace.working_directory = path_strip_filename(entry);
+
+    if local_modules_directory.count > 0 {
+        workspace.local_modules_directory = local_modules_directory;
+    } else {
+        workspace.local_modules_directory = find_local_modules(workspace.working_directory);
+    }
+
+    init_program(workspace.program_a);
+    init_program(workspace.program_b);
+
+    workspace.work_program = *workspace.program_b;
+    workspace.program = *workspace.program_a;
+}
+
+deinit_workspace :: (workspace: *Project_Workspace) {
+    deinit_program(*workspace.program_a);
+    deinit_program(*workspace.program_b);
+}
+
+path_in_imported_modules_or_files :: (workspace: *Project_Workspace, path: string) -> bool {
+    for module: workspace.program.imported_modules {
         if contains(path, tprint("/modules/%", module.name)) return true;
     }
 
-    for file: server.program.imported_files {
+    for file: workspace.program.imported_files {
         if contains(path, file.path) && file.project return true;
     }
 
     return false;
 }
 
-find_struct_or_enum_member :: (base: *Declaration, name: string) -> *Declaration {
+find_struct_or_enum_member :: (workspace: *Project_Workspace, base: *Declaration, name: string) -> *Declaration {
     block: *Block;
 
     if base.kind == {
-        case .ENUM; block = get_block(cast(*Enum) base);
-        case .STRUCT; block = get_block(cast(*Struct) base);
+        case .ENUM; block = get_block(workspace, cast(*Enum) base);
+        case .STRUCT; block = get_block(workspace, cast(*Struct) base);
 
         case; return null;
     }
 
     if !block return null;
 
-    for get_block_declarations(block) {
+    for get_block_declarations(workspace, block) {
         log("name % %", it.name, it.location);
         if it.name != name continue;
         return it;
@@ -60,57 +107,58 @@ find_struct_or_enum_member :: (base: *Declaration, name: string) -> *Declaration
     return null;
 }
 
-get_block :: (_struct: *Struct) -> *Block {
-    block, ok := table_find(*server.program.code_blocks_by_serial, _struct.block);
+get_block :: (workspace: *Project_Workspace, _struct: *Struct) -> *Block {
+    block, ok := table_find(*workspace.program.code_blocks_by_serial, _struct.block);
     if !ok return null;
     return block;
 }
 
-get_block :: (_enum: *Enum) -> *Block {
-    block, ok := table_find(*server.program.code_blocks_by_serial, _enum.block);
+get_block :: (workspace: *Project_Workspace, _enum: *Enum) -> *Block {
+    block, ok := table_find(*workspace.program.code_blocks_by_serial, _enum.block);
     if !ok return null;
     return block;
 }
 
-get_block :: (procedure: *Procedure) -> *Block {
-    block, ok := table_find(*server.program.code_blocks_by_serial, procedure.body);
+get_block :: (workspace: *Project_Workspace, procedure: *Procedure) -> *Block {
+    block, ok := table_find(*workspace.program.code_blocks_by_serial, procedure.body);
     if !ok return null;
     return block;
 }
 
-get_type_declaration :: (base_type_or_serial_to: Base_Type_Or_Serial_To) -> *Declaration {
+get_type_declaration :: (workspace: *Project_Workspace, base_type_or_serial_to: Base_Type_Or_Serial_To) -> *Declaration {
     if base_type_or_serial_to.type_kind == {
         case .BASE; #through;
         case .ARRAY; return null; // @TODO: What do we do about this one??
 
-        case .SERIAL; return get_declaration(base_type_or_serial_to.serial_to);
+        case .SERIAL; return get_declaration(workspace, base_type_or_serial_to.serial_to);
         case .POINTER; 
-            decl := get_declaration(base_type_or_serial_to.serial_to);
+            decl := get_declaration(workspace, base_type_or_serial_to.serial_to);
             assert(decl != null && decl.kind == .TYPE_INSTANTIATION);
-            return get_type_declaration((cast(*Type_Instantiation) decl).type);
+            return get_type_declaration(workspace, (cast(*Type_Instantiation) decl).type);
     }
 
     return null;
 }
 
-get_block_declarations :: (block: *Block) -> []*Declaration {
+get_block_declarations :: (workspace: *Project_Workspace, block: *Block) -> []*Declaration {
     declarations := NewArray(block.declarations.count, *Declaration);
     for block.declarations {
-        decl := get_declaration(it);
+        decl := get_declaration(workspace, it);
         assert(decl != null);
         declarations[it_index] = decl;
     }
+
     return declarations;
 }
 
-get_declaration :: (serial: ID) -> *Declaration {
-    decl, ok := table_find(*server.program.declarations_by_serial, serial);
+get_declaration :: (workspace: *Project_Workspace, serial: ID) -> *Declaration {
+    decl, ok := table_find(*workspace.program.declarations_by_serial, serial);
     if !ok return null;
     return decl;
 }
 
-find_declarations :: (name: string, available_from_file: string, available_from_block: *Block) -> []*Declaration {
-    decls := table_find_multiple(*server.program.declarations_by_name, name);
+find_declarations :: (workspace: *Project_Workspace, name: string, available_from_file: string, available_from_block: *Block) -> []*Declaration {
+    decls := table_find_multiple(*workspace.program.declarations_by_name, name);
     if decls.count == 0 {
         return .[];
     }
@@ -122,19 +170,19 @@ find_declarations :: (name: string, available_from_file: string, available_from_
         for decl: decls {
             if decl.flags & .IS_GLOBAL continue;
             
-            decl_block := find_block(decl.location.l0, decl.location.c0, decl.location.file);
+            decl_block := find_block(workspace, decl.location.l0, decl.location.c0, decl.location.file);
             if !decl_block || decl_block.serial != available_from_block.serial continue;
 
             array_add(*declarations, decl);
         }
 
         // Look into arguments of procedure or struct
-        available_from_block_parent, ok := table_find(*server.program.declarations_by_serial, available_from_block.parent);
+        available_from_block_parent, ok := table_find(*workspace.program.declarations_by_serial, available_from_block.parent);
         if ok {
             procedure := cast(*Procedure) available_from_block_parent;
 
             for argument_id: procedure.arguments {
-                argument, ok := table_find(*server.program.declarations_by_serial, argument_id);
+                argument, ok := table_find(*workspace.program.declarations_by_serial, argument_id);
 
                 if argument.name == name {
                     array_add(*declarations, argument);
@@ -153,10 +201,25 @@ find_declarations :: (name: string, available_from_file: string, available_from_
     return declarations;
 }
 
+declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
+    uri := decl.location.file;
+    #if OS == .WINDOWS then uri = slice(uri, 3, uri.count-1);
+
+    range: LSP_Range;
+    range.start.line      = xx max(decl.location.l0-1, 0);
+    range.start.character = xx max(decl.location.c0-1, 0);
+    range.end.line        = xx ifx decl.location.l1 < decl.location.l0 then max(decl.location.l0-1, 0) else max(decl.location.l1-1, 0);
+    range.end.character   = xx ifx decl.location.c1 < decl.location.c0 then max(decl.location.c0-1, 0) else max(decl.location.c1-1, 0);
+
+    return .{
+        uri=uri,
+        range=range,
+    };
+}
 
 // Find nearest block by line, char and file
 // @todo: make this more robust and cleaver (this is initial experimental implementation)
-find_block :: (line: s32, char: s32, file: string) -> *Block {
+find_block :: (workspace: *Project_Workspace, line: s32, char: s32, file: string) -> *Block {
     nearest_block: *Block;
 
     is_in_range :: (loc: Declaration.Location, line: s32, char: s32) -> bool {
@@ -168,7 +231,7 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
         return true;
     }
 
-    for block: server.program.code_blocks {
+    for block: workspace.program.code_blocks {
         if block.serial == 0 continue;
         if block.location.file != file continue;
 
@@ -176,7 +239,7 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
         if !is_in_range(block.location, line, char) continue;
 
         // Skip if, while, empty ... blocks
-        parent, parent_exists := table_find(*server.program.declarations_by_serial, block.parent);
+        parent, parent_exists := table_find(*workspace.program.declarations_by_serial, block.parent);
         if !parent_exists continue;
 
         // If we are not smaller than so far nearest block we skip.
@@ -191,11 +254,11 @@ find_block :: (line: s32, char: s32, file: string) -> *Block {
     return nearest_block;
 }
 
-reset_diagnostics :: () {
+reset_diagnostics :: (workspace: *Project_Workspace) {
     lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
         method="textDocument/publishDiagnostics",
         params = .{
-            uri = server.previously_errored_file,
+            uri = workspace.previously_errored_file,
             diagnostics = LSP_Diagnostic.[]
         }
     });
@@ -204,7 +267,7 @@ reset_diagnostics :: () {
 // Currently, parse only the first error (maybe parsing multiple errors is not that useful because Jai mostly report one error at a time)
 // @TODO: Make it work with multiple errors
 // @todo: add support for warnings
-send_compiler_errors_as_diagnostics :: (output: string) {
+send_compiler_errors_as_diagnostics :: (workspace: *Project_Workspace, output: string) {
     lines := split(output, "\n");
 
     file: string;
@@ -272,10 +335,10 @@ send_compiler_errors_as_diagnostics :: (output: string) {
         }
     });
 
-    server.previously_errored_file = file;
+    workspace.previously_errored_file = file;
 }
 
-refresh_program :: (send_diagnostics := false) -> success: bool, error: string {
+refresh_program :: (workspace: *Project_Workspace, send_diagnostics := false) -> success: bool, error: string {
     // @Stability @Incomplete: This modifies structs also modified by the cache thread!!
     // So this needs to take a lock or something!
     start := current_time_consensus();
@@ -291,31 +354,32 @@ refresh_program :: (send_diagnostics := false) -> success: bool, error: string {
             "-quiet", "-no_color", "-no_cwd", // (+ some basic args for Inception level 0)
             "-plug", "tracy", "-modules", "-import_dir", METAPROGRAM_MODULES_PATH, // ... but use the tracy module to instrument Inception level 1
         );
-        if server.local_modules_directory {
-            array_add(*command, "-import_dir", server.local_modules_directory);
+        if workspace.local_modules_directory {
+            array_add(*command, "-import_dir", workspace.local_modules_directory);
         }
-        array_add(*command, "-", server.entry, "-plug", "jails"); // ... and tell Inception level 1 to compile the actual entry point while using our JAILS metaprogram which will be instrumented by tracy
+        array_add(*command, "-", workspace.entry, "-plug", "jails"); // ... and tell Inception level 1 to compile the actual entry point while using our JAILS metaprogram which will be instrumented by tracy
     } else {
-        array_add(*command, server.entry, "-quiet", "-no_color", "-plug", "jails");
-        if server.local_modules_directory {
-            array_add(*command, "-import_dir", server.local_modules_directory);
+        array_add(*command, workspace.entry, "-quiet", "-no_color", "-plug", "jails");
+        if workspace.local_modules_directory {
+            array_add(*command, "-import_dir", workspace.local_modules_directory);
         }
     }
 
-    array_add(*command, "-", "-channel_id", tprint("%", server.args.channel_id)); // Add unique shared memory channel ID @TOOD: is there way how to more easily transform u64 to string? @TODO: test this with the tracy pipeline.
+
+    array_add(*command, "-", "-channel_id", tprint("%", server.args.channel_id), "-workspace", tprint("%", workspace.index)); // Add unique shared memory channel ID @TOOD: is there way how to more easily transform u64 to string? @TODO: test this with the tracy pipeline.
     array_add(*command, "---", "import_dir", METAPROGRAM_MODULES_PATH); // Import dir for the initial Default_Metaprogram so that it can find our plugins (tracy for Inception level 0 if we’re profiling or Jails if we’re not profiling).
 
-    result, output, error = run_command(..command, working_directory=server.working_directory, capture_and_return_output=true);
+    result, output, error = run_command(..command, working_directory=workspace.working_directory, capture_and_return_output=true);
 
     if send_diagnostics {
-       reset_diagnostics();
+       reset_diagnostics(workspace);
     }
 
     if result.exit_code != 0 {
         log_error("Could not run jai compiler: %\nError: %\nOutput: %", result, error, output);
 
         if send_diagnostics {
-            send_compiler_errors_as_diagnostics(error);
+            send_compiler_errors_as_diagnostics(workspace, error);
         }
 
         return false, error;
@@ -324,10 +388,10 @@ refresh_program :: (send_diagnostics := false) -> success: bool, error: string {
     end := current_time_consensus();
     duration_ms := to_milliseconds(end - start);
 
-    server.last_refresh_time = APOLLO_TIME_INVALID;
+    workspace.last_refresh_time = APOLLO_TIME_INVALID;
     // @Stability @Incomplete: This reads structs also modified by the cache thread!!
     // It needs to wait for a signal from the cache thread that all messages have been received!?
-    log("Cache refreshed in %ms! Nodes: %", duration_ms, server.work_program.declarations_by_name.count);
+    log("Cache refreshed in %ms! Nodes: %", duration_ms, workspace.work_program.declarations_by_name.count);
 
     if server.args.verbose {
         log("Compiler stdout: %", output);
@@ -335,8 +399,8 @@ refresh_program :: (send_diagnostics := false) -> success: bool, error: string {
     }
 
     // Swap programs
-    Swap(*server.program, *server.work_program);
-    reset_program(server.work_program);
+    Swap(*workspace.program, *workspace.work_program);
+    reset_program(workspace.work_program);
 
     return true, "";
 }
@@ -384,70 +448,77 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
             return -1;
         }
 
-        success, command, body_bytes := decode_command(message, Protocol_Tag);
+        success, workspace_index, command, body_bytes := decode_mesage_header(message, Protocol_Tag);
         if !success return -1;
+
+        workspace := *server.workspaces[workspace_index];
 
         if command == {
             case .INITIALIZATION;
+
                 initialization := deserialize(body_bytes, Initialization);
-                server.import_path = initialization.import_path;
+                workspace.import_path = initialization.import_path;
 
-                write_channel_success: bool;
-                write_channel_success, write_channel = writer_connect(tprint("%-%", IPC_CHANNEL_NAME_TO_META, server.args.channel_id));
+                log("Settings, work % %", workspace.index, workspace.import_path);
 
-                if !write_channel_success {
-                    log_error("Could not open write channel to metaprogram.");
-                    return -1;
-                }
+                // Disabled for now. Probably broken because of workspace changes. This will be useful when the compiler support replacing files. @TODO: Fix this.
+                // write_channel_success: bool;
+                // write_channel_success, write_channel = writer_connect(tprint("%-%", IPC_CHANNEL_NAME_TO_META, server.args.channel_id));
+
+                // if !write_channel_success {
+                //     log_error("Could not open write channel to metaprogram.");
+                //     return -1;
+                // }
 
                 // Send all (modified) files to the metaprogram
                 // @Stability: This only works because the metaprogram doesn’t send anything while
                 // it waits for files. If this ever changes, we need to move the sending to a separate thread
                 // or we might deadlock.
-                {
-                    lock(*server.modified_files_lock);
-                    defer unlock(*server.modified_files_lock);
 
-                    for server.modified_files {
-                        message: Modified_File;
-                        message.path = it_index;
-                        message.content = it;
-                        send_to_metaprogram(*write_channel, .MODIFIED_FILE, *message);
-                    }
+                // { 
+                //     lock(*server.modified_files_lock);
+                //     defer unlock(*server.modified_files_lock);
 
-                    send_to_metaprogram(*write_channel, .DONE, null);
-                }
+                //     for server.modified_files {
+                //         message: Modified_File;
+                //         message.path = it_index;
+                //         message.content = it;
+                //         send_to_metaprogram(*write_channel, .MODIFIED_FILE, *message);
+                //     }
+
+                //     send_to_metaprogram(*write_channel, .DONE, null);
+                // }
 
             case .MODULE_IMPORT;
                 module := deserialize(body_bytes, Module);
-                array_add(*server.work_program.imported_modules, module);
+                array_add(*workspace.work_program.imported_modules, module);
 
             case .FILE;
                 file := deserialize(body_bytes, Source_File);
                 // create_file(file.path, read_entire_file(file.path));
-                array_add(*server.work_program.imported_files, <<file);
+                array_add(*workspace.work_program.imported_files, <<file);
 
-            case .STRUCT; add_to_program(body_bytes, Struct);
-            case .PROCEDURE; add_to_program(body_bytes, Procedure);
-            case .TYPE_INSTANTIATION; add_to_program(body_bytes, Type_Instantiation);
-            case .EXPRESSION; add_to_program(body_bytes, Expression);
-            case .ENUM; add_to_program(body_bytes, Enum);
-            case .BLOCK; add_to_program(body_bytes, Block);
+            case .STRUCT; add_to_program(workspace, body_bytes, Struct);
+            case .PROCEDURE; add_to_program(workspace, body_bytes, Procedure);
+            case .TYPE_INSTANTIATION; add_to_program(workspace, body_bytes, Type_Instantiation);
+            case .EXPRESSION; add_to_program(workspace, body_bytes, Expression);
+            case .ENUM; add_to_program(workspace, body_bytes, Enum);
+            case .BLOCK; add_to_program(workspace, body_bytes, Block);
         }
     }
 
     return 0;
 }
 
-add_to_program :: (bytes: []u8, $type: Type) {
+add_to_program :: (workspace: *Project_Workspace, bytes: []u8, $type: Type) {
     data := deserialize(bytes, type);
 
     #if type == Block {
-        array_add(*server.work_program.code_blocks, data);
-        table_set(*server.work_program.code_blocks_by_serial, data.serial, data);
+        array_add(*workspace.work_program.code_blocks, data);
+        table_set(*workspace.work_program.code_blocks_by_serial, data.serial, data);
     } else {
-        table_set(*server.work_program.declarations_by_serial, data.serial, data);
-        table_add(*server.work_program.declarations_by_name, data.name, data);
+        table_set(*workspace.work_program.declarations_by_serial, data.serial, data);
+        table_add(*workspace.work_program.declarations_by_name, data.name, data);
     }
 }
 

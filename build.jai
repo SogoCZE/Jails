@@ -12,6 +12,7 @@
     profile_server := array_find(args, "-profile_server");
     launch_vscode := array_find(args, "-vscode");
 
+    // Metaprogram Library
     {
         w := compiler_create_workspace("Metaprogram library");
 
@@ -28,6 +29,9 @@
         message_loop(w, args, null);
         compiler_end_intercept(w);
     }
+
+
+    // Server 
     {
         w := compiler_create_workspace("Server");
 
@@ -63,8 +67,8 @@
         if tracy && tracy.shutdown tracy.shutdown(tracy);
     }
 
+    // When we provide -vscode argument automatically launch vscode with our extension installed.
     if launch_vscode {
-        // When we provide -vscode argument automatically launch vscode with our extension installed.
         vscode_extension_directory := join(get_working_directory(), "/vscode_extension");
         vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
 

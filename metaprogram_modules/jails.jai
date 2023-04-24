@@ -4,21 +4,25 @@ get_plugin :: () -> *Plugin {
 
     options := get_build_options();
 
-    channel_id := options.compile_time_command_line[options.compile_time_command_line.count-1]; // @TODO: This is dangerous!
+    channel_id := options.compile_time_command_line[options.compile_time_command_line.count-3]; // @TODO: This is dangerous!
+
     channel_to_meta := join(IPC_CHANNEL_NAME_TO_META, channel_id, separator="-");
     channel_from_meta := join(IPC_CHANNEL_NAME_FROM_META, channel_id, separator="-");
 
+    p.jails_workspace = parse_int(*options.compile_time_command_line[options.compile_time_command_line.count-1], u8); // @TODO: This is dangerous!
+    
     #if OS != .WINDOWS {
         POSIX :: #import "POSIX";
         POSIX.shm_unlink(channel_to_meta.data);
     }
 
     success: bool;
-    success, p.read_channel = reader_create_channel(channel_to_meta, CHANNEL_DATA_BYTES);
-    if !success {
-        log_error("Could not open read channel.");
-        exit(1);
-    }
+    // Disabled for now. Probably broken because of workspace changes. This will be useful when the compiler support replacing files. @TODO: Fix this.
+    // success, p.read_channel = reader_create_channel(channel_to_meta, CHANNEL_DATA_BYTES);
+    // if !success {
+    //     log_error("Could not open read channel.");
+    //     exit(1);
+    // }
 
     success, p.write_channel = writer_connect(channel_from_meta);
     if !success {

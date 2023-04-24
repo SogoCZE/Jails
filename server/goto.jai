@@ -1,14 +1,16 @@
 
 // This handles clicking on import or load.
-handle_import_or_load :: (request: LSP_Request_Message_Definition, line: string, module: bool, pos: LSP_Position) {
+handle_import_or_load :: (workspace: *Project_Workspace, request: LSP_Request_Message_Definition, line: string, module: bool, pos: LSP_Position) {
     start_of_path := find_index_from_left(line, "\"");
     end_of_path := find_index_from_right(line, "\"");
 
     path := slice(line, start_of_path + 1, end_of_path - start_of_path - 1);
 
+    log("... %", workspace.import_path);
+
     uri: string;
     if module {
-        modules_path := server.import_path[1]; 
+        modules_path := workspace.import_path[1]; 
         uri = tprint("%/%/module.jai", modules_path, path);
         if !file_exists(uri) {
            uri = tprint("%/%.jai", modules_path, path);
@@ -46,15 +48,22 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
     file_without_uri_prefix := replace(file, "file://", "");
 
+    workspace := find_workspace_by_path(file_without_uri_prefix);
+    if !workspace {
+        log("Cant find workspace for %", file_without_uri_prefix);
+        lsp_respond(request.id, null);
+        return;
+    }
+
     line := find_line_in_modified_file(file, request.params.position);
 
     if contains(line, "#import") {
-        handle_import_or_load(request, line, true, request.params.position);
+        handle_import_or_load(workspace, request, line, true, request.params.position);
         return;
     }
     
     if contains(line, "#load") {
-        handle_import_or_load(request, line, false, request.params.position);
+        handle_import_or_load(workspace, request, line, false, request.params.position);
         return;
     }
 
@@ -65,12 +74,12 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
     base_symbol := path[0];
-    base_symbol_block := find_block(xx (request.params.position.line+1), xx (request.params.position.character+1), file_without_uri_prefix);
+    base_symbol_block := find_block(workspace, xx (request.params.position.line+1), xx (request.params.position.character+1), file_without_uri_prefix);
 
     locations: [..]LSP_Location;
     defer array_free(locations);
 
-    declarations := find_declarations(base_symbol, file_without_uri_prefix, base_symbol_block);
+    declarations := find_declarations(workspace, base_symbol, file_without_uri_prefix, base_symbol_block);
     defer array_free(declarations);
 
     log("Clicked on % (%)", path, declarations.count);
@@ -88,17 +97,17 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
                 if current_declaration.kind == {
                     case .ENUM; #through;
-                    case .STRUCT; member_decl = find_struct_or_enum_member(current_declaration, part);
+                    case .STRUCT; member_decl = find_struct_or_enum_member(workspace, current_declaration, part);
 
                     case .EXPRESSION;
-                        type := get_type_declaration((cast(*Expression) current_declaration).type);
+                        type := get_type_declaration(workspace, (cast(*Expression) current_declaration).type);
                         if !type break;
-                        member_decl = find_struct_or_enum_member(type, part);
+                        member_decl = find_struct_or_enum_member(workspace, type, part);
 
                     case .TYPE_INSTANTIATION;
-                        type := get_type_declaration((cast(*Type_Instantiation) current_declaration).type);
+                        type := get_type_declaration(workspace, (cast(*Type_Instantiation) current_declaration).type);
                         if !type break;
-                        member_decl = find_struct_or_enum_member(type, part);
+                        member_decl = find_struct_or_enum_member(workspace, type, part);
                 }
 
                 if !member_decl break;

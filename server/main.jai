@@ -12,29 +12,86 @@ Args :: struct {
 
 Server :: struct {
     args: Args;
+    quit := false;
 
-    last_refresh_time: Apollo_Time = APOLLO_TIME_INVALID;
+    workspaces: []Project_Workspace;
 
     modified_files_lock: Mutex;
     modified_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
-
-    import_path: []string;
-    entry: string;
-    working_directory: string;
-    local_modules_directory: string;
-
-    previously_errored_file: string;
-
-    program_a: Program;
-    program_b: Program;
-
-    work_program: *Program;
-    program: *Program;
-
-    quit := false;
 }
 
 server: Server;
+
+// @TODO: make this more robust?
+// There is workaround for modules because they teoreticly dont have workspace.
+// We need to track module cache somewhere seperated from the workspace user cache.
+// It will also eliminate duplicated module cache across workspaces and also speedup
+// metaprogram processing time.
+find_workspace_by_path :: (path: string) -> *Project_Workspace {
+    for * workspace: server.workspaces {
+        if !contains(path, workspace.working_directory) && !path_in_imported_modules_or_files(workspace, path) {
+            continue;
+        }
+
+        return workspace;
+    }
+
+    return *server.workspaces[0];
+}
+
+Workspace_Config :: struct {
+    entry: string;
+    modules: string;
+}
+
+Config :: struct {
+    entry: string;
+    workspaces: []Workspace_Config;
+}
+
+// @TODO: This is temporary solution until we will figure better way how to do it.
+// It would be good to look at LSP workspace feature
+load_config_file :: (root: string) -> bool, Config {
+    config_path := join(root, "/jails.json");
+    if !file_exists(config_path) return false, .{};
+
+    config_content := read_entire_file(config_path);
+
+    ok, config := json_parse_string(config_content, Config);
+    if !ok {
+        log("Failed to parse config file!");
+        return false, .{};
+    }
+
+    return true, config;
+}
+
+setup_workspaces :: (root: string) {
+    ok, config := load_config_file(root);
+    if ok {
+        server.workspaces = NewArray(config.workspaces.count, Project_Workspace);
+
+        for workspace_config: config.workspaces {
+            absolute_entry := join(root, trim(workspace_config.entry, "/"), separator = "/");
+
+            absolute_modules: string;
+            if workspace_config.modules.count > 0 {
+                absolute_modules = join(root, trim(workspace_config.modules, "/"), separator = "/");
+            }
+
+            init_workspace(*server.workspaces[it_index], absolute_entry, xx it_index, absolute_modules);
+        }
+
+        return;
+    }
+
+    // When we dont have a config backup to the old entry resolution.
+    // @TODO: In the future we need to improve this to properly resolve workspaces even without config.
+    entry := find_entry_file(root);
+    workspaces: [1] Project_Workspace;
+    init_workspace(*workspaces[0], entry, 0);
+    server.workspaces = workspaces;
+}
 
 find_entry_file :: (root: string) -> string {
 
@@ -82,35 +139,14 @@ find_local_modules :: (root: string) -> string {
     return "";
 }
 
-declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
-    uri := decl.location.file;
-    #if OS == .WINDOWS then uri = slice(uri, 3, uri.count-1);
+refresh_program_if_needed :: (workspace: *Project_Workspace) {
+    if workspace.last_refresh_time == APOLLO_TIME_INVALID return;
 
-    decrement_or_zero :: inline (number: int) -> u32 {
-        if number <= 0 return 0;
-        return xx (number-1);
-    }
-
-    range: LSP_Range;
-    range.start.line      = decrement_or_zero(decl.location.l0);
-    range.start.character = decrement_or_zero(decl.location.c0);
-    range.end.line        = ifx decl.location.l1 < decl.location.l0 then decrement_or_zero(decl.location.l0) else decrement_or_zero(decl.location.l1);
-    range.end.character   = ifx decl.location.c1 < decl.location.c0 then decrement_or_zero(decl.location.c0) else decrement_or_zero(decl.location.c1);
-
-    return .{
-        uri=uri,
-        range=range,
-    };
-}
-
-refresh_program_if_needed :: () {
-    if server.last_refresh_time == APOLLO_TIME_INVALID return;
-
-    // @Incomplete: We want to use the server.last_refresh_time to debounce.
+    // @Incomplete: We want to use the workspace.last_refresh_time to debounce.
     // But since we’re blocking on messages right now, we can’t use a timeout to start recompiling.
-    // So we just use server.last_refresh_time as dirty flag.
+    // So we just use workspace.last_refresh_time as dirty flag.
 
-    success := refresh_program();
+    success := refresh_program(workspace);
     if !success return;
 }
 
@@ -132,18 +168,18 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("Root URI: %", <<body.params.rootUri);
             log("Root Path: %", <<body.params.rootPath);
 
-            server.working_directory       = <<body.params.rootPath;
-            server.entry                   = find_entry_file(server.working_directory);
-            server.local_modules_directory = find_local_modules(server.working_directory);
+            setup_workspaces(<<body.params.rootPath);
 
-            log("Entry file: %/%", server.working_directory, server.entry);
+            for * workspace: server.workspaces {
+                log("Workspace #%: %", it_index, workspace.working_directory);
+                log("Entry file: %", workspace.entry);
 
-            {
-                success, error_details := refresh_program();
+                success, error_details := refresh_program(workspace);
                 if !success {
-                    lsp_respond_with_error(body.id, .PARSE_ERROR, "Could not run initial Jails metaprogram run", error_details);
-                    // return; We cant return here because LSP client is waiting for response - if he wont get one the editor thinks the LSP crashed...
-                }
+                    lsp_respond_with_error(body.id, .PARSE_ERROR, tprint("Could not run initial metaprogram run", workspace.entry), error_details);
+                    // return; // We cant return here because LSP client is waiting for response - if he wont get one the editor thinks the LSP crashed...
+                }                
+
             }
 
             to_send: LSP_Result_Initialize;
@@ -168,7 +204,10 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             // @ToDo: Remove all changes from the "modified files" table so we don’t send that file over on ever compile?
 
-            success = refresh_program(true);
+            workspace := find_workspace_by_path(body.params.textDocument.uri);
+            if !workspace return;
+
+            success = refresh_program(workspace, true);
             if !success return;
 
         case "textDocument/didOpen";
@@ -193,7 +232,10 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := body.params.textDocument.uri;
             edit_modified_file(file_path, body.params.contentChanges);
 
-            server.last_refresh_time = current_time_consensus();
+            workspace := find_workspace_by_path(file_path);
+            if !workspace return;
+
+            workspace.last_refresh_time = current_time_consensus();
 
         case "textDocument/completion";
             // success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
@@ -220,7 +262,7 @@ main :: () {
 
     if server.args.channel_id == 0 {
         #if OS == .WINDOWS {
-            process_id := cast(u64) GetProcessId();
+            process_id := cast(u64) GetCurrentProcessId();
         } else {
             process_id := cast(u64) getpid();
         }
@@ -228,15 +270,6 @@ main :: () {
     }
 
     log("Args are %", server.args);
-
-    init_program(server.program_a);
-    defer deinit_program(server.program_a);
-
-    init_program(server.program_b);
-    defer deinit_program(server.program_b);
-
-    server.work_program = *server.program_b;
-    server.program = *server.program_a;
 
     init_modified_files();
     defer deinit_modified_files();
@@ -265,6 +298,10 @@ main :: () {
         }
 
         handle_request(request, body);
+    }
+
+    for * workspace: server.workspaces {
+        deinit_workspace(workspace);
     }
 
     log("Shutdown");

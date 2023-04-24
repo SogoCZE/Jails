@@ -8,9 +8,9 @@ IPC_CHANNEL_NAME_TO_META   :: "jails_to";
 CHANNEL_DATA_BYTES :: 64 * 1024 * 1024; // 64 MB @ToDo: what if we run out of space?
 
 #if ENABLE_CHECKSUM {
-    JAILS_HEADER_SIZE :: 2;  // 1 byte for message tag, 1 byte for the checksum.
+    JAILS_HEADER_SIZE :: 2 + 1;  // 2 byte for workspace_index and command, 1 byte for the checksum.
 } else {
-    JAILS_HEADER_SIZE :: 1;  // 1 byte for message tag, no checksum.
+    JAILS_HEADER_SIZE :: 2;  // 2 bytes for workspace_index and command, no checksum.
 }
 
 Protocol_Tag :: enum u8 {  // Is there a message here, or are we done?
@@ -47,7 +47,6 @@ Modified_File :: struct {
     content: [] u8;
 }
 
-
 ID :: s64;
 
 Our_Declaration_Flags :: enum_flags u32 {
@@ -77,13 +76,11 @@ Declaration :: struct {
         l0, c0, l1, c1: s32;
     }
 
-
     serial: ID;
     flags: Our_Declaration_Flags;
     kind: Protocol_Tag;
     name: string;
     location: Location;
-    
 }
 
 
@@ -213,13 +210,14 @@ If_Statement :: struct {
     is_directive_static := false;
 }
 
-decode_command :: (message: Read_Message, $T: Type) -> bool, T, [] u8 {
-    command := cast(T) message.user_read_pointer[0];
+decode_mesage_header :: (message: Read_Message, $T: Type) -> bool, u8, T, [] u8 {
+    workspace_index := cast(u8) message.user_read_pointer[0];
+    command := cast(T) message.user_read_pointer[1];
 
     valid_messages := type_info(T).values;
     if !array_find(valid_messages, cast(s64) command) {
         log_error("Got an invalid command on a data message: %", command);
-        return false, command, .[];
+        return false, workspace_index, command, .[];
     }
 
     data_bytes := message.user_read_bytes - JAILS_HEADER_SIZE;
@@ -234,7 +232,7 @@ decode_command :: (message: Read_Message, $T: Type) -> bool, T, [] u8 {
 
         if my_checksum != stored_checksum {
             log_error("Checksum mismatch in message %: Wanted %, got %. Quitting.\n", command, stored_checksum, my_checksum);
-            return false, command, .[];
+            return false, workspace_index, command, .[];
         }
     }
 
@@ -242,5 +240,5 @@ decode_command :: (message: Read_Message, $T: Type) -> bool, T, [] u8 {
     body_bytes.data = message.user_read_pointer + JAILS_HEADER_SIZE;
     body_bytes.count = data_bytes;
 
-    return true, command, body_bytes;
+    return true, workspace_index, command, body_bytes;
 }

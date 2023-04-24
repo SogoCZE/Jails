@@ -1,19 +1,26 @@
 handle_completitions :: (server: Server, request: LSP_Request_Message_Completion) {
     file_without_uri_prefix := replace(request.params.textDocument.uri, "file://", "");
 
+    workspace := find_workspace_by_path(file_without_uri_prefix);
+    if !workspace {
+        log("Cant find workspace for %", file_without_uri_prefix);
+        lsp_respond(request.id, null);
+        return;
+    }
+
     cursor_pos := request.params.position;
-    cursor_block := find_block(xx (cursor_pos.line+1), xx (cursor_pos.character+1), file_without_uri_prefix);
+    cursor_block := find_block(workspace, xx (cursor_pos.line+1), xx (cursor_pos.character+1), file_without_uri_prefix);
 
     completions: [..]LSP_Completion_Item;
 
-    for decl: server.program.declarations_by_name {
+    for decl: workspace.program.declarations_by_name {
         if decl.kind != .PROCEDURE continue;
 
         if decl.flags & .SCOPE_FILE && file_without_uri_prefix != decl.location.file continue;
-        if !path_in_imported_modules_or_files(decl.location.file) continue;
+        if !path_in_imported_modules_or_files(workspace, decl.location.file) continue;
 
         if !(decl.flags & .IS_GLOBAL) {
-            decl_block := find_block(decl.location.l0, decl.location.c0, decl.location.file);
+            decl_block := find_block(workspace, decl.location.l0, decl.location.c0, decl.location.file);
             if !decl_block || !cursor_block || decl_block.serial != cursor_block.serial continue;
         }
 
