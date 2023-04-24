@@ -459,8 +459,6 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
                 initialization := deserialize(body_bytes, Initialization);
                 workspace.import_path = initialization.import_path;
 
-                log("Settings, work % %", workspace.index, workspace.import_path);
-
                 // Disabled for now. Probably broken because of workspace changes. This will be useful when the compiler support replacing files. @TODO: Fix this.
                 // write_channel_success: bool;
                 // write_channel_success, write_channel = writer_connect(tprint("%-%", IPC_CHANNEL_NAME_TO_META, server.args.channel_id));
