@@ -14,6 +14,7 @@ Server :: struct {
     args: Args;
     quit := false;
 
+    project_root: string;
     workspaces: []Project_Workspace;
 
     modified_files_lock: Mutex;
@@ -88,9 +89,8 @@ setup_workspaces :: (root: string) {
     // When we dont have a config backup to the old entry resolution.
     // @TODO: In the future we need to improve this to properly resolve workspaces even without config.
     entry := find_entry_file(root);
-    workspaces: [1] Project_Workspace;
-    init_workspace(*workspaces[0], entry, 0);
-    server.workspaces = workspaces;
+    server.workspaces = NewArray(1, Project_Workspace);
+    init_workspace(*server.workspaces[0], entry, 0);
 }
 
 find_entry_file :: (root: string) -> string {
@@ -168,7 +168,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("Root URI: %", <<body.params.rootUri);
             log("Root Path: %", <<body.params.rootPath);
 
-            setup_workspaces(<<body.params.rootPath);
+            server.project_root = <<body.params.rootPath;
+
+            setup_workspaces(server.project_root);
 
             for * workspace: server.workspaces {
                 log("Workspace #%: %", it_index, workspace.working_directory);
@@ -343,6 +345,7 @@ find_current_jai_path :: () -> string {
 #import "Random";
 #import "Process";
 #import "Reflection";
+#import "File_Watcher";
 
 #load "rpc.jai";
 #load "lsp_interface.jai";

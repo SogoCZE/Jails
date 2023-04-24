@@ -6,8 +6,6 @@ handle_import_or_load :: (workspace: *Project_Workspace, request: LSP_Request_Me
 
     path := slice(line, start_of_path + 1, end_of_path - start_of_path - 1);
 
-    log("... %", workspace.import_path);
-
     uri: string;
     if module {
         modules_path := workspace.import_path[1]; 
