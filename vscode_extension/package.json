@@ -16,7 +16,8 @@
   "scripts": {
     "compile": "tsc -b",
     "watch": "tsc --watch",
-    "pack": "cp ../bin/jails ./out/ && vsce package"
+    "pack:unix": "cp ../bin/jails ./out/ && vsce package",
+    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\ && vsce package"
   },
   "license": "MIT",
   "engines": {
