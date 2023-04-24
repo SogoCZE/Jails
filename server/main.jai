@@ -41,7 +41,7 @@ find_workspace_by_path :: (path: string) -> *Project_Workspace {
 
 Workspace_Config :: struct {
     entry: string;
-    modules: string;
+    local_modules: string;
 }
 
 Config :: struct {
