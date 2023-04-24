@@ -75,8 +75,8 @@ setup_workspaces :: (root: string) {
             absolute_entry := join(root, trim(workspace_config.entry, "/"), separator = "/");
 
             absolute_modules: string;
-            if workspace_config.modules.count > 0 {
-                absolute_modules = join(root, trim(workspace_config.modules, "/"), separator = "/");
+            if workspace_config.local_modules.count > 0 {
+                absolute_modules = join(root, trim(workspace_config.local_modules, "/"), separator = "/");
             }
 
             init_workspace(*server.workspaces[it_index], absolute_entry, xx it_index, absolute_modules);
