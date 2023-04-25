@@ -357,11 +357,14 @@ process_declaration :: (p: *Jails_Plugin, decl: *Code_Declaration) -> ID {
                         #if DEBUG then print("_expression.array_element_type = %\n", _expression.array_element_type);
                     case .STRUCT;
                         code_type_inst := cast(*Code_Type_Instantiation) code_literal.struct_literal_info.type_expression;
-                        identExpression := cast(*Code_Ident) code_type_inst.type_valued_expression;
 
-                        if identExpression.resolved_declaration {
-                            _expression.type_kind = .SERIAL;
-                            _expression.serial_to = identExpression.resolved_declaration.serial;
+                        if code_type_inst {
+                            identExpression := cast(*Code_Ident) code_type_inst.type_valued_expression;
+
+                            if identExpression.resolved_declaration {
+                                _expression.type_kind = .SERIAL;
+                                _expression.serial_to = identExpression.resolved_declaration.serial;
+                            }
                         }
 
                         #if DEBUG then print("_expression.serial_to = % \n", _expression.serial_to);
