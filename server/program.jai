@@ -233,7 +233,18 @@ find_block :: (workspace: *Project_Workspace, line: s32, char: s32, file: string
 
     for block: workspace.program.code_blocks {
         if block.serial == 0 continue;
-        if block.location.file != file continue;
+
+        block_file := block.location.file;
+        file_final := file;
+        #if OS == .WINDOWS  {
+            // TODO: Fix this! This is total non-sense.
+            block_file = replace(replace(block_file, "c:", ""), "C:", "c:");
+            file_final = replace(replace(file_final, "c:", ""), "C:", "c:");
+        }
+
+        if block_file != file_final {
+            continue;
+        }
 
         // If the location is not present in the block we skip.
         if !is_in_range(block.location, line, char) continue;
