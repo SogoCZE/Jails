@@ -8,25 +8,31 @@ handle_import_or_load :: (workspace: *Project_Workspace, request: LSP_Request_Me
 
     uri: string;
     if module {
+        find_module_in_path :: (modules_path: string, path: string) -> bool, string {
+            uri := tprint("%/%/module.jai", modules_path, path);
+            if !file_exists(uri) {
+                uri = tprint("%/%.jai", modules_path, path);
+            }
+            return file_exists(uri), uri;
+        }
+
         modules_path := workspace.import_path[1]; 
-        uri = tprint("%/%/module.jai", modules_path, path);
-        if !file_exists(uri) {
-           uri = tprint("%/%.jai", modules_path, path);
+        ok: bool;
+        ok, uri = find_module_in_path(modules_path, path);
+        if !ok {
+            ok, uri = find_module_in_path(workspace.local_modules_directory, path);
         }
     } else {
         current_file := path_strip_filename(request.params.textDocument.uri);
         uri = tprint("%/%", current_file, path); 
     }
 
-    #if OS == .WINDOWS {
-        if module {
-            // strip: C:/ 
-            uri = slice(uri, 3, uri.count-1);
-        }
-    }
-
     if !module {
-         uri = slice(uri, 7, uri.count-1);
+         #if OS == .WINDOWS {
+             uri = slice(uri, 8, uri.count-1); // On windows file uris have triple slashes like this: file:///C:/folder/file.jai
+         } else {
+             uri = slice(uri, 7, uri.count-1);
+         }
     }
 
     range: LSP_Range;
