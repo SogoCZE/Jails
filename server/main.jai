@@ -240,14 +240,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             workspace.last_refresh_time = current_time_consensus();
 
         case "textDocument/completion";
-            // success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
-            // if !success {
-            //     log_error("Unable to parse textDocument/completion message");
-            //     return;
-            // }
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
+            if !success {
+                log_error("Unable to parse textDocument/completion message");
+                return;
+            }
 
             // refresh_program_if_needed();
-            // handle_completitions(body);
+            handle_completitions(body);
 
     }
 }

@@ -1,4 +1,4 @@
-handle_completitions :: (server: Server, request: LSP_Request_Message_Completion) {
+handle_completitions :: (request: LSP_Request_Message_Completion) {
     file_without_uri_prefix := replace(request.params.textDocument.uri, "file://", "");
 
     workspace := find_workspace_by_path(file_without_uri_prefix);
