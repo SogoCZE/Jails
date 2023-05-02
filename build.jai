@@ -86,6 +86,9 @@
             }
 
             vscode_path = tprint("C:/Users/%/AppData/Local/Programs/Microsoft VS Code/Code.exe", username);
+            if !file_exists(vscode_path) {
+                vscode_path = "C:/Program Files/Microsoft VS Code/Code.exe"; // Try program files in case it's installed for all users
+            }
         }
 
         if OS == .MACOS {
@@ -114,6 +117,7 @@ message_loop :: (w: Workspace, args: []string, tracy: *Metaprogram_Plugin) {
 #import "Basic";
 #import "Compiler";
 #import "File";
+#import "File_Utilities";
 #import "String";
 #import "Process";
 #import "System";

@@ -11,7 +11,7 @@ get_cursor_context :: (file: string, position: LSP_Position) -> []string {
         }
 
         if final_line == position.line {
-            pointer_index = it_index + position.character;
+            pointer_index = it_index + position.character + 1;
             break;
         }
     }
@@ -25,7 +25,7 @@ get_cursor_context :: (file: string, position: LSP_Position) -> []string {
     end_index := content.count;
 
     is_separator :: (char: u8) -> bool {
-        return is_any(char, " \n\t;*.[](){}=:#\",!+-/");
+        return is_any(char, " \r\n\t;*.[](){}=:#\",!+-/");
     }
 
 
