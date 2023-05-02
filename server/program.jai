@@ -203,7 +203,7 @@ find_declarations :: (workspace: *Project_Workspace, name: string, available_fro
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     uri := decl.location.file;
-    #if OS == .WINDOWS then uri = slice(uri, 3, uri.count-1);
+    // #if OS == .WINDOWS then uri = slice(uri, 3, uri.count-1);
 
     range: LSP_Range;
     range.start.line      = xx max(decl.location.l0-1, 0);
@@ -266,13 +266,15 @@ find_block :: (workspace: *Project_Workspace, line: s32, char: s32, file: string
 }
 
 reset_diagnostics :: (workspace: *Project_Workspace) {
-    lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
-        method="textDocument/publishDiagnostics",
-        params = .{
-            uri = workspace.previously_errored_file,
-            diagnostics = LSP_Diagnostic.[]
-        }
-    });
+    if workspace.previously_errored_file {
+        lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
+            method="textDocument/publishDiagnostics",
+            params = .{
+                uri = workspace.previously_errored_file,
+                diagnostics = LSP_Diagnostic.[]
+            }
+        });
+    }
 }
 
 // Currently, parse only the first error (maybe parsing multiple errors is not that useful because Jai mostly report one error at a time)
@@ -284,16 +286,21 @@ send_compiler_errors_as_diagnostics :: (workspace: *Project_Workspace, output: s
     file: string;
     diagnostic: LSP_Diagnostic;
 
+    ERROR_MARKER :: ": Error:";
     // Get the first error
     for output_line: lines {
-        if !contains(output_line, ": Error:") continue;
+        if !contains(output_line, ERROR_MARKER) continue;
 
-        parts := split(output_line, ":");
-        if parts.count < 3 continue;
+        message_index := find_index_from_right(output_line, ERROR_MARKER);
+        message := slice(output_line, message_index + ERROR_MARKER.count, output_line.count - message_index);
+        rest := slice(output_line, 0, message_index);
+        
+        ok: bool;
+        location: string;
+        ok, file, location = split_from_right(rest, ":");
+        if !ok continue;
 
-        file = parts[0];
-
-        line_and_character := split(parts[1], ",");
+        line_and_character := split(location, ",");
         if line_and_character.count < 2 continue;
 
         line, l_ok := parse_int(*line_and_character[0], u32);
@@ -302,16 +309,7 @@ send_compiler_errors_as_diagnostics :: (workspace: *Project_Workspace, output: s
         character, c_ok := parse_int(*line_and_character[1], u32);
         if !c_ok continue;
 
-        builder: String_Builder;
-        append(*builder, trim(parts[3]));
-        if parts.count > 3 {
-            for 4..parts.count-1 {
-                append(*builder, ":");
-                append(*builder, parts[it]);
-            }
-        }
-
-        diagnostic.message = builder_to_string(*builder);
+        diagnostic.message = message;
         diagnostic.serverity = xx LSP_Diagnostic_Severity.ERROR;
 
         diagnostic.range.start.line = line-1;
