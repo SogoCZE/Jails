@@ -336,7 +336,7 @@ send_compiler_errors_as_diagnostics :: (workspace: *Project_Workspace, output: s
     diagnostics: [1]LSP_Diagnostic;
     diagnostics[0] = diagnostic;
 
-    file = tprint("file:///%", file);
+    file = tprint("file://%", file);
     file = copy_string(file); // split_from_right and slice don't allocate memory so copy the file in case the string with compiler output is freed
 
     lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
