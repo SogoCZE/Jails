@@ -203,7 +203,7 @@ find_declarations :: (workspace: *Project_Workspace, name: string, available_fro
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     uri := decl.location.file;
-    uri = tprint("file:///%", uri);
+    uri = tprint("file://%", uri);
 
     range: LSP_Range;
     range.start.line      = xx max(decl.location.l0-1, 0);
