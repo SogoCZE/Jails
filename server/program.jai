@@ -203,10 +203,7 @@ find_declarations :: (workspace: *Project_Workspace, name: string, available_fro
 
 declaration_to_lsp_location :: (decl: Declaration) -> LSP_Location {
     uri := decl.location.file;
-    // #if OS == .WINDOWS then uri = slice(uri, 3, uri.count-1);
-    #if OS == .WINDOWS {
-        uri = tprint("file:///%", uri);
-    }
+    uri = tprint("file:///%", uri);
 
     range: LSP_Range;
     range.start.line      = xx max(decl.location.l0-1, 0);
@@ -339,10 +336,7 @@ send_compiler_errors_as_diagnostics :: (workspace: *Project_Workspace, output: s
     diagnostics: [1]LSP_Diagnostic;
     diagnostics[0] = diagnostic;
 
-    #if OS == .WINDOWS {
-        file = tprint("file:///%", file);
-    }
-
+    file = tprint("file:///%", file);
     file = copy_string(file); // split_from_right and slice don't allocate memory so copy the file in case the string with compiler output is freed
 
     lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{

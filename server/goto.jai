@@ -22,18 +22,10 @@ handle_import_or_load :: (workspace: *Project_Workspace, request: LSP_Request_Me
         if !ok {
             ok, uri = find_module_in_path(workspace.local_modules_directory, path);
         }
-        #if OS == .WINDOWS {
-            uri = tprint("file:///%", uri);
-        }
+        uri = tprint("file:///%", uri);
     } else {
         current_file := path_strip_filename(request.params.textDocument.uri);
         uri = tprint("%/%", current_file, path); 
-    }
-
-    if !module {
-         #if OS != .WINDOWS {
-             uri = slice(uri, 7, uri.count-1);
-         }
     }
 
     range: LSP_Range;
