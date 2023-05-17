@@ -12,13 +12,28 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
 
     while bytes_to_read > readed  {
         #if OS != .WINDOWS { // Linux, MacOS 
-            readed += xx posix.read(posix.STDIN_FILENO, buffer+readed, bytes_to_read-readed);
+            read_this_time := posix.read(posix.STDIN_FILENO, buffer+readed, bytes_to_read-readed);
+            if read_this_time < 0 {
+              // probably EAGAIN or EINTR?
+              err := posix.errno();
+              if err != posix.EINTR && err != posix.EAGAIN {
+                  log_error( "Reading the stdin failed with errno: %", posix.errno());
+                  return readed;
+              } else {
+                  // we should retry
+              }
+            } else if read_this_time == 0 {
+              // probably closed (EOF)
+              return readed;
+            } else {
+              readed += xx read_this_time;
+            }
         } else { // Windows
             win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *readed);
         }
     }
 
-    return readed; 
+    return readed;
 }
 
 read_line_from_stdin :: (buffer: []u8) -> u32 {
@@ -46,9 +61,13 @@ parse_header :: (header : string) -> s32, success: bool {
 }
 
 get_message :: () -> string, bool {
-    buffer: [0xFFFF]u8;     
+    buffer: [0xFFFF]u8;
 
     header_bytes := read_line_from_stdin(buffer);
+    if header_bytes <= 0 {
+      log_error("The input channel was closed!");
+      return "", false;
+    }
     header := to_string(buffer.data, header_bytes);
 
     body_size, success := parse_header(header);
@@ -59,8 +78,12 @@ get_message :: () -> string, bool {
     body_buffer: []u8 = ---;
     body_buffer.data = talloc(body_size);
     body_buffer.count = body_size;
-    
-    read_from_stdin(buffer.data + header.count, 2); // @todo: this is somewhat weird
+
+    if read_from_stdin(buffer.data + header.count, 2) < 2 {
+      log_error("Couldn't read CRLF");
+      return "", false;
+    } // @todo: this is somewhat weird
+
     if buffer[header.count+1] != #char "\n" {
         body_buffer[0] = buffer[header.count];
         body_buffer[1] = buffer[header.count+1];
