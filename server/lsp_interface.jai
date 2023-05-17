@@ -497,7 +497,7 @@ LSP_Result_Initialize :: struct {
     };
 
     serverInfo: struct {
-        name := "jsl";
+        name := "Jails";
         version := VERSION;
     };
 }
