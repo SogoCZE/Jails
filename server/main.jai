@@ -10,6 +10,19 @@ Args :: struct {
     jai_path: string = #run find_current_jai_path();
 }
 
+Document :: struct {
+  content: [..]u8;
+  line_start_indices: [..]u64;
+
+  Client_Status :: enum {
+    CLOSED;
+    DIRTY;
+    SAVED;
+  };
+  client_status: Client_Status;
+}
+
+
 Server :: struct {
     args: Args;
     quit := false;
@@ -18,7 +31,7 @@ Server :: struct {
     workspaces: []Project_Workspace;
 
     modified_files_lock: Mutex;
-    modified_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
+    modified_files: Table(string, Document);
 }
 
 server: Server;
@@ -226,7 +239,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := body.params.textDocument.uri;
             content := body.params.textDocument.text;
 
-            create_modified_file(file_path, content);
+            create_modified_file(file_path, content, true);
 
         case "textDocument/didChange";
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);

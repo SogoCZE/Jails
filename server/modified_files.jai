@@ -8,7 +8,9 @@ deinit_modified_files :: () {
     deinit(*server.modified_files);
 }
 
-create_modified_file :: (file_path: string, content: string) {
+create_modified_file :: (file_path: string,
+                         content: string,
+                         is_client_owned: bool) {
     file_without_uri_prefix := replace(file_path, "file://", "");
     content_dynamic: [..]u8;
 
@@ -17,8 +19,24 @@ create_modified_file :: (file_path: string, content: string) {
 
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
-    table_set(*server.modified_files, file_without_uri_prefix, content_dynamic);
+
+    if !is_client_owned {
+      document, found := table_find( *server.modified_files, file_without_uri_prefix );
+      if found && document.client_status != .CLOSED {
+        // don't replace a client-owned buffer with one we read from disk
+        log( "Not clobbering client-owned modified file", file_without_uri_prefix );
+        return;
+      }
+    }
+
+    table_set(*server.modified_files, file_without_uri_prefix, .{
+      content = content_dynamic,
+      // line_start_indices = calc_line_start_indicies( content_dynamic ),
+      client_status = ifx is_client_owned then Document.Client_Status.DIRTY else .CLOSED,
+    });
     // dump_server_modified_files();
+
+    log( "Created modified file %: %", file_without_uri_prefix, content_dynamic);
 }
 
 edit_modified_file :: (file_path: string, changes: []LSP_Content_Change) {
@@ -26,22 +44,25 @@ edit_modified_file :: (file_path: string, changes: []LSP_Content_Change) {
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
 
-    content := table_find_pointer(*server.modified_files, file_without_uri_prefix);
-    if !content {
+    document := table_find_pointer(*server.modified_files, file_without_uri_prefix);
+    if !document {
         log_error("File is not in the cache %", file_without_uri_prefix);
         return;
     }
 
+    content := document.content;
     for change: changes {
       if change.range {
           from := change.range.start;
           to := change.range.end;
-          apply_change(content, from, to, xx change.text);
+          apply_change(document, from, to, xx change.text);
         } else {
           // full file
-          apply_change_to_range(content, 0, content.count, xx change.text );
+          apply_change_to_range(document, 0, content.count, xx change.text );
         }
     }
+
+    log( "Updated modified file %: %", file_without_uri_prefix, content );
 }
 
 remove_modified_file :: (file_path: string) {
@@ -53,13 +74,17 @@ remove_modified_file :: (file_path: string) {
     if !found {
         log_error("Tried to remove file % but it was not in the modified server.modified_files table!", file_without_uri_prefix);
     }
+
+    // TODO: SHouldn't we free the document contents ?
+
+    log( "Removed modified file: %", file_without_uri_prefix);
 }
 
 find_range_in_modified_file :: (file: string, range: LSP_Range) -> string {
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
 
-    content, ok := table_find(*server.modified_files, file);
+    document, ok := table_find(*server.modified_files, file);
     if !ok {
         return "";
     }
@@ -69,6 +94,7 @@ find_range_in_modified_file :: (file: string, range: LSP_Range) -> string {
     end_index: int = -1;
 
     // We get index of starting and ending byte of the range.
+    content := document.content;
     for char: content {
         if current_line == range.start.line && start_index == -1 {
             start_index = it_index + range.start.character;
@@ -93,10 +119,12 @@ find_range_in_modified_file :: (file: string, range: LSP_Range) -> string {
 find_line_in_modified_file :: (file: string, position: LSP_Position) -> string {
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
-    content, ok := table_find(*server.modified_files, file);
+    document, ok := table_find(*server.modified_files, file);
     if !ok {
         return "";
     }
+
+    content := document.content;
 
     final_line: int;
     start_index: int = -1;
@@ -131,15 +159,20 @@ find_line_in_modified_file :: (file: string, position: LSP_Position) -> string {
 }
 
 get_modified_file :: (name: string) -> []u8 {
+    file_without_uri_prefix := replace(name, "file://", "");
+
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
 
-    content, ok := table_find(*server.modified_files, name);
+    document, ok := table_find(*server.modified_files, file_without_uri_prefix);
     if !ok {
+      log("Didn't find modified file for %", file_without_uri_prefix);
         return .[];
+    } else {
+      log( "found modified file for %", file_without_uri_prefix);
     }
 
-    return content;
+    return document.content;
 }
 
 #scope_file
@@ -150,12 +183,13 @@ DEBUG_AC :: true;
 // - unicode support
 // - {}, "", () when the editor (for example vscode) auto-closes parentheses behaves badly.
 // Mutates in memory file
-apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: []u8) {
+apply_change :: (document: *Document, from: LSP_Position, to: LSP_Position, text: []u8) {
     current_line: int;
     start_index: int = -1;
     end_index: int = -1;
 
     // We get index of starting and ending byte of the range.
+    content := *document.content;
     for char: <<content {
         if current_line == from.line && start_index == -1 {
             start_index = it_index + from.character;
@@ -197,10 +231,12 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
 
         log("- END (%)", end_index);
     }
-    apply_change_to_range(content, start_index, end_index, text );
+    apply_change_to_range(document, start_index, end_index, text );
 }
 
-apply_change_to_range :: (content: *[..]u8, start_index: int, end_index: int, text: []u8 ) {
+apply_change_to_range :: (document: *Document, start_index: int, end_index: int, text: []u8 ) {
+
+    content := *document.content;
 
     assert(content.count >= start_index && content.count >= end_index);
 

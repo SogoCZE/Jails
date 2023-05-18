@@ -8,7 +8,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         return;
     }
 
-    refresh_program_if_needed(workspace);
+    //refresh_program_if_needed(workspace);
 
     cursor_pos := request.params.position;
     cursor_block := find_block(workspace, xx (cursor_pos.line+1), xx (cursor_pos.character+1), file_without_uri_prefix);

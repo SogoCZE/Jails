@@ -509,7 +509,17 @@ listen_to_metaprogram :: (thread: *Thread) -> s64 {
 
             case .FILE;
                 file := deserialize(body_bytes, Source_File);
-                create_modified_file(file.path, read_entire_file(file.path)); // This is needed for code snippet peeks - for example to preview procedure header in completions... @TODO: We should rename modified_files to just files really...
+                // TODO/FIXME: THis will (incorrectly) override any actually
+                // modified data in this file. So say we had
+                // didOpen file.jai -> v1
+                // didChange file.jai -> v2
+                // <This> -> reads file.jai from disk -> .. ?!
+                // completions/definition request: uses file on disk, not the
+                // unsaved/modified buffer.
+                create_modified_file(file.path,
+                                     read_entire_file(file.path),
+                                     false);
+                                     // This is needed for code snippet peeks - for example to preview procedure header in completions... @TODO: We should rename modified_files to just files really...
                 array_add(*workspace.work_program.imported_files, <<file);
 
             case .STRUCT; add_to_program(workspace, body_bytes, Struct);
