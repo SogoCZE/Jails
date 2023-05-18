@@ -4,7 +4,7 @@ get_cursor_context :: (file: string, position: LSP_Position) -> []string {
     final_line: int;
     pointer_index: int = -1;
 
-    // @SPEED: This searching could be probably done faster if we had server.modified_files stored as array of lines instead of file content. 
+    // @SPEED: This searching could be probably done faster if we had server.modified_files stored as array of lines instead of file content.
     for char: content {
         if char == #char "\n" {
             final_line += 1;
@@ -30,15 +30,14 @@ get_cursor_context :: (file: string, position: LSP_Position) -> []string {
 
     rewind_count :int;
     while pointer_index > 0 && is_separator( content[ pointer_index ] ) && content[ pointer_index ] != #char "." {
-      // if we are requested on a separator, find the first non-separator character before this position.
-      // This feels natural when asking for the loctaion on the '.' of 'foobar.baz' -> return loc of foobar.
-      // Ditto for completion request of 'foobar.' -> return the members of 'foobar'
-      pointer_index -= 1;
+        // if we are requested on a separator, find the first non-separator character before this position.
+        // This feels natural when asking for the loctaion on the '.' of 'foobar.baz' -> return loc of foobar.
+        // Ditto for completion request of 'foobar.' -> return the members of 'foobar'
+        pointer_index -= 1;
 
-      // but for finding the "end" of the identifier sequence, we advance back past these separators
-      rewind_count += 1;
+        // but for finding the "end" of the identifier sequence, we advance back past these separators
+        rewind_count += 1;
     }
-
 
     // Start search
     for < index: pointer_index..0 {

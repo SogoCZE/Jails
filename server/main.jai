@@ -11,17 +11,16 @@ Args :: struct {
 }
 
 Document :: struct {
-  content: [..]u8;
-  line_start_indices: [..]u64;
+    content: [..]u8;
+    line_start_indices: [..]u64;
 
-  Client_Status :: enum {
-    CLOSED;
-    DIRTY;
-    SAVED;
-  };
-  client_status: Client_Status;
+    Client_Status :: enum {
+        CLOSED;
+        DIRTY;
+        SAVED;
+    };
+    client_status: Client_Status;
 }
-
 
 Server :: struct {
     args: Args;
@@ -197,7 +196,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 if !success {
                     lsp_respond_with_error(body.id, .PARSE_ERROR, tprint("Could not run initial metaprogram run", workspace.entry), error_details);
                     // return; // We cant return here because LSP client is waiting for response - if he wont get one the editor thinks the LSP crashed...
-                }                
+                }
 
             }
 
