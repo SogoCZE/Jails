@@ -28,6 +28,17 @@ get_cursor_context :: (file: string, position: LSP_Position) -> []string {
         return is_any(char, " \r\n\t;*.[](){}=:#\",!+-/");
     }
 
+    rewind_count :int;
+    while pointer_index > 0 && is_separator( content[ pointer_index ] ) && content[ pointer_index ] != #char "." {
+      // if we are requested on a separator, find the first non-separator character before this position.
+      // This feels natural when asking for the loctaion on the '.' of 'foobar.baz' -> return loc of foobar.
+      // Ditto for completion request of 'foobar.' -> return the members of 'foobar'
+      pointer_index -= 1;
+
+      // but for finding the "end" of the identifier sequence, we advance back past these separators
+      rewind_count += 1;
+    }
+
 
     // Start search
     for < index: pointer_index..0 {
@@ -45,7 +56,7 @@ get_cursor_context :: (file: string, position: LSP_Position) -> []string {
     }
 
     // End search
-    for index: pointer_index..content.count-1 {
+    for index: (pointer_index + rewind_count)..content.count-1 {
         char := content[index];
         if is_separator(char) {
             end_index = index;

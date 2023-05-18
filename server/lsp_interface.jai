@@ -125,7 +125,7 @@ LSP_Did_Open_Text_Document :: struct {
 LSP_Did_Save_Text_Document :: LSP_Did_Open_Text_Document;
 
 LSP_Content_Change :: struct {
-    range: LSP_Range;
+    range: *LSP_Range;
     text: string;
 }
 

@@ -9,6 +9,7 @@ deinit_modified_files :: () {
 }
 
 create_modified_file :: (file_path: string, content: string) {
+    file_without_uri_prefix := replace(file_path, "file://", "");
     content_dynamic: [..]u8;
 
     array_copy(*content_dynamic, cast([]u8) content);
@@ -16,34 +17,41 @@ create_modified_file :: (file_path: string, content: string) {
 
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
-    table_set(*server.modified_files, file_path, content_dynamic);
+    table_set(*server.modified_files, file_without_uri_prefix, content_dynamic);
     // dump_server_modified_files();
 }
 
 edit_modified_file :: (file_path: string, changes: []LSP_Content_Change) {
+    file_without_uri_prefix := replace(file_path, "file://", "");
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
 
-    content := table_find_pointer(*server.modified_files, file_path);
+    content := table_find_pointer(*server.modified_files, file_without_uri_prefix);
     if !content {
-        log_error("File is not in the cache %", file_path);
+        log_error("File is not in the cache %", file_without_uri_prefix);
         return;
     }
 
     for change: changes {
-        from := change.range.start;
-        to := change.range.end;
-        apply_change(content, from, to, xx change.text);
+      if change.range {
+          from := change.range.start;
+          to := change.range.end;
+          apply_change(content, from, to, xx change.text);
+        } else {
+          // full file
+          apply_change_to_range(content, 0, content.count, xx change.text );
+        }
     }
 }
 
 remove_modified_file :: (file_path: string) {
+    file_without_uri_prefix := replace(file_path, "file://", "");
     lock(*server.modified_files_lock);
     defer unlock(*server.modified_files_lock);
 
-    found := table_remove(*server.modified_files, file_path);
+    found := table_remove(*server.modified_files, file_without_uri_prefix);
     if !found {
-        log_error("Tried to remove file % but it was not in the modified server.modified_files table!", file_path);
+        log_error("Tried to remove file % but it was not in the modified server.modified_files table!", file_without_uri_prefix);
     }
 }
 
@@ -136,7 +144,7 @@ get_modified_file :: (name: string) -> []u8 {
 
 #scope_file
 
-DEBUG_AC :: false;
+DEBUG_AC :: true;
 
 // @todo:
 // - unicode support
@@ -166,6 +174,13 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
         }
     }
 
+    if start_index < 0 || end_index < 0 {
+      log( "didn't find the requested range in the document: %:% -> %:%\n",
+           from.line, from.character,
+           to.line, to.character );
+       return;
+    }
+
     #if DEBUG_AC {
         log("from: %, to: % (reached line %)", from.line, to.line, current_line);
 
@@ -182,6 +197,10 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
 
         log("- END (%)", end_index);
     }
+    apply_change_to_range(content, start_index, end_index, text );
+}
+
+apply_change_to_range :: (content: *[..]u8, start_index: int, end_index: int, text: []u8 ) {
 
     assert(content.count >= start_index && content.count >= end_index);
 

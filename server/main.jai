@@ -29,14 +29,18 @@ server: Server;
 // It will also eliminate duplicated module cache across workspaces and also speedup
 // metaprogram processing time.
 find_workspace_by_path :: (path: string) -> *Project_Workspace {
+    file_without_uri_prefix := replace(path, "file://", "");
+
     for * workspace: server.workspaces {
-        if !contains(path, workspace.working_directory) && !path_in_imported_modules_or_files(workspace, path) {
+        if !contains(file_without_uri_prefix, workspace.working_directory) &&
+           !path_in_imported_modules_or_files(workspace, file_without_uri_prefix) {
             continue;
         }
 
         return workspace;
     }
 
+    log_error( "Workspace not found for file path %\n", file_without_uri_prefix);
     return *server.workspaces[0];
 }
 
@@ -246,7 +250,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
-            // refresh_program_if_needed();
             handle_completitions(body);
 
     }
