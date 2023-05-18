@@ -10,6 +10,18 @@ Args :: struct {
     jai_path: string = #run find_current_jai_path();
 }
 
+Document :: struct {
+    content: [..]u8;
+    line_start_indices: [..]u64;
+
+    Client_Status :: enum {
+        CLOSED;
+        DIRTY;
+        SAVED;
+    };
+    client_status: Client_Status;
+}
+
 Server :: struct {
     args: Args;
     quit := false;
@@ -18,7 +30,7 @@ Server :: struct {
     workspaces: []Project_Workspace;
 
     modified_files_lock: Mutex;
-    modified_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
+    modified_files: Table(string, Document);
 }
 
 server: Server;
@@ -29,14 +41,18 @@ server: Server;
 // It will also eliminate duplicated module cache across workspaces and also speedup
 // metaprogram processing time.
 find_workspace_by_path :: (path: string) -> *Project_Workspace {
+    file_without_uri_prefix := replace(path, "file://", "");
+
     for * workspace: server.workspaces {
-        if !contains(path, workspace.working_directory) && !path_in_imported_modules_or_files(workspace, path) {
+        if !contains(file_without_uri_prefix, workspace.working_directory) &&
+           !path_in_imported_modules_or_files(workspace, file_without_uri_prefix) {
             continue;
         }
 
         return workspace;
     }
 
+    log_error( "Workspace not found for file path %\n", file_without_uri_prefix);
     return *server.workspaces[0];
 }
 
@@ -180,7 +196,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 if !success {
                     lsp_respond_with_error(body.id, .PARSE_ERROR, tprint("Could not run initial metaprogram run", workspace.entry), error_details);
                     // return; // We cant return here because LSP client is waiting for response - if he wont get one the editor thinks the LSP crashed...
-                }                
+                }
 
             }
 
@@ -222,7 +238,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := body.params.textDocument.uri;
             content := body.params.textDocument.text;
 
-            create_modified_file(file_path, content);
+            create_modified_file(file_path, content, true);
 
         case "textDocument/didChange";
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);
@@ -246,7 +262,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
-            // refresh_program_if_needed();
             handle_completitions(body);
 
     }
