@@ -7,3 +7,6 @@
 [submodule "modules/tracy"]
 	path = metaprogram_modules/tracy
 	url = https://github.com/rluba/jai-tracy.git
+[submodule "modules/jai_parser"]
+	path = modules/jai_parser
+	url = https://github.com/SogoCZE/jai_parser

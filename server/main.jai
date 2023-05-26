@@ -30,7 +30,7 @@ server: Server;
 // metaprogram processing time.
 find_workspace_by_path :: (path: string) -> *Project_Workspace {
     for * workspace: server.workspaces {
-        if !contains(path, workspace.working_directory) && !path_in_imported_modules_or_files(workspace, path) {
+        if !contains(path, workspace.working_directory) /*&& !path_in_imported_modules_or_files(workspace, path)*/ {
             continue;
         }
 
@@ -139,16 +139,16 @@ find_local_modules :: (root: string) -> string {
     return "";
 }
 
-refresh_program_if_needed :: (workspace: *Project_Workspace) {
-    if workspace.last_refresh_time == APOLLO_TIME_INVALID return;
+// refresh_program_if_needed :: (workspace: *Project_Workspace) {
+//     if workspace.last_refresh_time == APOLLO_TIME_INVALID return;
 
-    // @Incomplete: We want to use the workspace.last_refresh_time to debounce.
-    // But since we’re blocking on messages right now, we can’t use a timeout to start recompiling.
-    // So we just use workspace.last_refresh_time as dirty flag.
+//     // @Incomplete: We want to use the workspace.last_refresh_time to debounce.
+//     // But since we’re blocking on messages right now, we can’t use a timeout to start recompiling.
+//     // So we just use workspace.last_refresh_time as dirty flag.
 
-    success := refresh_program(workspace);
-    if !success return;
-}
+//     success := refresh_program(workspace);
+//     if !success return;
+// }
 
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
     log("Got %", request.method);
@@ -176,12 +176,11 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 log("Workspace #%: %", it_index, workspace.working_directory);
                 log("Entry file: %", workspace.entry);
 
-                success, error_details := refresh_program(workspace);
-                if !success {
-                    lsp_respond_with_error(body.id, .PARSE_ERROR, tprint("Could not run initial metaprogram run", workspace.entry), error_details);
+                // success, error_details := refresh_program(workspace);
+                // if !success {
+                    // lsp_respond_with_error(body.id, .PARSE_ERROR, tprint("Could not run initial metaprogram run", workspace.entry), error_details);
                     // return; // We cant return here because LSP client is waiting for response - if he wont get one the editor thinks the LSP crashed...
-                }                
-
+                // }                
             }
 
             to_send: LSP_Result_Initialize;
@@ -209,8 +208,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             workspace := find_workspace_by_path(body.params.textDocument.uri);
             if !workspace return;
 
-            success = refresh_program(workspace, true);
-            if !success return;
+            // success = refresh_program(workspace, true);
+            // if !success return;
 
         case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document);
@@ -223,6 +222,11 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             content := body.params.textDocument.text;
 
             create_modified_file(file_path, content);
+            
+            workspace := find_workspace_by_path(file_path);
+            if !workspace return;
+
+            parse_file(workspace, file_path);
 
         case "textDocument/didChange";
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);
@@ -238,6 +242,16 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             if !workspace return;
 
             workspace.last_refresh_time = current_time_consensus();
+
+
+        case "textDocument/didClose";
+            success, body := json_parse_string(raw_request, LSP_Did_Close_Text_Document);
+            if !success {
+                log_error("Unable to parse textDocument/dicClose message");
+                return;
+            }
+            
+            log("Close!");
 
         case "textDocument/completion";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
@@ -276,13 +290,13 @@ main :: () {
     init_modified_files();
     defer deinit_modified_files();
 
-    thread := New(Thread);
-    thread_init(thread, listen_to_metaprogram);
-    defer {
-        thread_deinit(thread);
-        free(thread);
-    }
-    thread_start(thread);
+    // thread := New(Thread);
+    // thread_init(thread, listen_to_metaprogram);
+    // defer {
+    //     thread_deinit(thread);
+    //     free(thread);
+    // }
+    // thread_start(thread);
 
     while !server.quit {
         reset_temporary_storage();
@@ -330,9 +344,10 @@ find_current_jai_path :: () -> string {
     }
 }
 
-#load "../shared/binary_serialization.jai";
-#load "../shared/shared.jai";
+// #load "../shared/binary_serialization.jai";
+// #load "../shared/shared.jai";
 
+#import "Compiler";
 #import "Basic";
 #import "Command_Line";
 #import "File";
@@ -346,6 +361,7 @@ find_current_jai_path :: () -> string {
 #import "Process";
 #import "Reflection";
 #import "File_Watcher";
+#import "jai_parser";
 
 #load "rpc.jai";
 #load "lsp_interface.jai";

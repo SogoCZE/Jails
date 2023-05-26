@@ -124,6 +124,15 @@ LSP_Did_Open_Text_Document :: struct {
 
 LSP_Did_Save_Text_Document :: LSP_Did_Open_Text_Document;
 
+LSP_Did_Close_Text_Document :: struct {
+    using request: LSP_Request_Message;
+    params: struct {
+        textDocument: struct {
+            uri: string;
+        }
+    }
+}
+
 LSP_Content_Change :: struct {
     range: LSP_Range;
     text: string;
