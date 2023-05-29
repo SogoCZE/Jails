@@ -40,7 +40,7 @@ handle_import_or_load :: (workspace: *Project_Workspace, request: LSP_Request_Me
     // });
 }
 
-// @TODO: Consider using a compiler for goto resolution based on a clicked symbol (index all symbols - procedure calls, expressions, type instantiation...)
+
 handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
     file_without_uri_prefix := replace(file, "file://", "");
@@ -64,7 +64,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    cursor_location := lsp_location_to_node_location(request.params.position);
+    cursor_location := lsp_location_to_node_location(request.params.position, file);
 
     node := get_node_by_location(workspace, cursor_location);
     if !node {
@@ -72,9 +72,36 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    log("Clicked node: %", node.kind);
+    cursor_block := get_node_nearest_block(node);
 
-    lsp_respond(request.id, null);
+    if node.kind != .IDENTIFIER {
+        lsp_respond(request.id, null);
+        return;
+    }
+
+    log("Clicked node: %", node.kind);
+    if node.parent && node.parent.kind == .BINARY_OPERATION {
+        log("Parent of clicked %", node.parent.kind);
+
+        path := get_path_of_binary_operation(xx node.parent);
+        if path[0] != node {
+            member_decl := resolve_struct_member_by_path(workspace, path);
+            lsp_respond(request.id, node_location_to_lsp_location(member_decl.location));
+            return;
+        }
+        
+    }
+
+    ident := cast(*Identifier) node;
+
+    decls := get_declarations(workspace, ident.name, cursor_block);
+
+    locations: [..]LSP_Location;
+    defer array_free(locations);
+
+    for decls array_add(*locations, node_location_to_lsp_location(it.location));
+
+    lsp_respond(request.id, locations);
 
     // path := get_cursor_context(file, request.params.position);
     // if path.count == 0 {

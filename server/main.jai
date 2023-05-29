@@ -205,8 +205,12 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             // @ToDo: Remove all changes from the "modified files" table so we don’t send that file over on ever compile?
 
-            workspace := find_workspace_by_path(body.params.textDocument.uri);
+            file_path := body.params.textDocument.uri;
+
+            workspace := find_workspace_by_path(file_path);
             if !workspace return;
+
+            parse_file(workspace, file_path);
 
             // success = refresh_program(workspace, true);
             // if !success return;
@@ -240,6 +244,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             workspace := find_workspace_by_path(file_path);
             if !workspace return;
+
+            parse_file(workspace, file_path);
 
             workspace.last_refresh_time = current_time_consensus();
 
