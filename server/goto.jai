@@ -82,7 +82,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     if node.parent && node.parent.kind == .BINARY_OPERATION {
         log("Parent of clicked %", node.parent.kind);
 
-        path := get_path_of_binary_operation(xx node);
+        path := get_path_of_binary_operation(node);
         if path[0] != node {
             member_decl := resolve_struct_member_by_path(workspace, path);
             lsp_respond(request.id, node_location_to_lsp_location(member_decl.location));
@@ -92,6 +92,11 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
     ident := cast(*Identifier) node;
+
+    if cursor_block.parent && cursor_block.parent.kind == .PROCEDURE {
+        proc := cast(*Procedure) cursor_block.parent;
+        proc.arguments;
+    } 
 
     decls := get_declarations(workspace, ident.name, cursor_block);
 
