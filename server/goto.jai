@@ -95,7 +95,16 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     if cursor_block.parent && cursor_block.parent.kind == .PROCEDURE {
         proc := cast(*Procedure) cursor_block.parent;
-        proc.arguments;
+        
+        for arg: proc.arguments {
+            if arg.kind != .DECLARATION continue;
+            decl := cast(*Declaration) arg;
+            if decl.name == ident.name {
+                lsp_respond(request.id, node_location_to_lsp_location(decl.location));
+                return;
+            }
+        }
+
     } 
 
     decls := get_declarations(workspace, ident.name, cursor_block);
