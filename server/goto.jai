@@ -40,7 +40,6 @@ handle_import_or_load :: (workspace: *Project_Workspace, request: LSP_Request_Me
     // });
 }
 
-
 handle_goto :: (request: LSP_Request_Message_Definition) {
     file := request.params.textDocument.uri;
     file_without_uri_prefix := replace(file, "file://", "");
@@ -83,7 +82,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     if node.parent && node.parent.kind == .BINARY_OPERATION {
         log("Parent of clicked %", node.parent.kind);
 
-        path := get_path_of_binary_operation(xx node.parent);
+        path := get_path_of_binary_operation(xx node);
         if path[0] != node {
             member_decl := resolve_struct_member_by_path(workspace, path);
             lsp_respond(request.id, node_location_to_lsp_location(member_decl.location));

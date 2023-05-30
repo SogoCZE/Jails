@@ -151,6 +151,12 @@ get_declarations :: (workspace: *Project_Workspace, name: string, from_scope: *B
     return decls;
 }
 
+get_declaration :: (workspace: *Project_Workspace, name: string, from_scope: *Block = null) -> *Declaration {
+    decls := get_declarations(workspace, name, from_scope);
+    if decls.count == 0 return null;
+    return decls[0];
+}
+
 get_node_nearest_block :: (node: *Node) -> *Block {
     current_node := node;
     current_block: *Block;
@@ -195,60 +201,83 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     return lsp_location;
 }
 
-// @TODO: rename this to struct member something?
-get_path_of_binary_operation :: (binary_op: *Binary_Operation) -> []*Node {
+get_path_of_binary_operation :: (root: *Node) -> []*Node {
     path: [..]*Node;
-    array_add(*path, binary_op.left);
-    array_add(*path, binary_op.right);
-    node := binary_op.left;
+    if !root.parent || root.parent.kind != .BINARY_OPERATION return path;
 
-    while node.parent && node.parent.kind == .BINARY_OPERATION {
-        parent_binary_op := cast(*Binary_Operation) node.parent;
-        if !parent_binary_op.left || parent_binary_op.left == node break;
+    op := cast(*Binary_Operation) root.parent;
+
+    if op.right == root array_add(*path, root);
+    array_add(*path, op.left);
+
+    while op.parent && op.parent.kind == .BINARY_OPERATION {
+        parent_binary_op := cast(*Binary_Operation) op.parent;
         array_add(*path, parent_binary_op.left);
-        node = parent_binary_op.left; 
+        op = parent_binary_op; 
     }
 
-    array_reserve(*path, path.count);
+    array_reverse(path);
 
     return path;
 }
 
-resolve_struct_member_by_path :: (workspace: *Project_Workspace, path: []*Node) -> *Declaration {
-    _struct: *Struct;
+// @InComplete
+resolve_struct_member_by_path :: (workspace: *Project_Workspace, path: []*Node, from_scope: *Block = null) -> *Declaration {
+    curr_decl: *Declaration;
 
     base := path[0];
+    if base.kind != .IDENTIFIER return null;
+    
+    base_ident := cast(*Identifier) base; 
 
-    // @TODO: Real path traverse!
+    curr_decl = get_declaration(workspace, base_ident.name, from_scope); // @TODO: Handle more of them
+    curr_block: *Block;
 
-    if base.kind == .IDENTIFIER {
-        ident := cast(*Identifier) base;
-        decl := get_declarations(workspace, ident.name)[0];
+    for part: path {
+        if it_index == 0 continue; // Skip the base
+        if part.kind != .IDENTIFIER break;
 
-        decl_type := get_decl_type(workspace, decl);
+        part_ident := cast(*Identifier) part;
+        decl_type := get_decl_type(workspace, curr_decl, curr_block);
+        if !decl_type break;
 
         if decl_type.kind == .STRUCT {
             _struct := cast(*Struct) decl_type;
             if !_struct.block return null;
+            curr_block = _struct.block;
 
             for _struct.block.members {
                 if it.kind != .DECLARATION continue; // Skip all
 
                 member_decl := cast(*Declaration) it;
-                final_ident := cast(*Identifier) path[1];
 
-                if member_decl.name == final_ident.name {
-                    return member_decl;
+                if member_decl.name == part_ident.name {
+                    curr_decl = member_decl;
+                    break;
                 }
             }
 
         }
-
     }
+
+    return curr_decl;
 }
 
-get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration) -> *Node {
+// @InComplete
+get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration, from_scope: *Block = null) -> *Node {
     if decl.type_inst {
+
+        if decl.type_inst.kind == {
+
+            case .IDENTIFIER;
+                ident := cast(*Identifier) decl.type_inst;
+                type_inst_decl := get_declaration(workspace, ident.name, from_scope);
+                if !type_inst_decl return null;
+
+                return get_decl_type(workspace, type_inst_decl);
+
+        }
+
         // @TODO
     }
 
@@ -268,7 +297,9 @@ get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration) -> *Node {
             if literal.struct_literal_info.type.kind == .IDENTIFIER {
                 ident := cast(*Identifier) literal.struct_literal_info.type;
 
-                decl := get_declarations(workspace, ident.name)[0];
+                decl := get_declaration(workspace, ident.name, from_scope);
+                if !decl return null;
+
                 return get_decl_type(workspace, decl);
             }
 

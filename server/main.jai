@@ -350,6 +350,21 @@ find_current_jai_path :: () -> string {
     }
 }
 
+// @TODO: Move this to some utils file or something?
+array_reverse :: (array: []$T) {
+    temp: T;
+    start := 0;
+    end := array.count-1;
+
+    while start < end {
+        temp = array[start];  
+        array[start] = array[end];
+        array[end] = temp;
+        start += 1;
+        end -= 1;
+    }
+}
+
 // #load "../shared/binary_serialization.jai";
 // #load "../shared/shared.jai";
 
