@@ -51,17 +51,17 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    line := find_line_in_modified_file(file, request.params.position);
+    // line := find_line_in_modified_file(file, request.params.position);
 
-    if contains(line, "#import") {
-        handle_import_or_load(workspace, request, line, true, request.params.position);
-        return;
-    }
+    // if contains(line, "#import") {
+    //     handle_import_or_load(workspace, request, line, true, request.params.position);
+    //     return;
+    // }
     
-    if contains(line, "#load") {
-        handle_import_or_load(workspace, request, line, false, request.params.position);
-        return;
-    }
+    // if contains(line, "#load") {
+    //     handle_import_or_load(workspace, request, line, false, request.params.position);
+    //     return;
+    // }
 
     cursor_location := lsp_location_to_node_location(request.params.position, file);
 
@@ -78,11 +78,40 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
+    ident := cast(*Identifier) node;
+
     log("Clicked node: %", node.kind);
     if node.parent && node.parent.kind == .BINARY_OPERATION {
         log("Parent of clicked %", node.parent.kind);
 
-        path := get_path_of_binary_operation(node);
+        // op := cast(*Binary_Operation) node.parent;
+
+        // if op.parent && op.parent.kind == .LITERAL {
+        //     decl := get_literal_member(workspace, xx op.parent, ident, cursor_block);
+        //     if decl {
+        //         lsp_respond(request.id, node_location_to_lsp_location(decl.location));
+        //         return;
+        //     }
+        // } 
+
+        path, root_binary_op := get_path_of_binary_operation(node);
+
+        if root_binary_op.parent && root_binary_op.parent.kind == .LITERAL {
+            new_path := NewArray(path.count+1, *Node);
+            new_path[0] = get_struct_literal_type(workspace, xx root_binary_op.parent, cursor_block);
+
+            if !new_path[0] {
+                lsp_respond(request.id, null);
+                return;
+            }
+
+            for 1..path.count {
+                new_path[it] = path[it-1];
+            }
+
+            path = new_path;
+        }
+
         if path[0] != node {
             member_decl := resolve_struct_member_by_path(workspace, path);
             lsp_respond(request.id, node_location_to_lsp_location(member_decl.location));
@@ -91,21 +120,6 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         
     }
 
-    ident := cast(*Identifier) node;
-
-    if cursor_block.parent && cursor_block.parent.kind == .PROCEDURE {
-        proc := cast(*Procedure) cursor_block.parent;
-        
-        for arg: proc.arguments {
-            if arg.kind != .DECLARATION continue;
-            decl := cast(*Declaration) arg;
-            if decl.name == ident.name {
-                lsp_respond(request.id, node_location_to_lsp_location(decl.location));
-                return;
-            }
-        }
-
-    } 
 
     decls := get_declarations(workspace, ident.name, cursor_block);
 
@@ -115,61 +129,4 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     for decls array_add(*locations, node_location_to_lsp_location(it.location));
 
     lsp_respond(request.id, locations);
-
-    // path := get_cursor_context(file, request.params.position);
-    // if path.count == 0 {
-    //     lsp_respond(request.id, null);
-    //     return;
-    // }
-
-    // base_symbol := path[0];
-    // base_symbol_block := find_block(workspace, xx (request.params.position.line+1), xx (request.params.position.character+1), file_without_uri_prefix);
-
-    // locations: [..]LSP_Location;
-    // defer array_free(locations);
-
-    // declarations := find_declarations(workspace, base_symbol, file_without_uri_prefix, base_symbol_block);
-    // defer array_free(declarations);
-
-    // log("Clicked on % (%)", path, declarations.count);
-
-    // // Struct or Enum members
-    // if path.count > 1 {
-
-    //     for decl: declarations {
-    //         current_declaration := decl;
-
-    //         for part: path {
-    //             if it_index == 0 continue; // skip the first one...
-
-    //             member_decl: *Declaration;
-
-    //             if current_declaration.kind == {
-    //                 case .ENUM; #through;
-    //                 case .STRUCT; member_decl = find_struct_or_enum_member(workspace, current_declaration, part);
-
-    //                 case .EXPRESSION;
-    //                     type := get_type_declaration(workspace, (cast(*Expression) current_declaration).type);
-    //                     if !type break;
-    //                     member_decl = find_struct_or_enum_member(workspace, type, part);
-
-    //                 case .TYPE_INSTANTIATION;
-    //                     type := get_type_declaration(workspace, (cast(*Type_Instantiation) current_declaration).type);
-    //                     if !type break;
-    //                     member_decl = find_struct_or_enum_member(workspace, type, part);
-    //             }
-
-    //             if !member_decl break;
-
-    //             current_declaration = member_decl;
-    //         }
-
-    //         array_add(*locations, declaration_to_lsp_location(current_declaration));
-    //     }
-
-    // } else {
-    //     for declarations array_add(*locations, declaration_to_lsp_location(it));
-    // }
-
-    // lsp_respond(request.id, locations);
 }

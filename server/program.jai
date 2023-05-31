@@ -143,6 +143,32 @@ get_declarations :: (workspace: *Project_Workspace, name: string, from_scope: *B
 
     decls: [..]*Declaration;
 
+    if from_scope && from_scope.parent {
+        
+        if from_scope.parent.kind == {
+
+            case .PROCEDURE;
+                proc := cast(*Procedure) from_scope.parent;
+        
+                for arg: proc.arguments {
+                    if arg.kind != .DECLARATION continue;
+                    decl := cast(*Declaration) arg;
+                    if decl.name == name array_add(*decls, decl);   
+                }  
+
+            case .STRUCT;
+                _struct := cast(*Struct) from_scope.parent;
+
+                for arg: _struct.polymorphic_arguments {
+                    if arg.kind != .DECLARATION continue;
+                    decl := cast(*Declaration) arg;
+                    if decl.name == name array_add(*decls, decl);   
+                }  
+            
+        }
+
+    }
+
     for decl: unfiltered_decls {
         if decl.parent && decl.parent != from_scope continue;
         array_add(*decls, decl);   
@@ -201,9 +227,9 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     return lsp_location;
 }
 
-get_path_of_binary_operation :: (root: *Node) -> []*Node {
+get_path_of_binary_operation :: (root: *Node) -> []*Node, *Binary_Operation {
     path: [..]*Node;
-    if !root.parent || root.parent.kind != .BINARY_OPERATION return path;
+    if !root.parent || root.parent.kind != .BINARY_OPERATION return path, null;
 
     op := cast(*Binary_Operation) root.parent;
 
@@ -218,7 +244,7 @@ get_path_of_binary_operation :: (root: *Node) -> []*Node {
 
     array_reverse(path);
 
-    return path;
+    return path, op;
 }
 
 // @InComplete
@@ -264,6 +290,21 @@ resolve_struct_member_by_path :: (workspace: *Project_Workspace, path: []*Node, 
 }
 
 // @InComplete
+get_decl_type_ident :: (workspace: *Project_Workspace, decl: *Declaration) -> *Identifier {
+
+    // @TODO: Path... decl: Entity.Stats;
+    if decl.type_inst && decl.type_inst.kind == .IDENTIFIER {
+        return xx decl.type_inst;
+    }
+
+    if decl.expression && decl.expression.kind == .IDENTIFIER {
+        return xx decl.expression;
+    }
+
+    return null;
+}
+
+// @InComplete
 get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration, from_scope: *Block = null) -> *Node {
     if decl.type_inst {
 
@@ -306,4 +347,29 @@ get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration, from_scope:
 
     }
 
+}
+
+get_struct_literal_type :: (workspace: *Project_Workspace, literal: *Literal, from_scope: *Block = null) -> *Node {
+    if literal.value_type != .STRUCT return null;
+    
+    if literal.struct_literal_info.type {
+        if literal.struct_literal_info.type.kind != .IDENTIFIER return null; // @TODO: Entity.Stats.{speed=20};
+        literal_type_ident := cast(*Identifier) literal.struct_literal_info.type;
+        return literal_type_ident;
+    }
+
+    // If the struct is infer we need to find type from decl
+    if !literal.parent || literal.parent.kind != .BINARY_OPERATION return null;
+    binary_op := cast(*Binary_Operation) literal.parent;
+
+    if binary_op.operation != .ASSING return null;
+
+    
+    if binary_op.left.kind == .IDENTIFIER {
+        decl := get_declaration(workspace, (cast(*Identifier)binary_op.left).name, from_scope);
+        if !decl return null;
+        return get_decl_type_ident(workspace, decl);
+    }
+
+    return null;
 }
