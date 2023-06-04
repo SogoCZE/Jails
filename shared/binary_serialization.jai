@@ -38,15 +38,6 @@ deserialize :: (bytes: []u8, $Output_Type: Type) -> *Output_Type {
 }
 
 cleanup_for_serialization :: (element : *$T) {
-    #if #run same_polymorph_source(T, Table(int, int)) {
-        table := element;
-        DEFAULT_VALUE :: table.Entry.{};
-
-        for * table.entries {
-            if it.hash > FIRST_VALID_HASH continue;
-            memcpy(it, *DEFAULT_VALUE, size_of(type_of(DEFAULT_VALUE)));
-        }
-    }
 
     same_polymorph_source :: ($a : Type, $b : Type) -> bool {
         info_a := type_info(a);
@@ -58,6 +49,15 @@ cleanup_for_serialization :: (element : *$T) {
         return info_a == info_b;
     }
 
+    #if #run same_polymorph_source(T, Table(int, int)) {
+        table := element;
+        DEFAULT_VALUE :: table.Entry.{};
+
+        for * table.entries {
+            if it.hash > FIRST_VALID_HASH continue;
+            memcpy(it, *DEFAULT_VALUE, size_of(type_of(DEFAULT_VALUE)));
+        }
+    }
 }
 
 #scope_file
@@ -379,7 +379,6 @@ quick_string_builder :: () #expand {
 get_type_name :: (info : *Type_Info) -> string {
     builder : String_Builder;
     free_buffers(*builder);
-    get_type_name_internal(*builder, info);
 
     get_type_name_internal :: (builder : *String_Builder, info : *Type_Info) {
         if info.type == .PROCEDURE {
@@ -403,6 +402,8 @@ get_type_name :: (info : *Type_Info) -> string {
             print_type_to_builder(builder, info);
         }
     }
+
+    get_type_name_internal(*builder, info);
 
     return builder_to_string(*builder, allocator = temporary_allocator);
 }

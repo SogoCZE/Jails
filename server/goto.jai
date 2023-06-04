@@ -51,6 +51,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
+
     // line := find_line_in_modified_file(file, request.params.position);
 
     // if contains(line, "#import") {
@@ -80,7 +81,11 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     ident := cast(*Identifier) node;
 
-    log("Clicked node: %", node.kind);
+    log("Clicked node: % (%)", node.kind, ident.name);
+
+    
+
+
     if node.parent && node.parent.kind == .BINARY_OPERATION {
         log("Parent of clicked %", node.parent.kind);
 

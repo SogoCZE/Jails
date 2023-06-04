@@ -59,7 +59,11 @@ reset_program :: (using program: Program) {
     table_reset(*files);
 }
 
-parse_file :: (workspace: *Project_Workspace, path: string) {
+parse_file :: (workspace: *Project_Workspace, path: string, force := false) {
+    if !force && table_contains(*workspace.program.files, path) {
+        log("Skipping % because it already exists", path);
+        return;
+    }
 
     content := cast(string) get_modified_file(path);
     if content.count == 0 {
@@ -78,13 +82,15 @@ parse_file :: (workspace: *Project_Workspace, path: string) {
     path_without_filename := trim_right(path_strip_filename(path), "/");
 
     parser: Parser(Node_Visit_Data);
-    parser.user_data.program = workspace.program;
+    parser.user_data.workspace = workspace;
     parser.user_data.path_without_filename = path_without_filename;
     parser.node_visit = node_visit;
     parser.lexer = *create_lexer(content, path);
 
     // @TODO: We need to free old nodes from the memory!
-    reset_program(workspace.program);
+    // reset_program(workspace.program);
+
+    // table_set()
 
     nodes: [..]*Node;
     table_set(*workspace.program.files, path, nodes);
@@ -97,26 +103,54 @@ parse_file :: (workspace: *Project_Workspace, path: string) {
 }
 
 Node_Visit_Data :: struct {
-    program: *Program;
+    workspace: *Project_Workspace;
     path_without_filename: string;
 }
 
 node_visit :: (node: *Node, data: Node_Visit_Data) {
     if !node return;
     
-    // log("Node: %", node.kind);
-
+    get_module_entry :: (root: string) -> string {
+        uri := tprint("%/module.jai", root);
+        if !file_exists(uri) uri = tprint("%.jai", root);
+        return uri;
+    }
+    
     if node.kind == .DECLARATION {
         decl := cast(*Declaration) node;
-        table_add(*data.program.declarations, decl.name, decl);        
+        table_add(*data.workspace.program.declarations, decl.name, decl);        
     }
 
-    nodes := table_find_pointer(*data.program.files, node.location.file);
+    nodes := table_find_pointer(*data.workspace.program.files, node.location.file);
     if !nodes return;
 
     array_add(nodes, node);
 
-    // Import and Load!
+    if node.kind == .DIRECTIVE_IMPORT {
+        _import := cast(*Directive_Import) node;
+
+        path: string;
+
+        if _import.import_kind == {
+            case .MODULE;
+                module_path := tprint("%/modules/%", server.args.jai_path, _import.module);
+                path = get_module_entry(module_path);
+            case .FILE;
+                path = tprint("%/%", data.path_without_filename, _import.module); 
+            case .DIR;
+                path = tprint("%/%", data.path_without_filename, get_module_entry(_import.module)); 
+            case .STRING;
+                // @TODO: Do we wanna parse the string here?
+        }
+
+        parse_file(data.workspace, path); // @TODO: Run this in another thread?
+    }
+
+    if node.kind == .DIRECTIVE_LOAD {
+        _load := cast(*Directive_Load) node;
+        load_relative_path := tprint("%/%", data.path_without_filename, _load.file);
+        parse_file(data.workspace, load_relative_path); // @TODO: Run this in another thread?
+    }
 }
 
 get_node_by_location :: (workspace: *Project_Workspace, location: Node.Location) -> *Node {
@@ -139,38 +173,50 @@ get_node_by_location :: (workspace: *Project_Workspace, location: Node.Location)
 
 get_declarations :: (workspace: *Project_Workspace, name: string, from_scope: *Block = null) -> []*Declaration {
     unfiltered_decls := table_find_multiple(*workspace.program.declarations, name);
-    if !from_scope return unfiltered_decls;
+    // if !from_scope return unfiltered_decls;
 
     decls: [..]*Declaration;
 
-    if from_scope && from_scope.parent {
+    // if from_scope && from_scope.parent {
         
-        if from_scope.parent.kind == {
+    //     if from_scope.parent.kind == {
 
-            case .PROCEDURE;
-                proc := cast(*Procedure) from_scope.parent;
+    //         case .PROCEDURE;
+    //             proc := cast(*Procedure) from_scope.parent;
         
-                for arg: proc.arguments {
-                    if arg.kind != .DECLARATION continue;
-                    decl := cast(*Declaration) arg;
-                    if decl.name == name array_add(*decls, decl);   
-                }  
+    //             for arg: proc.arguments {
+    //                 if arg.kind != .DECLARATION continue;
+    //                 decl := cast(*Declaration) arg;
+    //                 if decl.name == name array_add(*decls, decl);   
+    //             }  
 
-            case .STRUCT;
-                _struct := cast(*Struct) from_scope.parent;
+    //         case .STRUCT;
+    //             _struct := cast(*Struct) from_scope.parent;
 
-                for arg: _struct.polymorphic_arguments {
-                    if arg.kind != .DECLARATION continue;
-                    decl := cast(*Declaration) arg;
-                    if decl.name == name array_add(*decls, decl);   
-                }  
+    //             for arg: _struct.polymorphic_arguments {
+    //                 if arg.kind != .DECLARATION continue;
+    //                 decl := cast(*Declaration) arg;
+    //                 if decl.name == name array_add(*decls, decl);   
+    //             }  
             
-        }
+    //     }
 
-    }
+    // }
 
     for decl: unfiltered_decls {
-        if decl.parent && decl.parent != from_scope continue;
+        decl_scope := get_node_nearest_block(decl);
+
+        // @TODO: #scope_export, #scope_file, #scope_module ...
+
+        if decl.const {
+            if !is_child_of_block(decl_scope, from_scope) continue;
+        } else {
+            log("Scopes, % ?? %", decl_scope, from_scope);
+            if decl_scope && decl_scope != from_scope {
+                continue;
+            }
+        }
+
         array_add(*decls, decl);   
     }
 
@@ -190,11 +236,39 @@ get_node_nearest_block :: (node: *Node) -> *Block {
     while current_node.parent {
         current_node = current_node.parent;
         if current_node.kind == .BLOCK {
-            current_block = xx current_node;  
+            block := cast(*Block) current_node; 
+            current_block = xx block;  
+
+            if !block.parent break;
+
+            if block.parent.kind == {
+                case .PROCEDURE; break;
+                case .STRUCT; break;
+                case .UNION; break;
+                case .ENUM; break;
+            }
+
         }
     }
 
     return current_block;
+}
+
+is_child_of_block :: (block: *Block, node: *Node) -> bool {
+    if !block || !node return false;
+
+    current_node := node;
+
+    log("Last %", current_node.*);
+
+    if current_node == block return true;
+
+    while current_node.parent {
+        current_node = current_node.parent;
+        if current_node == block return true;
+    }
+
+    return false;
 }
 
 contains :: (a: Node.Location, b: Node.Location) -> bool {

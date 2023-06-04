@@ -245,7 +245,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             workspace := find_workspace_by_path(file_path);
             if !workspace return;
 
-            parse_file(workspace, file_path);
+            parse_file(workspace, file_path, true);
 
             workspace.last_refresh_time = current_time_consensus();
 
@@ -332,6 +332,13 @@ main :: () {
 find_current_jai_path :: () -> string {
     Compiler :: #import "Compiler";
     options := get_build_options();
+
+    remove_trailing_slash :: (path: string) -> string {
+        result := path;
+        if path[path.count - 1] == #char "/" result.count -= 1;
+        return result;
+    }
+
     for options.import_path {
         if find_index_from_left(it, "jai/modules") != -1 {
             modules_path := remove_trailing_slash(it);
@@ -342,12 +349,6 @@ find_current_jai_path :: () -> string {
     }
 
     return "";
-
-    remove_trailing_slash :: (path: string) -> string {
-        result := path;
-        if path[path.count - 1] == #char "/" result.count -= 1;
-        return result;
-    }
 }
 
 // @TODO: Move this to some utils file or something?
