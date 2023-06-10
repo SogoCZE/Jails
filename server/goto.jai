@@ -83,9 +83,6 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     log("Clicked node: % (%)", node.kind, ident.name);
 
-    
-
-
     if node.parent && node.parent.kind == .BINARY_OPERATION {
         log("Parent of clicked %", node.parent.kind);
 
@@ -130,6 +127,8 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     locations: [..]LSP_Location;
     defer array_free(locations);
+
+    
 
     for decls array_add(*locations, node_location_to_lsp_location(it.location));
 

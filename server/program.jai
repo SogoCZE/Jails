@@ -16,9 +16,15 @@ Project_Workspace :: struct {
     program: *Program;   
 }
 
-Program :: struct {
+Program_File :: struct {
+    imports: [..]*Directive_Import;
+    loads: [..]*Directive_Load;
+    nodes: [..]*Node;
     declarations: Table(string, *Declaration);
-    files: Table(string, [..]*Node);
+}
+
+Program :: struct {
+    files: Table(string, Program_File);
 }
 
 init_workspace :: (workspace: *Project_Workspace, entry: string, index: u8, local_modules_directory: string = "") {
@@ -45,22 +51,34 @@ deinit_workspace :: (workspace: *Project_Workspace) {
 }
 
 init_program :: (using program: Program) {
-    init(*declarations);
     init(*files);
 }
 
 deinit_program :: (using program: Program) {
-    deinit(*declarations);
     deinit(*files);
 }
 
 reset_program :: (using program: Program) {
-    table_reset(*declarations);
     table_reset(*files);
 }
 
+init_file :: (using file: Program_File) {
+    init(*declarations);
+}
+
+deinit_file :: (using file: Program_File) {
+    deinit(*declarations);
+    array_free(nodes);
+}
+
+reset_file :: (using file: Program_File) {
+    table_reset(*declarations);
+    array_reset(*nodes);
+}
+
 parse_file :: (workspace: *Project_Workspace, path: string, force := false) {
-    if !force && table_contains(*workspace.program.files, path) {
+    file_exists := table_contains(*workspace.program.files, path);
+    if !force && file_exists {
         log("Skipping % because it already exists", path);
         return;
     }
@@ -77,23 +95,24 @@ parse_file :: (workspace: *Project_Workspace, path: string, force := false) {
         }
     }
 
+    file: *Program_File;
+    if file_exists {
+        file = table_find_pointer(*workspace.program.files, path);
+        reset_file(file); // Clear old results
+    } else {
+        file = table_add(*workspace.program.files, path, .{});
+    }
+
     log("[%]: Parsing started!", path);
 
     path_without_filename := trim_right(path_strip_filename(path), "/");
 
     parser: Parser(Node_Visit_Data);
     parser.user_data.workspace = workspace;
+    parser.user_data.file = file;
     parser.user_data.path_without_filename = path_without_filename;
     parser.node_visit = node_visit;
     parser.lexer = *create_lexer(content, path);
-
-    // @TODO: We need to free old nodes from the memory!
-    // reset_program(workspace.program);
-
-    // table_set()
-
-    nodes: [..]*Node;
-    table_set(*workspace.program.files, path, nodes);
 
     while !end(parser.lexer) {
         parse(*parser, null);
@@ -104,11 +123,14 @@ parse_file :: (workspace: *Project_Workspace, path: string, force := false) {
 
 Node_Visit_Data :: struct {
     workspace: *Project_Workspace;
+    file: *Program_File;
     path_without_filename: string;
 }
 
 node_visit :: (node: *Node, data: Node_Visit_Data) {
     if !node return;
+
+    file := data.file;
     
     get_module_entry :: (root: string) -> string {
         uri := tprint("%/module.jai", root);
@@ -118,10 +140,10 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     
     if node.kind == .DECLARATION {
         decl := cast(*Declaration) node;
-        table_add(*data.workspace.program.declarations, decl.name, decl);        
+        table_add(*file.declarations, decl.name, decl);        
     }
 
-    nodes := table_find_pointer(*data.workspace.program.files, node.location.file);
+    nodes := *file.nodes;
     if !nodes return;
 
     array_add(nodes, node);
@@ -143,12 +165,15 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
                 // @TODO: Do we wanna parse the string here?
         }
 
+        array_add(*data.file.imports, _import);
+
         parse_file(data.workspace, path); // @TODO: Run this in another thread?
     }
 
     if node.kind == .DIRECTIVE_LOAD {
         _load := cast(*Directive_Load) node;
         load_relative_path := tprint("%/%", data.path_without_filename, _load.file);
+        array_add(*data.file.loads, _load);
         parse_file(data.workspace, load_relative_path); // @TODO: Run this in another thread?
     }
 }
@@ -156,8 +181,10 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 get_node_by_location :: (workspace: *Project_Workspace, location: Node.Location) -> *Node {
     nearest_node: *Node;
 
-    nodes, ok := table_find(*workspace.program.files, location.file);
+    file, ok := table_find(*workspace.program.files, location.file);
     if !ok return null;
+
+    nodes := file.nodes;
 
     for node: nodes {
         if !contains(node.location, location) continue;
@@ -172,48 +199,56 @@ get_node_by_location :: (workspace: *Project_Workspace, location: Node.Location)
 }
 
 get_declarations :: (workspace: *Project_Workspace, name: string, from_scope: *Block = null) -> []*Declaration {
-    unfiltered_decls := table_find_multiple(*workspace.program.declarations, name);
-    // if !from_scope return unfiltered_decls;
+    unfiltered_decls: [..]*Declaration;
+
+    // Get all name matching decls from all files
+    for workspace.program.files {
+        for it.loads log("Load: %", it.file);
+        for it.imports log("Import: %", it.module);
+
+        decls := table_find_multiple(*it.declarations, name);
+        for decls array_add(*unfiltered_decls, it);
+    }
 
     decls: [..]*Declaration;
 
-    // if from_scope && from_scope.parent {
+    // Params
+    if from_scope && from_scope.parent {
         
-    //     if from_scope.parent.kind == {
+        if from_scope.parent.kind == {
 
-    //         case .PROCEDURE;
-    //             proc := cast(*Procedure) from_scope.parent;
+            case .PROCEDURE;
+                proc := cast(*Procedure) from_scope.parent;
         
-    //             for arg: proc.arguments {
-    //                 if arg.kind != .DECLARATION continue;
-    //                 decl := cast(*Declaration) arg;
-    //                 if decl.name == name array_add(*decls, decl);   
-    //             }  
+                for arg: proc.arguments {
+                    if arg.kind != .DECLARATION continue;
+                    decl := cast(*Declaration) arg;
+                    if decl.name == name array_add(*decls, decl);   
+                }  
 
-    //         case .STRUCT;
-    //             _struct := cast(*Struct) from_scope.parent;
+            case .STRUCT;
+                _struct := cast(*Struct) from_scope.parent;
 
-    //             for arg: _struct.polymorphic_arguments {
-    //                 if arg.kind != .DECLARATION continue;
-    //                 decl := cast(*Declaration) arg;
-    //                 if decl.name == name array_add(*decls, decl);   
-    //             }  
+                for arg: _struct.polymorphic_arguments {
+                    if arg.kind != .DECLARATION continue;
+                    decl := cast(*Declaration) arg;
+                    if decl.name == name array_add(*decls, decl);   
+                }  
             
-    //     }
+        }
 
-    // }
+    }
 
     for decl: unfiltered_decls {
         decl_scope := get_node_nearest_block(decl);
+        global := is_global(decl);
 
-        // @TODO: #scope_export, #scope_file, #scope_module ...
-
-        if decl.const {
-            if !is_child_of_block(decl_scope, from_scope) continue;
-        } else {
-            log("Scopes, % ?? %", decl_scope, from_scope);
-            if decl_scope && decl_scope != from_scope {
-                continue;
+        if !global {
+            if decl.const {
+                if !is_child_of_block(decl_scope, from_scope) continue;
+            } else {
+                log("Scopes, % ?? %", decl_scope, from_scope);
+                if decl_scope != from_scope continue;
             }
         }
 
@@ -223,18 +258,28 @@ get_declarations :: (workspace: *Project_Workspace, name: string, from_scope: *B
     return decls;
 }
 
+is_global :: (node: *Node) -> bool {
+    if !node.parent return true;
+    // @TODO: #scope_export, #scope_file, #scope_module ...
+
+    return false;
+}
+
 get_declaration :: (workspace: *Project_Workspace, name: string, from_scope: *Block = null) -> *Declaration {
     decls := get_declarations(workspace, name, from_scope);
     if decls.count == 0 return null;
     return decls[0];
 }
 
-get_node_nearest_block :: (node: *Node) -> *Block {
+get_node_nearest_block :: (node: *Node, dd := true) -> *Block {
     current_node := node;
     current_block: *Block;
 
     while current_node.parent {
         current_node = current_node.parent;
+
+        if current_node.kind == .PROCEDURE || current_node.kind == .STRUCT break;
+
         if current_node.kind == .BLOCK {
             block := cast(*Block) current_node; 
             current_block = xx block;  
@@ -421,6 +466,7 @@ get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration, from_scope:
 
     }
 
+    return null;
 }
 
 get_struct_literal_type :: (workspace: *Project_Workspace, literal: *Literal, from_scope: *Block = null) -> *Node {
