@@ -12,24 +12,7 @@
     profile_server := array_find(args, "-profile_server");
     launch_vscode := array_find(args, "-vscode");
 
-    // Metaprogram Library
-    {
-        w := compiler_create_workspace("Metaprogram library");
-
-        options := get_build_options(w);
-        copy_commonly_propagated_fields(get_build_options(), *options);
-        options.output_type = .DYNAMIC_LIBRARY;
-        options.output_executable_name = "jails_metaprogram_library";
-        options.output_path = "./metaprogram_modules";
-        options.import_path = import_path;
-        set_build_options(options, w);
-
-        compiler_begin_intercept(w);
-        add_build_file("./metaprogram/library.jai", w);
-        message_loop(w, args, null);
-        compiler_end_intercept(w);
-    }
-
+    ok: bool;
 
     // Server 
     {
@@ -60,7 +43,7 @@
         compiler_begin_intercept(w, flags);
         if tracy && tracy.add_source tracy.add_source(tracy);
         add_build_file("./server/main.jai", w);
-        message_loop(w, args, tracy);
+        ok = message_loop(w, args, tracy);
         compiler_end_intercept(w);
 
         if tracy && tracy.finish tracy.finish(tracy);
@@ -68,7 +51,7 @@
     }
 
     // When we provide -vscode argument automatically launch vscode with our extension installed.
-    if launch_vscode {
+    if ok && launch_vscode {
         vscode_extension_directory := join(get_working_directory(), "/vscode_extension");
         vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
 
@@ -99,7 +82,7 @@
     }
 }
 
-message_loop :: (w: Workspace, args: []string, tracy: *Metaprogram_Plugin) {
+message_loop :: (w: Workspace, args: []string, tracy: *Metaprogram_Plugin) -> bool {
     while true {
         message := compiler_wait_for_message();
         if tracy && tracy.message tracy.message(tracy, message);
@@ -107,11 +90,13 @@ message_loop :: (w: Workspace, args: []string, tracy: *Metaprogram_Plugin) {
 
         complete := cast(*Message_Complete) message;
         if complete.error_code != .NONE {
-            return;
+            return false;
         }
 
         break;
     }
+
+    return true;
 }
 
 #import "Basic";

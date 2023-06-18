@@ -1,30 +1,30 @@
-init_modified_files :: () {
-    init(*server.modified_files_lock);
-    init(*server.modified_files);
+init_memory_files :: () {
+    init(*server.memory_files_lock);
+    init(*server.memory_files);
 }
 
-deinit_modified_files :: () {
-    destroy(*server.modified_files_lock);
-    deinit(*server.modified_files);
+deinit_memory_files :: () {
+    destroy(*server.memory_files_lock);
+    deinit(*server.memory_files);
 }
 
-create_modified_file :: (file_path: string, content: string) {
+create_memory_file :: (file_path: string, content: string) {
     content_dynamic: [..]u8;
 
     array_copy(*content_dynamic, cast([]u8) content);
     free(content);
 
-    lock(*server.modified_files_lock);
-    defer unlock(*server.modified_files_lock);
-    table_set(*server.modified_files, file_path, content_dynamic);
-    // dump_server_modified_files();
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
+    table_set(*server.memory_files, file_path, content_dynamic);
+    // dump_server_memory_files();
 }
 
-edit_modified_file :: (file_path: string, changes: []LSP_Content_Change) {
-    lock(*server.modified_files_lock);
-    defer unlock(*server.modified_files_lock);
+edit_memory_file :: (file_path: string, changes: []LSP_Content_Change) {
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
 
-    content := table_find_pointer(*server.modified_files, file_path);
+    content := table_find_pointer(*server.memory_files, file_path);
     if !content {
         log_error("File is not in the cache %", file_path);
         return;
@@ -37,21 +37,21 @@ edit_modified_file :: (file_path: string, changes: []LSP_Content_Change) {
     }
 }
 
-remove_modified_file :: (file_path: string) {
-    lock(*server.modified_files_lock);
-    defer unlock(*server.modified_files_lock);
+remove_memory_file :: (file_path: string) {
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
 
-    found := table_remove(*server.modified_files, file_path);
+    found := table_remove(*server.memory_files, file_path);
     if !found {
-        log_error("Tried to remove file % but it was not in the modified server.modified_files table!", file_path);
+        log_error("Tried to remove file % but it was not in the server.memory_files table!", file_path);
     }
 }
 
-find_range_in_modified_file :: (file: string, range: LSP_Range) -> string {
-    lock(*server.modified_files_lock);
-    defer unlock(*server.modified_files_lock);
+find_range_in_memory_file :: (file: string, range: LSP_Range) -> string {
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
 
-    content, ok := table_find(*server.modified_files, file);
+    content, ok := table_find(*server.memory_files, file);
     if !ok {
         return "";
     }
@@ -82,10 +82,10 @@ find_range_in_modified_file :: (file: string, range: LSP_Range) -> string {
     return to_string(*content[start_index], end_index-start_index);
 }
 
-find_line_in_modified_file :: (file: string, position: LSP_Position) -> string {
-    lock(*server.modified_files_lock);
-    defer unlock(*server.modified_files_lock);
-    content, ok := table_find(*server.modified_files, file);
+find_line_in_memory_file :: (file: string, position: LSP_Position) -> string {
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
+    content, ok := table_find(*server.memory_files, file);
     if !ok {
         return "";
     }
@@ -94,7 +94,7 @@ find_line_in_modified_file :: (file: string, position: LSP_Position) -> string {
     start_index: int = -1;
     end_index := content.count;
 
-    // @SPEED: This searching could be probably done faster if we had server.modified_files stored as array of lines instead of file content. 
+    // @SPEED: This searching could be probably done faster if we had server.memory_files stored as array of lines instead of file content. 
     for char: content {
         if char == #char "\n" {
             final_line += 1;
@@ -122,11 +122,11 @@ find_line_in_modified_file :: (file: string, position: LSP_Position) -> string {
     return to_string(*content[start_index], end_index-start_index);
 }
 
-get_modified_file :: (name: string) -> []u8 {
-    lock(*server.modified_files_lock);
-    defer unlock(*server.modified_files_lock);
+get_memory_file :: (name: string) -> []u8 {
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
 
-    content, ok := table_find(*server.modified_files, name);
+    content, ok := table_find(*server.memory_files, name);
     if !ok {
         return .[];
     }
@@ -134,10 +134,10 @@ get_modified_file :: (name: string) -> []u8 {
     return content;
 }
 
-find_word_in_modified_file :: (file: string, position: LSP_Position) -> string, Node.Location {
-    lock(*server.modified_files_lock);
-    defer unlock(*server.modified_files_lock);
-    content, ok := table_find(*server.modified_files, file);
+find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, Node.Location {
+    lock(*server.memory_files_lock);
+    defer unlock(*server.memory_files_lock);
+    content, ok := table_find(*server.memory_files, file);
     if !ok {
         return "", .{};
     }
@@ -145,7 +145,7 @@ find_word_in_modified_file :: (file: string, position: LSP_Position) -> string, 
     final_line: int;
     pointer_index: int = -1;
 
-    // @SPEED: This searching could be probably done faster if we had server.modified_files stored as array of lines instead of file content. 
+    // @SPEED: This searching could be probably done faster if we had server.memory_files stored as array of lines instead of file content. 
     for char: content {
         if char == #char "\n" {
             final_line += 1;
@@ -285,15 +285,3 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
     }
 
 }
-
-// dump_modified_files :: () {
-//     lock(*server.modified_server.modified_files_lock);
-//     defer unlock(*server.modified_server.modified_files_lock);
-
-//     for content, file: server.modified_files {
-//         just_filename := path_filename(file);
-//         write_entire_file(tprint("%/server/bin/server.modified_files_dump/%", PROJECT_FOLDER_PATH, just_filename), cast(string) content);
-//     }
-// }
-
-#import "Thread";

@@ -1,65 +1,14 @@
-Project_Workspace :: struct {
-    index: u8;
-    
-    entry: string;
-    working_directory: string;
-    local_modules_directory: string;
-    
-    last_refresh_time: Apollo_Time = APOLLO_TIME_INVALID;
-
-    previously_errored_file: string;
-
-    program_a: Program;
-    program_b: Program;
-
-    work_program: *Program;
-    program: *Program;   
+Module_Import :: struct {
+    module: string;
+    root: string;
 }
 
 Program_File :: struct {
-    imports: [..]*Directive_Import;
+    path: string;
+    imports: [..]Module_Import;
     loads: [..]*Directive_Load;
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
-}
-
-Program :: struct {
-    files: Table(string, Program_File);
-}
-
-init_workspace :: (workspace: *Project_Workspace, entry: string, index: u8, local_modules_directory: string = "") {
-    workspace.index = index;
-    workspace.entry = entry;
-    workspace.working_directory = path_strip_filename(entry);
-
-    if local_modules_directory.count > 0 {
-        workspace.local_modules_directory = local_modules_directory;
-    } else {
-        workspace.local_modules_directory = find_local_modules(workspace.working_directory);
-    }
-
-    init_program(workspace.program_a);
-    init_program(workspace.program_b);
-
-    workspace.work_program = *workspace.program_b;
-    workspace.program      = *workspace.program_a;
-}
-
-deinit_workspace :: (workspace: *Project_Workspace) {
-    deinit_program(*workspace.program_a);
-    deinit_program(*workspace.program_b);
-}
-
-init_program :: (using program: Program) {
-    init(*files);
-}
-
-deinit_program :: (using program: Program) {
-    deinit(*files);
-}
-
-reset_program :: (using program: Program) {
-    table_reset(*files);
 }
 
 init_file :: (using file: Program_File) {
@@ -74,41 +23,47 @@ deinit_file :: (using file: Program_File) {
 reset_file :: (using file: Program_File) {
     table_reset(*declarations);
     array_reset(*nodes);
+    array_reset(*loads);
+    array_reset(*imports);
 }
 
-parse_file :: (workspace: *Project_Workspace, path: string, force := false) {
-    file_exists := table_contains(*workspace.program.files, path);
+get_file :: (path: string) -> *Program_File {
+    return table_find_pointer(*server.files, path);
+}
+
+parse_file :: ( path: string, force := false) {
+    file_exists := table_contains(*server.files, path);
     if !force && file_exists {
         log("Skipping % because it already exists", path);
         return;
     }
 
-    content := cast(string) get_modified_file(path);
+    content := cast(string) get_memory_file(path);
     if content.count == 0 {
         exists: bool;
+
         path_without_file_prefix := replace(path, "file://", "");
         defer free(path_without_file_prefix);
+
         content, exists = read_entire_file(path_without_file_prefix);
         if !exists {
             log_error("File % does not exists!", path_without_file_prefix);
             return;
         }
+
     }
 
     file: *Program_File;
     if file_exists {
-        file = table_find_pointer(*workspace.program.files, path);
+        file = table_find_pointer(*server.files, path);
         reset_file(file); // Clear old results
     } else {
-        file = table_add(*workspace.program.files, path, .{});
+        file = table_add(*server.files, path, .{path=path});
     }
-
-    log("[%]: Parsing started!", path);
 
     path_without_filename := trim_right(path_strip_filename(path), "/");
 
     parser: Parser(Node_Visit_Data);
-    parser.user_data.workspace = workspace;
     parser.user_data.file = file;
     parser.user_data.path_without_filename = path_without_filename;
     parser.node_visit = node_visit;
@@ -118,11 +73,10 @@ parse_file :: (workspace: *Project_Workspace, path: string, force := false) {
         parse(*parser, null);
     }
 
-    log("[%]: Parsing done!", path);
+    log("Parsed: %", path);
 }
 
 Node_Visit_Data :: struct {
-    workspace: *Project_Workspace;
     file: *Program_File;
     path_without_filename: string;
 }
@@ -133,8 +87,8 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     file := data.file;
     
     get_module_entry :: (root: string) -> string {
-        uri := tprint("%/module.jai", root);
-        if !file_exists(uri) uri = tprint("%.jai", root);
+        uri := sprint("%/module.jai", root);
+        if !file_exists(uri) uri = sprint("%.jai", root);
         return uri;
     }
     
@@ -143,10 +97,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         table_add(*file.declarations, decl.name, decl);        
     }
 
-    nodes := *file.nodes;
-    if !nodes return;
-
-    array_add(nodes, node);
+    array_add(*file.nodes, node);
 
     if node.kind == .DIRECTIVE_IMPORT {
         _import := cast(*Directive_Import) node;
@@ -155,38 +106,44 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
         if _import.import_kind == {
             case .MODULE;
-                module_path := tprint("%/modules/%", server.args.jai_path, _import.module);
-                path = get_module_entry(module_path);
+                module_path := sprint("%/modules/%", server.args.jai_path, _import.module);
+                path = sprint("file://%", get_module_entry(module_path));
             case .FILE;
-                path = tprint("%/%", data.path_without_filename, _import.module); 
+                path = sprint("%/%", data.path_without_filename, _import.module); 
             case .DIR;
-                path = tprint("%/%", data.path_without_filename, get_module_entry(_import.module)); 
+                path = sprint("%/%", data.path_without_filename, get_module_entry(_import.module)); 
             case .STRING;
+                return;
                 // @TODO: Do we wanna parse the string here?
         }
 
-        array_add(*data.file.imports, _import);
+        module_import: Module_Import;
+        module_import.module = _import.module;
+        module_import.root = path;
 
-        parse_file(data.workspace, path); // @TODO: Run this in another thread?
+        array_add(*data.file.imports, module_import);
+
+        parse_file(path); // @TODO: Run this in another thread?
     }
 
     if node.kind == .DIRECTIVE_LOAD {
         _load := cast(*Directive_Load) node;
-        load_relative_path := tprint("%/%", data.path_without_filename, _load.file);
+        load_relative_path := sprint("%/%", data.path_without_filename, _load.file);
         array_add(*data.file.loads, _load);
-        parse_file(data.workspace, load_relative_path); // @TODO: Run this in another thread?
+        parse_file(load_relative_path); // @TODO: Run this in another thread?
     }
 }
 
-get_node_by_location :: (workspace: *Project_Workspace, location: Node.Location) -> *Node {
+get_node_by_location :: ( file: *Program_File, location: Node.Location) -> *Node {
     nearest_node: *Node;
 
-    file, ok := table_find(*workspace.program.files, location.file);
-    if !ok return null;
+    for node: file.nodes {
 
-    nodes := file.nodes;
+        if !node {
+            log("Null node in file: % \nNodes: %\n---", file.path, file.nodes);
+            continue;
+        }
 
-    for node: nodes {
         if !contains(node.location, location) continue;
 
         // If we are not smaller than so far nearest node we skip.
@@ -194,25 +151,27 @@ get_node_by_location :: (workspace: *Project_Workspace, location: Node.Location)
 
         nearest_node = node;
     }
-    
+
+
     return nearest_node;
 }
 
-get_declarations :: (workspace: *Project_Workspace, name: string, from_scope: *Block = null) -> []*Declaration {
+get_declarations :: (file: *Program_File, name: string, from_scope: *Block = null) -> []*Declaration {
     unfiltered_decls: [..]*Declaration;
 
-    // Get all name matching decls from all files
-    for workspace.program.files {
-        for it.loads log("Load: %", it.file);
-        for it.imports log("Import: %", it.module);
+    for server.files {
+        // This ensure we take intro account only files that are being loaded or imported...
+        if file.path != it.path && !is_avaiable_from(file, it.path) continue;
 
         decls := table_find_multiple(*it.declarations, name);
-        for decls array_add(*unfiltered_decls, it);
+        for decl: decls {
+            array_add(*unfiltered_decls, decl);
+        }
     }
 
     decls: [..]*Declaration;
 
-    // Params
+    // Procedure or Struct params
     if from_scope && from_scope.parent {
         
         if from_scope.parent.kind == {
@@ -265,8 +224,34 @@ is_global :: (node: *Node) -> bool {
     return false;
 }
 
-get_declaration :: (workspace: *Project_Workspace, name: string, from_scope: *Block = null) -> *Declaration {
-    decls := get_declarations(workspace, name, from_scope);
+is_avaiable_from :: (file: *Program_File, path: string) -> bool {
+    loaded: bool;
+
+    for file.imports {
+        log("Import (%) root: %", it.module, it.root);
+    }
+
+    for file.loads {
+        load_path := trim_right(path_strip_filename(file.path), "/");
+        load_relative_path := sprint("%/%", load_path, it.file);
+
+        if load_relative_path == path {
+            loaded = true;
+            break;
+        }
+
+        next_file := get_file(load_relative_path);
+        if next_file && is_avaiable_from(next_file, path) {
+            loaded = true;
+            break;
+        }
+    }
+
+    return loaded;
+}
+
+get_declaration :: (file: *Program_File, name: string, from_scope: *Block = null) -> *Declaration {
+    decls := get_declarations(file, name, from_scope);
     if decls.count == 0 return null;
     return decls[0];
 }
@@ -367,7 +352,7 @@ get_path_of_binary_operation :: (root: *Node) -> []*Node, *Binary_Operation {
 }
 
 // @InComplete
-resolve_struct_member_by_path :: (workspace: *Project_Workspace, path: []*Node, from_scope: *Block = null) -> *Declaration {
+resolve_struct_member_by_path :: (file: *Program_File, path: []*Node, from_scope: *Block = null) -> *Declaration {
     curr_decl: *Declaration;
 
     base := path[0];
@@ -375,7 +360,7 @@ resolve_struct_member_by_path :: (workspace: *Project_Workspace, path: []*Node, 
     
     base_ident := cast(*Identifier) base; 
 
-    curr_decl = get_declaration(workspace, base_ident.name, from_scope); // @TODO: Handle more of them
+    curr_decl = get_declaration(file, base_ident.name, from_scope); // @TODO: Handle more of them
     curr_block: *Block;
 
     for part: path {
@@ -383,7 +368,7 @@ resolve_struct_member_by_path :: (workspace: *Project_Workspace, path: []*Node, 
         if part.kind != .IDENTIFIER break;
 
         part_ident := cast(*Identifier) part;
-        decl_type := get_decl_type(workspace, curr_decl, curr_block);
+        decl_type := get_decl_type(file, curr_decl, curr_block);
         if !decl_type break;
 
         if decl_type.kind == .STRUCT {
@@ -409,7 +394,7 @@ resolve_struct_member_by_path :: (workspace: *Project_Workspace, path: []*Node, 
 }
 
 // @InComplete
-get_decl_type_ident :: (workspace: *Project_Workspace, decl: *Declaration) -> *Identifier {
+get_decl_type_ident :: (decl: *Declaration) -> *Identifier {
 
     // @TODO: Path... decl: Entity.Stats;
     if decl.type_inst && decl.type_inst.kind == .IDENTIFIER {
@@ -424,17 +409,17 @@ get_decl_type_ident :: (workspace: *Project_Workspace, decl: *Declaration) -> *I
 }
 
 // @InComplete
-get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration, from_scope: *Block = null) -> *Node {
+get_decl_type :: (file: *Program_File, decl: *Declaration, from_scope: *Block = null) -> *Node {
     if decl.type_inst {
 
         if decl.type_inst.kind == {
 
             case .IDENTIFIER;
                 ident := cast(*Identifier) decl.type_inst;
-                type_inst_decl := get_declaration(workspace, ident.name, from_scope);
+                type_inst_decl := get_declaration(file, ident.name, from_scope);
                 if !type_inst_decl return null;
 
-                return get_decl_type(workspace, type_inst_decl);
+                return get_decl_type(file, type_inst_decl);
 
         }
 
@@ -457,10 +442,10 @@ get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration, from_scope:
             if literal.struct_literal_info.type.kind == .IDENTIFIER {
                 ident := cast(*Identifier) literal.struct_literal_info.type;
 
-                decl := get_declaration(workspace, ident.name, from_scope);
+                decl := get_declaration(file, ident.name, from_scope);
                 if !decl return null;
 
-                return get_decl_type(workspace, decl);
+                return get_decl_type(file, decl);
             }
 
 
@@ -469,7 +454,7 @@ get_decl_type :: (workspace: *Project_Workspace, decl: *Declaration, from_scope:
     return null;
 }
 
-get_struct_literal_type :: (workspace: *Project_Workspace, literal: *Literal, from_scope: *Block = null) -> *Node {
+get_struct_literal_type :: (file: *Program_File, literal: *Literal, from_scope: *Block = null) -> *Node {
     if literal.value_type != .STRUCT return null;
     
     if literal.struct_literal_info.type {
@@ -486,9 +471,9 @@ get_struct_literal_type :: (workspace: *Project_Workspace, literal: *Literal, fr
 
     
     if binary_op.left.kind == .IDENTIFIER {
-        decl := get_declaration(workspace, (cast(*Identifier)binary_op.left).name, from_scope);
+        decl := get_declaration(file, (cast(*Identifier)binary_op.left).name, from_scope);
         if !decl return null;
-        return get_decl_type_ident(workspace, decl);
+        return get_decl_type_ident(decl);
     }
 
     return null;
