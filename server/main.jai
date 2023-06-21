@@ -11,7 +11,7 @@ Server :: struct {
     quit := false;
 
     project_root: string;
-    files: Table(string, Program_File);
+    files: Table(string, *Program_File);
 
     memory_files_lock: Mutex;
     memory_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
@@ -94,7 +94,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
             
-            log("Close!");
+            file_path := body.params.textDocument.uri;
+            remove_memory_file(file_path);
 
         case "textDocument/completion";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
@@ -119,6 +120,9 @@ main :: () {
     }
 
     log("Args are %", server.args);
+
+    init(*server.files);
+    defer deinit(*server.files);
 
     init_memory_files();
     defer deinit_memory_files();

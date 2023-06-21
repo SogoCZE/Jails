@@ -3,7 +3,14 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     file_path := request.params.textDocument.uri;
     file_path_without_uri_prefix := replace(file_path, "file://", "");
 
-    file := get_file( file_path);
+    file := get_file(file_path);
+    if !file {
+        log_error("File does not exists or has not been parser yet! (%)", file_path);
+        lsp_respond(request.id, null);
+        return;
+    }
+
+    log("File: %", file);
 
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
 

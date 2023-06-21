@@ -28,13 +28,15 @@ reset_file :: (using file: Program_File) {
 }
 
 get_file :: (path: string) -> *Program_File {
-    return table_find_pointer(*server.files, path);
+    file, ok := table_find(*server.files, path);
+    if !ok return null;
+    return file;
 }
 
-parse_file :: ( path: string, force := false) {
-    file_exists := table_contains(*server.files, path);
-    if !force && file_exists {
-        log("Skipping % because it already exists", path);
+parse_file :: (path: string, force := false) {
+    file, ok := table_find(*server.files, path);
+    if !force && ok {
+        // log("Skipping % because it already exists", path);
         return;
     }
 
@@ -47,18 +49,19 @@ parse_file :: ( path: string, force := false) {
 
         content, exists = read_entire_file(path_without_file_prefix);
         if !exists {
-            log_error("File % does not exists!", path_without_file_prefix);
+            // log_error("File % does not exists!", path_without_file_prefix);
             return;
         }
 
     }
 
-    file: *Program_File;
-    if file_exists {
-        file = table_find_pointer(*server.files, path);
-        reset_file(file); // Clear old results
+    if ok {
+        reset_file(file); // clear old data
     } else {
-        file = table_add(*server.files, path, .{path=path});
+        file = New(Program_File);
+        file.path = path;
+        init_file(file);
+        table_add(*server.files, path, file);
     }
 
     path_without_filename := trim_right(path_strip_filename(path), "/");
@@ -73,7 +76,7 @@ parse_file :: ( path: string, force := false) {
         parse(*parser, null);
     }
 
-    log("Parsed: %", path);
+    // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
 }
 
 Node_Visit_Data :: struct {
@@ -85,13 +88,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     if !node return;
 
     file := data.file;
-    
-    get_module_entry :: (root: string) -> string {
-        uri := sprint("%/module.jai", root);
-        if !file_exists(uri) uri = sprint("%.jai", root);
-        return uri;
-    }
-    
+
     if node.kind == .DECLARATION {
         decl := cast(*Declaration) node;
         table_add(*file.declarations, decl.name, decl);        
@@ -100,8 +97,14 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     array_add(*file.nodes, node);
 
     if node.kind == .DIRECTIVE_IMPORT {
-        _import := cast(*Directive_Import) node;
 
+        get_module_entry :: (root: string) -> string {
+            uri := sprint("%/module.jai", root);
+            if !file_exists(uri) uri = sprint("%.jai", root);
+            return uri;
+        }
+
+        _import := cast(*Directive_Import) node;
         path: string;
 
         if _import.import_kind == {
@@ -118,8 +121,8 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         }
 
         module_import: Module_Import;
-        module_import.module = _import.module;
         module_import.root = path;
+        module_import.module = _import.module;
 
         array_add(*data.file.imports, module_import);
 
@@ -134,16 +137,10 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     }
 }
 
-get_node_by_location :: ( file: *Program_File, location: Node.Location) -> *Node {
+get_node_by_location :: (file: *Program_File, location: Node.Location) -> *Node {
     nearest_node: *Node;
 
     for node: file.nodes {
-
-        if !node {
-            log("Null node in file: % \nNodes: %\n---", file.path, file.nodes);
-            continue;
-        }
-
         if !contains(node.location, location) continue;
 
         // If we are not smaller than so far nearest node we skip.
@@ -160,8 +157,11 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
     unfiltered_decls: [..]*Declaration;
 
     for server.files {
+        already_checked: [..]string;
         // This ensure we take intro account only files that are being loaded or imported...
-        if file.path != it.path && !is_avaiable_from(file, it.path) continue;
+        if file.path != it.path && !is_avaiable_from(file, it.path, *already_checked) continue;
+
+        array_free(already_checked);
 
         decls := table_find_multiple(*it.declarations, name);
         for decl: decls {
@@ -219,21 +219,42 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
 
 is_global :: (node: *Node) -> bool {
     if !node.parent return true;
-    // @TODO: #scope_export, #scope_file, #scope_module ...
+
+    // @TODO: #scope_file, #scope_module ...
+    if node.parent.kind == .DIRECTIVE_SCOPE {
+        directive_scope := cast(*Directive_Scope) node.parent;
+        if directive_scope.scope_kind == .EXPORT return true;
+    } 
 
     return false;
 }
 
-is_avaiable_from :: (file: *Program_File, path: string) -> bool {
+is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]string) -> bool {
     loaded: bool;
 
     for file.imports {
-        log("Import (%) root: %", it.module, it.root);
+        if array_find(already_checked.*, it.root) continue;
+        array_add(already_checked, it.root);
+
+        if it.root == path {
+            loaded = true;
+            break;
+        }
+
+        next_file := get_file(it.root);
+        if next_file && is_avaiable_from(next_file, path, already_checked) {
+            loaded = true;
+            break;
+        }
+
     }
 
     for file.loads {
         load_path := trim_right(path_strip_filename(file.path), "/");
         load_relative_path := sprint("%/%", load_path, it.file);
+
+        if array_find(already_checked.*, load_relative_path) continue;
+        array_add(already_checked, load_relative_path);
 
         if load_relative_path == path {
             loaded = true;
@@ -241,7 +262,7 @@ is_avaiable_from :: (file: *Program_File, path: string) -> bool {
         }
 
         next_file := get_file(load_relative_path);
-        if next_file && is_avaiable_from(next_file, path) {
+        if next_file && is_avaiable_from(next_file, path, already_checked) {
             loaded = true;
             break;
         }
