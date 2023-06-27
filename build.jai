@@ -11,6 +11,7 @@
 
     profile_server := array_find(args, "-profile_server");
     launch_vscode := array_find(args, "-vscode");
+    release := array_find(args, "-release");
 
     ok: bool;
 
@@ -23,6 +24,9 @@
         options.output_executable_name = "jails";
         options.output_path = "./bin";
         options.import_path = import_path;
+
+        if release set_optimization(*options, .OPTIMIZED);
+
         set_build_options(options, w);
 
         tracy: *Metaprogram_Plugin;

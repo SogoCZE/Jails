@@ -89,6 +89,24 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
     file := data.file;
 
+    if node.kind == .COMPOUND_DECLARATION {
+        compound_declaration := cast(*Compound_Declaration) node;
+        for member: compound_declaration.members {
+            if member.kind != .COMPOUND_DECLARATION_ITEM continue;
+            item := cast(*Compound_Declaration_Item) member;
+            if item.item_kind != .DECLARATION || item.expression.kind != .IDENTIFIER continue;
+            decl_ident := cast(*Identifier) item.expression;
+
+            // @TODO: is this ok? Do we really wan't to create "virtual" decl here?
+            decl := New(Declaration);
+            decl.parent = decl_ident.parent;
+            decl.location = decl_ident.location;
+            decl.name = decl_ident.name;
+
+            table_add(*file.declarations, decl.name, decl);        
+        }
+    }
+
     if node.kind == .DECLARATION {
         decl := cast(*Declaration) node;
         table_add(*file.declarations, decl.name, decl);        
@@ -158,7 +176,7 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
 
     for server.files {
         already_checked: [..]string;
-        // This ensure we take intro account only files that are being loaded or imported...
+        // This ensure we take into account only files that are being loaded or imported...
         if file.path != it.path && !is_avaiable_from(file, it.path, *already_checked) continue;
 
         array_free(already_checked);
