@@ -33,6 +33,8 @@ get_file :: (path: string) -> *Program_File {
     return file;
 }
 
+
+
 parse_file :: (path: string, force := false) {
     file, ok := table_find(*server.files, path);
     if !force && ok {
@@ -116,10 +118,35 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
     if node.kind == .DIRECTIVE_IMPORT {
 
-        get_module_entry :: (root: string) -> string {
-            uri := sprint("%/module.jai", root);
-            if !file_exists(uri) uri = sprint("%.jai", root);
-            return uri;
+        get_module_entry :: (module: string) -> string {
+            uri := join(module, "/module.jai");
+            if file_exists(uri) return uri;
+
+            uri = join(module, ".jai");
+            if file_exists(uri) return uri;
+
+            return "";
+        }
+
+        get_module :: (module_name: string) -> string {
+            for local_modules_folder: server.local_modules {
+                absolute_path: string;
+                if starts_with(local_modules_folder, "/") {
+                    absolute_path = local_modules_folder;
+                } else {
+                    absolute_path = join(server.project_root, local_modules_folder, separator="/");
+                }
+
+                entry := get_module_entry(join(absolute_path, module_name, separator="/"));
+                if entry.count > 0 return entry;
+            }
+
+            jai_modules := join(server.args.jai_path, "/modules");
+
+            entry := get_module_entry(join(jai_modules, module_name, separator="/"));
+            if entry.count > 0 return entry;
+
+            return "";
         }
 
         _import := cast(*Directive_Import) node;
@@ -127,12 +154,15 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
         if _import.import_kind == {
             case .MODULE;
-                module_path := sprint("%/modules/%", server.args.jai_path, _import.module);
-                path = sprint("file://%", get_module_entry(module_path));
+                path = get_module(_import.module);
+                if path.count == 0 return;
+                log("Path: %", path);
             case .FILE;
                 path = sprint("%/%", data.path_without_filename, _import.module); 
             case .DIR;
-                path = sprint("%/%", data.path_without_filename, get_module_entry(_import.module)); 
+                relative_path := sprint("%/%", data.path_without_filename, _import.module); 
+                path = get_module_entry(relative_path);
+                if path.count == 0 return;
             case .STRING;
                 return;
                 // @TODO: Do we wanna parse the string here?
@@ -174,12 +204,30 @@ get_node_by_location :: (file: *Program_File, location: Node.Location) -> *Node 
 get_declarations :: (file: *Program_File, name: string, from_scope: *Block = null) -> []*Declaration {
     unfiltered_decls: [..]*Declaration;
 
-    for server.files {
-        already_checked: [..]string;
-        // This ensure we take into account only files that are being loaded or imported...
-        if file.path != it.path && !is_avaiable_from(file, it.path, *already_checked) continue;
+    files_that_load_this_file := get_files_that_load(file);
+    defer array_free(files_that_load_this_file);
 
-        array_free(already_checked);
+    for server.files {
+        // This ensure we take into account only files that are being loaded or imported...
+        if file.path != it.path {
+            
+            is_avaiable_from_one_of_the_parents: bool;
+
+            for file_that_load_this_file: files_that_load_this_file {
+                already_checked: [..]string;
+                defer array_free(already_checked);
+    
+                if !is_avaiable_from(file_that_load_this_file, it.path, *already_checked) continue;
+    
+                is_avaiable_from_one_of_the_parents = true;
+                break;
+            }
+    
+            already_checked: [..]string;
+            defer array_free(already_checked);
+    
+            if !is_avaiable_from_one_of_the_parents && !is_avaiable_from(file, it.path, *already_checked) continue;
+        } 
 
         decls := table_find_multiple(*it.declarations, name);
         for decl: decls {
@@ -243,30 +291,45 @@ is_global :: (node: *Node) -> bool {
         directive_scope := cast(*Directive_Scope) node.parent;
         if directive_scope.scope_kind == .EXPORT return true;
     } 
-
     return false;
 }
 
-is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]string) -> bool {
-    loaded: bool;
+get_files_that_load :: (target_file: *Program_File) -> []*Program_File {
+    files: [..]*Program_File;
 
-    for file.imports {
-        if array_find(already_checked.*, it.root) continue;
-        array_add(already_checked, it.root);
-
-        if it.root == path {
-            loaded = true;
-            break;
-        }
-
-        next_file := get_file(it.root);
-        if next_file && is_avaiable_from(next_file, path, already_checked) {
-            loaded = true;
-            break;
-        }
-
+    for file: server.files {
+        already_checked: [..]string;
+        defer array_free(already_checked);
+        if !is_avaiable_from(file, target_file.path, *already_checked, true) continue;
+        array_add(*files, file);
     }
 
+    return files;
+}
+
+is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]string, $loads_only := false) -> bool {
+    loaded: bool;
+
+    if !loads_only {
+        for file.imports {
+            if array_find(already_checked.*, it.root) continue;
+            array_add(already_checked, it.root);
+
+            if it.root == path {
+                loaded = true;
+                break;
+            }
+
+            next_file := get_file(it.root);
+            if next_file && is_avaiable_from(next_file, path, already_checked) {
+                loaded = true;
+                break;
+            }
+
+        }
+    }
+
+    
     for file.loads {
         load_path := trim_right(path_strip_filename(file.path), "/");
         load_relative_path := sprint("%/%", load_path, it.file);

@@ -10,6 +10,10 @@ Server :: struct {
     args: Args;
     quit := false;
 
+    // This is from the config file
+    local_modules: []string;
+    roots: []string;
+
     project_root: string;
     files: Table(string, *Program_File);
 
@@ -18,6 +22,28 @@ Server :: struct {
 }
 
 server: Server;
+
+load_config_file :: () {
+    
+    Config :: struct {
+        local_modules: []string;
+        roots: []string;
+    }
+    
+    config_path := join(server.project_root, "/jails.json");
+    if !file_exists(config_path) return;
+
+    config_content := read_entire_file(config_path);
+
+    ok, config := json_parse_string(config_content, Config);
+    if !ok {
+        log("Failed to parse config file!");
+        return;
+    }
+
+    server.local_modules = config.local_modules;
+    server.roots = config.roots;
+}
 
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
     log("Got %", request.method);
@@ -37,6 +63,22 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("Root Path: %", <<body.params.rootPath);
 
             server.project_root = <<body.params.rootPath;
+
+            load_config_file();
+
+            log("Server.local_modules: %", server.local_modules);
+            log("Server.roots: %", server.roots);
+
+            for root: server.roots {
+                absolute_path: string;
+                if starts_with(root, "/") {
+                    absolute_path = root;
+                } else {
+                    absolute_path = join(server.project_root, root, separator="/");
+                }
+
+                parse_file(join("file://", absolute_path), true);
+            }
 
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
@@ -74,6 +116,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             create_memory_file(file_path, content);
             
             parse_file(file_path);
+
+            log("File_path: %", file_path);
 
         case "textDocument/didChange";
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);

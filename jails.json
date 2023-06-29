@@ -1,16 +1,9 @@
 {
-    "workspaces": [
-        {
-            "entry": "/server/main.jai",
-            "local_modules": "/modules"
-        },
-        {
-            "entry": "/metaprogram/library.jai",
-            "local_modules": "/modules"
-        },
-        {
-            "entry": "/metaprogram_modules/jails.jai",
-            "local_modules": "/modules"
-        }
+    "local_modules": [
+        "modules"
+    ],
+    "roots": [
+        "server/main.jai",
+        "build.jai"
     ]
 }
