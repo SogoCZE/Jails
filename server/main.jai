@@ -3,7 +3,7 @@ VERSION :: "1.0.0";
 Args :: struct {
     verbose: bool;
     profile: bool;
-    jai_path: string = #run find_current_jai_path();
+    jai_path: string;
 }
 
 Server :: struct {
@@ -23,11 +23,65 @@ Server :: struct {
 
 server: Server;
 
+is_hex_digit :: (c: u32) -> bool {
+    return (c >= #char "a" && c <= #char "f") || (c >= #char "A" && c <= #char "F") || (c >= #char "0" && c <= #char "9");
+}
+
+decode_url :: (ostr: string) -> string {
+    str := copy_string(ostr);
+
+    i, j: int;
+    hex: [2]u8 = .[#char "0", #char "0"];
+
+    while i < str.count {
+
+        defer {
+            i += 1;
+            j += 1;
+        }
+
+        if str[i] != #char "%" || str[i+1] == 0 {
+            str[j] = str[i];
+            continue;
+        } 
+
+        if is_hex_digit(str[i+1]) && is_hex_digit(str[i+2]) {
+            hex[0] = str[i+1];
+            hex[1] = str[i+2];
+
+            str[j] = xx string_to_int(xx hex, 16);
+            i += 2;
+        }
+
+
+    }
+    str.count = j;
+
+    return str;
+}
+
+find_jai_path :: () -> string {
+    env_paths := to_string(getenv("path".data));
+    paths := split(env_paths, ";");
+    jai_path: string;
+
+    for path: paths {
+        if !contains(to_lower_copy(path), "jai") continue;
+        jai_path = path;
+        break;
+    }
+
+    jai_path = trim_right(replace(jai_path, "bin", ""), "/\\");
+
+    return jai_path;
+}
+
 load_config_file :: () {
     
     Config :: struct {
         local_modules: []string;
         roots: []string;
+        jai_path: string;
     }
     
     config_path := join(server.project_root, "/jails.json");
@@ -43,6 +97,10 @@ load_config_file :: () {
 
     server.local_modules = config.local_modules;
     server.roots = config.roots;
+
+    if config.jai_path.count > 0 {
+        server.args.jai_path = config.jai_path; 
+    }
 }
 
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
@@ -59,10 +117,10 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
-            log("Root URI: %", <<body.params.rootUri);
-            log("Root Path: %", <<body.params.rootPath);
+            log("Root URI: %", body.params.rootUri.*);
+            log("Root Path: %", body.params.rootPath.*);
 
-            server.project_root = <<body.params.rootPath;
+            server.project_root = body.params.rootPath.*;
 
             load_config_file();
 
@@ -163,6 +221,10 @@ main :: () {
         exit(1);
     }
 
+    if server.args.jai_path.count == 0 {
+         server.args.jai_path = find_jai_path();
+    }
+
     log("Args are %", server.args);
 
     init(*server.files);
@@ -188,28 +250,6 @@ main :: () {
     }
 
     log("Shutdown");
-}
-
-find_current_jai_path :: () -> string {
-    Compiler :: #import "Compiler";
-    options := get_build_options();
-
-    remove_trailing_slash :: (path: string) -> string {
-        result := path;
-        if path[path.count - 1] == #char "/" result.count -= 1;
-        return result;
-    }
-
-    for options.import_path {
-        if find_index_from_left(it, "jai/modules") != -1 {
-            modules_path := remove_trailing_slash(it);
-            base_path := remove_trailing_slash(path_strip_filename(modules_path));
-            log("% -> %", modules_path, base_path);
-            return base_path;
-        }
-    }
-
-    return "";
 }
 
 // @TODO: Move this to some utils file or something?

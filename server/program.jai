@@ -33,7 +33,17 @@ get_file :: (path: string) -> *Program_File {
     return file;
 }
 
+normalize_path :: (path: string) -> string {
+    normalized_path := decode_url(path);
 
+    #if OS == .WINDOWS {
+        normalized_path = replace(normalized_path, "file:///", "");
+    } else {
+        normalized_path = replace(normalized_path, "file://", "");
+    }
+
+    return normalized_path;
+}
 
 parse_file :: (path: string, force := false) {
     file, ok := table_find(*server.files, path);
@@ -42,14 +52,16 @@ parse_file :: (path: string, force := false) {
         return;
     }
 
+    log("Parse file: %", path);
+
     content := cast(string) get_memory_file(path);
     if content.count == 0 {
         exists: bool;
 
-        path_without_file_prefix := replace(path, "file://", "");
-        defer free(path_without_file_prefix);
+        normalized_path := normalize_path(path);
+        defer free(normalized_path);
 
-        content, exists = read_entire_file(path_without_file_prefix);
+        content, exists = read_entire_file(normalized_path);
         if !exists {
             // log_error("File % does not exists!", path_without_file_prefix);
             return;
@@ -70,7 +82,7 @@ parse_file :: (path: string, force := false) {
 
     parser: Parser(Node_Visit_Data);
     parser.user_data.file = file;
-    parser.user_data.path_without_filename = path_without_filename;
+    parser.user_data.path_without_filename = normalize_path(path_without_filename);
     parser.node_visit = node_visit;
     parser.lexer = *create_lexer(content, path);
 
@@ -119,6 +131,8 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     if node.kind == .DIRECTIVE_IMPORT {
 
         get_module_entry :: (module: string) -> string {
+            log("A: %", module);
+
             uri := join(module, "/module.jai");
             if file_exists(uri) return uri;
 
@@ -143,6 +157,8 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
             jai_modules := join(server.args.jai_path, "/modules");
 
+            log("Jai modules: %", jai_modules);
+
             entry := get_module_entry(join(jai_modules, module_name, separator="/"));
             if entry.count > 0 return entry;
 
@@ -155,8 +171,8 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         if _import.import_kind == {
             case .MODULE;
                 path = get_module(_import.module);
-                if path.count == 0 return;
                 log("Path: %", path);
+                if path.count == 0 return;
             case .FILE;
                 path = sprint("%/%", data.path_without_filename, _import.module); 
             case .DIR;
@@ -179,7 +195,9 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
     if node.kind == .DIRECTIVE_LOAD {
         _load := cast(*Directive_Load) node;
-        load_relative_path := sprint("%/%", data.path_without_filename, _load.file);
+
+        log("Load path: %", _load.file);
+        load_relative_path := join(data.path_without_filename, _load.file, separator="/");
         array_add(*data.file.loads, _load);
         parse_file(load_relative_path); // @TODO: Run this in another thread?
     }
