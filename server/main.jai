@@ -83,6 +83,8 @@ find_jai_path :: () -> string {
 
     jai_path = trim_right(replace(jai_path, "bin", ""), "/\\");
 
+    log("Jai path: %", jai_path);
+
     return jai_path;
 }
 

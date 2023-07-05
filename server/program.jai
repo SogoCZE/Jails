@@ -64,7 +64,7 @@ parse_file :: (raw_path: string, force := false) {
         return;
     }
 
-    log("Parse file: %", path);
+    // log("Parse file: %", path);
 
     content := cast(string) get_memory_file(path);
     if content.count == 0 {
@@ -75,7 +75,7 @@ parse_file :: (raw_path: string, force := false) {
 
         content, exists = read_entire_file(path);
         if !exists {
-            log_error("File % does not exists!", path);
+            // log_error("File % does not exists!", path);
             return;
         }
 
@@ -143,8 +143,6 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     if node.kind == .DIRECTIVE_IMPORT {
 
         get_module_entry :: (module: string) -> string {
-            log("A: %", module);
-
             uri := join(module, "/module.jai");
             if file_exists(uri) return uri;
 
@@ -169,8 +167,6 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 
             jai_modules := join(server.args.jai_path, "/modules");
 
-            log("Jai modules: %", jai_modules);
-
             entry := get_module_entry(join(jai_modules, module_name, separator="/"));
             if entry.count > 0 return entry;
 
@@ -183,7 +179,6 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         if _import.import_kind == {
             case .MODULE;
                 path = get_module(_import.module);
-                log("Path: %", path);
                 if path.count == 0 return;
             case .FILE;
                 path = sprint("%/%", data.path_without_filename, _import.module); 
@@ -208,7 +203,6 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     if node.kind == .DIRECTIVE_LOAD {
         _load := cast(*Directive_Load) node;
 
-        log("Load path: %", _load.file);
         load_relative_path := join(data.path_without_filename, _load.file, separator="/");
         array_add(*data.file.loads, _load);
         parse_file(load_relative_path); // @TODO: Run this in another thread?
@@ -302,7 +296,7 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
             if decl.const {
                 if !is_child_of_block(decl_scope, from_scope) continue;
             } else {
-                log("Scopes, % ?? %", decl_scope, from_scope);
+                // log("Scopes, % ?? %", decl_scope, from_scope);
                 if decl_scope != from_scope continue;
             }
         }
@@ -421,7 +415,7 @@ is_child_of_block :: (block: *Block, node: *Node) -> bool {
 
     current_node := node;
 
-    log("Last %", current_node.*);
+    // log("Last %", current_node.*);
 
     if current_node == block return true;
 
@@ -460,7 +454,6 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     lsp_location.range.start.character = xx location.c0;
     lsp_location.range.end.line = xx location.l1;
     lsp_location.range.end.character = xx location.c1;
-    log("Loc: %, URI: %", location.file, lsp_location.uri);
     return lsp_location;
 }
 
