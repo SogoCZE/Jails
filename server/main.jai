@@ -23,41 +23,43 @@ Server :: struct {
 
 server: Server;
 
+// @TODO: move this to somewhere else
 is_hex_digit :: (c: u32) -> bool {
     return (c >= #char "a" && c <= #char "f") || (c >= #char "A" && c <= #char "F") || (c >= #char "0" && c <= #char "9");
 }
 
-decode_url :: (ostr: string) -> string {
-    str := copy_string(ostr);
+// @TODO: move this to somewhere else
+decode_url :: (url: string) -> string {
+    out_url := copy_string(url);
 
     i, j: int;
     hex: [2]u8 = .[#char "0", #char "0"];
 
-    while i < str.count {
+    while i < out_url.count {
 
         defer {
             i += 1;
             j += 1;
         }
 
-        if str[i] != #char "%" || str[i+1] == 0 {
-            str[j] = str[i];
+        if out_url[i] != #char "%" || out_url[i+1] == 0 {
+            out_url[j] = out_url[i];
             continue;
         } 
 
-        if is_hex_digit(str[i+1]) && is_hex_digit(str[i+2]) {
-            hex[0] = str[i+1];
-            hex[1] = str[i+2];
+        if is_hex_digit(out_url[i+1]) && is_hex_digit(out_url[i+2]) {
+            hex[0] = out_url[i+1];
+            hex[1] = out_url[i+2];
 
-            str[j] = xx string_to_int(xx hex, 16);
+            out_url[j] = xx string_to_int(xx hex, 16);
             i += 2;
         }
 
 
     }
-    str.count = j;
+    out_url.count = j;
 
-    return str;
+    return out_url;
 }
 
 find_jai_path :: () -> string {

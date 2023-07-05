@@ -28,7 +28,7 @@ reset_file :: (using file: Program_File) {
 }
 
 get_file :: (path: string) -> *Program_File {
-    file, ok := table_find(*server.files, path);
+    file, ok := table_find(*server.files, normalize_path(path));
     if !ok return null;
     return file;
 }
@@ -42,10 +42,22 @@ normalize_path :: (path: string) -> string {
         normalized_path = replace(normalized_path, "file://", "");
     }
 
+    path_overwrite_separators(normalized_path, #char "/");
+
     return normalized_path;
 }
 
-parse_file :: (path: string, force := false) {
+path_to_lsp_path :: (path: string) -> string {
+    #if OS == .WINDOWS {
+        return join("file:///", path);
+    } else {
+        return join("file://", path);
+    }
+}
+
+parse_file :: (raw_path: string, force := false) {
+    path := normalize_path(raw_path);
+
     file, ok := table_find(*server.files, path);
     if !force && ok {
         // log("Skipping % because it already exists", path);
@@ -58,12 +70,12 @@ parse_file :: (path: string, force := false) {
     if content.count == 0 {
         exists: bool;
 
-        normalized_path := normalize_path(path);
-        defer free(normalized_path);
+        // normalized_path := normalize_path(path);
+        // defer free(normalized_path);
 
-        content, exists = read_entire_file(normalized_path);
+        content, exists = read_entire_file(path);
         if !exists {
-            // log_error("File % does not exists!", path_without_file_prefix);
+            log_error("File % does not exists!", path);
             return;
         }
 
@@ -443,11 +455,12 @@ lsp_location_to_node_location :: (location: LSP_Position, file := "") -> Node.Lo
 
 node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     lsp_location: LSP_Location;
-    lsp_location.uri = location.file;
+    lsp_location.uri = path_to_lsp_path(location.file);
     lsp_location.range.start.line = xx location.l0;
     lsp_location.range.start.character = xx location.c0;
     lsp_location.range.end.line = xx location.l1;
     lsp_location.range.end.character = xx location.c1;
+    log("Loc: %, URI: %", location.file, lsp_location.uri);
     return lsp_location;
 }
 
