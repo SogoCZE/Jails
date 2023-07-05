@@ -63,29 +63,21 @@ decode_url :: (url: string) -> string {
 }
 
 find_jai_path :: () -> string {
-    env_paths := to_string(getenv("PATH".data));
-
-    sep: u8;
+    raw_path: string;
     #if OS == .WINDOWS {
-        sep = #char ";";
+        _, raw_path = run_command("where.exe", "jai", capture_and_return_output=true);
+        path_overwrite_separators(raw_path, #char "/");
     } else {
-        sep = #char ":";
+        _, raw_path = run_command("readlink", "-f", "$(where jai)", capture_and_return_output=true);
     }
 
-    paths := split(env_paths, sep);
-    jai_path: string;
+    raw_path = trim(raw_path);
+    path := split(raw_path, "/");
 
-    for path: paths {
-        if !contains(to_lower_copy(path), "jai") continue;
-        jai_path = path;
-        break;
-    }
+    pop(*path);
+    pop(*path);
 
-    jai_path = trim_right(replace(jai_path, "bin", ""), "/\\");
-
-    log("Jai path: %", jai_path);
-
-    return jai_path;
+    return join(..path, separator="/");
 }
 
 load_config_file :: () {

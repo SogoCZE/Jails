@@ -38,11 +38,10 @@ normalize_path :: (path: string) -> string {
 
     #if OS == .WINDOWS {
         normalized_path = replace(normalized_path, "file:///", "");
+        path_overwrite_separators(normalized_path, #char "/");
     } else {
         normalized_path = replace(normalized_path, "file://", "");
     }
-
-    path_overwrite_separators(normalized_path, #char "/");
 
     return normalized_path;
 }
