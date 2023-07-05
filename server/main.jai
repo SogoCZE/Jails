@@ -63,8 +63,16 @@ decode_url :: (url: string) -> string {
 }
 
 find_jai_path :: () -> string {
-    env_paths := to_string(getenv("path".data));
-    paths := split(env_paths, ";");
+    env_paths := to_string(getenv("PATH".data));
+
+    sep: u8;
+    #if OS == .WINDOWS {
+        sep = #char ";";
+    } else {
+        sep = #char ":";
+    }
+
+    paths := split(env_paths, sep);
     jai_path: string;
 
     for path: paths {

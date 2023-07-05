@@ -240,7 +240,7 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
     for server.files {
         // This ensure we take into account only files that are being loaded or imported...
         if file.path != it.path {
-            
+
             is_avaiable_from_one_of_the_parents: bool;
 
             for file_that_load_this_file: files_that_load_this_file {
