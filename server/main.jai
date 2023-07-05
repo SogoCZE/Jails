@@ -68,9 +68,12 @@ find_jai_path :: () -> string {
         _, raw_path = run_command("where.exe", "jai", capture_and_return_output=true);
         path_overwrite_separators(raw_path, #char "/");
     } else {
-        _, raw_path = run_command("readlink", "-f", "$(where jai)", capture_and_return_output=true);
+        _, raw_path = run_command("whereis", "-q", "jai", capture_and_return_output=true, print_captured_output=false);
     }
 
+    // @TODO: error that we cant find jai path
+    if raw_path.count == 0 return "";
+    
     raw_path = trim(raw_path);
     path := split(raw_path, "/");
 
