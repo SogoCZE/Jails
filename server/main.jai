@@ -67,18 +67,27 @@ find_jai_path :: () -> string {
     #if OS == .WINDOWS {
         _, raw_path = run_command("where.exe", "jai", capture_and_return_output=true);
         path_overwrite_separators(raw_path, #char "/");
+        raw_path = trim(raw_path);
     } else {
-        _, raw_path = run_command("whereis", "-q", "jai", capture_and_return_output=true, print_captured_output=false);
+        _, raw_path = run_command("whereis", "-q", "jai", capture_and_return_output=true);
+        raw_path = trim(raw_path);
+
+        BUFFER_SIZE :: 4096;  
+        buf: [BUFFER_SIZE] u8;
+
+        length := readlink(to_c_string(raw_path), buf.data, BUFFER_SIZE);
+        if length > 0 {
+            raw_path = to_string(buf.data);
+        }
     }
 
     // @TODO: error that we cant find jai path
     if raw_path.count == 0 return "";
     
-    raw_path = trim(raw_path);
     path := split(raw_path, "/");
 
-    pop(*path);
-    pop(*path);
+    pop(*path); // jai.exe or jai
+    pop(*path); // bin
 
     return join(..path, separator="/");
 }

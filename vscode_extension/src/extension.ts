@@ -1,4 +1,3 @@
-import path = require("path");
 import { ExtensionContext, window } from "vscode";
 
 import {
