@@ -151,7 +151,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                     absolute_path = join(server.project_root, root, separator="/");
                 }
 
-                parse_file(join("file://", absolute_path), true);
+                absolute_path = normalize_path(absolute_path);
+                parse_file(absolute_path, true);
             }
 
             to_send: LSP_Result_Initialize;
@@ -173,9 +174,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
-            file_path := body.params.textDocument.uri;
+            file_path := normalize_path(body.params.textDocument.uri);
 
-            parse_file(file_path);
+            parse_file(file_path, true);
 
         case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document);
@@ -184,7 +185,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
-            file_path := body.params.textDocument.uri;
+            file_path := normalize_path(body.params.textDocument.uri);
             content := body.params.textDocument.text;
 
             create_memory_file(file_path, content);
@@ -200,9 +201,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
-            file_path := body.params.textDocument.uri;
+            file_path := normalize_path(body.params.textDocument.uri);
             edit_memory_file(file_path, body.params.contentChanges);
-
             parse_file(file_path, true);
 
         case "textDocument/didClose";
@@ -211,8 +211,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 log_error("Unable to parse textDocument/dicClose message");
                 return;
             }
-            
-            file_path := body.params.textDocument.uri;
+
+            file_path := normalize_path(body.params.textDocument.uri);
             remove_memory_file(file_path);
 
         case "textDocument/completion";
