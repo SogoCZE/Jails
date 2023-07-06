@@ -28,7 +28,7 @@ reset_file :: (using file: Program_File) {
 }
 
 get_file :: (path: string) -> *Program_File {
-    file, ok := table_find(*server.files, normalize_path(path));
+    file, ok := table_find(*server.files, path);
     if !ok return null;
     return file;
 }
@@ -203,10 +203,11 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     }
 }
 
-get_node_by_location :: (file: *Program_File, location: Node.Location) -> *Node {
+get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
     nearest_node: *Node;
 
     for node: file.nodes {
+        if filter != .UNINITIALIZATED && node.kind != filter continue;
         if !contains(node.location, location) continue;
 
         // If we are not smaller than so far nearest node we skip.
@@ -219,8 +220,9 @@ get_node_by_location :: (file: *Program_File, location: Node.Location) -> *Node 
     return nearest_node;
 }
 
-get_declarations :: (file: *Program_File, name: string, from_scope: *Block = null) -> []*Declaration {
+get_declarations :: (file: *Program_File, name: string, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
     unfiltered_decls: [..]*Declaration;
+    array_free(unfiltered_decls);
 
     files_that_load_this_file := get_files_that_load(file);
     defer array_free(files_that_load_this_file);
@@ -256,12 +258,12 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
     decls: [..]*Declaration;
 
     // Procedure or Struct params
-    if from_scope && from_scope.parent {
+    if from_block && from_block.parent {
         
-        if from_scope.parent.kind == {
+        if from_block.parent.kind == {
 
             case .PROCEDURE;
-                proc := cast(*Procedure) from_scope.parent;
+                proc := cast(*Procedure) from_block.parent;
         
                 for arg: proc.arguments {
                     if arg.kind != .DECLARATION continue;
@@ -270,7 +272,7 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
                 }  
 
             case .STRUCT;
-                _struct := cast(*Struct) from_scope.parent;
+                _struct := cast(*Struct) from_block.parent;
 
                 for arg: _struct.polymorphic_arguments {
                     if arg.kind != .DECLARATION continue;
@@ -283,15 +285,100 @@ get_declarations :: (file: *Program_File, name: string, from_scope: *Block = nul
     }
 
     for decl: unfiltered_decls {
-        decl_scope := get_node_nearest_block(decl);
+        decl_block := get_node_nearest_block(decl);
         global := is_global(decl);
 
         if !global {
             if decl.const {
-                if !is_child_of_block(decl_scope, from_scope) continue;
+                if !is_child_of_block(decl_block, from_block) continue;
             } else {
-                // log("Scopes, % ?? %", decl_scope, from_scope);
-                if decl_scope != from_scope continue;
+                // log("Scopes, % ?? %", decl_block, from_block);
+                if decl_block != from_block continue;
+                if from_loc && from_loc.l0 < decl.location.l0 continue;
+            }
+        }
+
+        array_add(*decls, decl);   
+    }
+
+    return decls;
+}
+
+// @TODO: this is copypasta of the procedure get_declarations - we need to split it more and reuse it. 
+// Here we dont want to find specific decl by name but filter all avaiable decls in provided context.
+get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
+    unfiltered_decls: [..]*Declaration;
+
+    files_that_load_this_file := get_files_that_load(file);
+    defer array_free(files_that_load_this_file);
+
+    for server.files {
+        // This ensure we take into account only files that are being loaded or imported...
+        if file.path != it.path {
+
+            is_avaiable_from_one_of_the_parents: bool;
+
+            for file_that_load_this_file: files_that_load_this_file {
+                already_checked: [..]string;
+                defer array_free(already_checked);
+    
+                if !is_avaiable_from(file_that_load_this_file, it.path, *already_checked) continue;
+    
+                is_avaiable_from_one_of_the_parents = true;
+                break;
+            }
+    
+            already_checked: [..]string;
+            defer array_free(already_checked);
+    
+            if !is_avaiable_from_one_of_the_parents && !is_avaiable_from(file, it.path, *already_checked) continue;
+        } 
+
+        for decl: it.declarations {
+            array_add(*unfiltered_decls, decl);
+        }
+    }
+
+    decls: [..]*Declaration;
+
+    // Procedure or Struct params
+    if from_block && from_block.parent {
+        
+        if from_block.parent.kind == {
+
+            case .PROCEDURE;
+                proc := cast(*Procedure) from_block.parent;
+        
+                for arg: proc.arguments {
+                    if arg.kind != .DECLARATION continue;
+                    decl := cast(*Declaration) arg;
+                    array_add(*decls, decl);   
+                }  
+
+            case .STRUCT;
+                _struct := cast(*Struct) from_block.parent;
+
+                for arg: _struct.polymorphic_arguments {
+                    if arg.kind != .DECLARATION continue;
+                    decl := cast(*Declaration) arg;
+                    array_add(*decls, decl);   
+                }  
+            
+        }
+
+    }
+
+    for decl: unfiltered_decls {
+        decl_block := get_node_nearest_block(decl);
+        global := is_global(decl);
+
+        if !global {
+            if decl.const {
+                if !is_child_of_block(decl_block, from_block) continue;
+            } else {
+                // log("Scopes, % ?? %", decl_block, from_block);
+                if decl_block != from_block continue;
+                if from_loc && from_loc.l0 < decl.location.l0 continue;
             }
         }
 
@@ -350,7 +437,8 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
     
     for file.loads {
         load_path := trim_right(path_strip_filename(file.path), "/");
-        load_relative_path := sprint("%/%", load_path, it.file);
+        load_relative_path := join(load_path, "/", it.file);
+        defer free(load_relative_path);
 
         if array_find(already_checked.*, load_relative_path) continue;
         array_add(already_checked, load_relative_path);
@@ -370,13 +458,13 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
     return loaded;
 }
 
-get_declaration :: (file: *Program_File, name: string, from_scope: *Block = null) -> *Declaration {
-    decls := get_declarations(file, name, from_scope);
+get_declaration :: (file: *Program_File, name: string, from_block: *Block = null) -> *Declaration {
+    decls := get_declarations(file, name, from_block);
     if decls.count == 0 return null;
     return decls[0];
 }
 
-get_node_nearest_block :: (node: *Node, dd := true) -> *Block {
+get_node_nearest_block :: (node: *Node) -> *Block {
     current_node := node;
     current_block: *Block;
 
@@ -472,7 +560,7 @@ get_path_of_binary_operation :: (root: *Node) -> []*Node, *Binary_Operation {
 }
 
 // @InComplete
-resolve_struct_member_by_path :: (file: *Program_File, path: []*Node, from_scope: *Block = null) -> *Declaration {
+resolve_struct_member_by_path :: (file: *Program_File, path: []*Node, from_block: *Block = null) -> *Declaration {
     curr_decl: *Declaration;
 
     base := path[0];
@@ -480,7 +568,7 @@ resolve_struct_member_by_path :: (file: *Program_File, path: []*Node, from_scope
     
     base_ident := cast(*Identifier) base; 
 
-    curr_decl = get_declaration(file, base_ident.name, from_scope); // @TODO: Handle more of them
+    curr_decl = get_declaration(file, base_ident.name, from_block); // @TODO: Handle more of them
     curr_block: *Block;
 
     for part: path {
@@ -529,14 +617,14 @@ get_decl_type_ident :: (decl: *Declaration) -> *Identifier {
 }
 
 // @InComplete
-get_decl_type :: (file: *Program_File, decl: *Declaration, from_scope: *Block = null) -> *Node {
+get_decl_type :: (file: *Program_File, decl: *Declaration, from_block: *Block = null) -> *Node {
     if decl.type_inst {
 
         if decl.type_inst.kind == {
 
             case .IDENTIFIER;
                 ident := cast(*Identifier) decl.type_inst;
-                type_inst_decl := get_declaration(file, ident.name, from_scope);
+                type_inst_decl := get_declaration(file, ident.name, from_block);
                 if !type_inst_decl return null;
 
                 return get_decl_type(file, type_inst_decl);
@@ -562,7 +650,7 @@ get_decl_type :: (file: *Program_File, decl: *Declaration, from_scope: *Block = 
             if literal.struct_literal_info.type.kind == .IDENTIFIER {
                 ident := cast(*Identifier) literal.struct_literal_info.type;
 
-                decl := get_declaration(file, ident.name, from_scope);
+                decl := get_declaration(file, ident.name, from_block);
                 if !decl return null;
 
                 return get_decl_type(file, decl);
@@ -574,7 +662,7 @@ get_decl_type :: (file: *Program_File, decl: *Declaration, from_scope: *Block = 
     return null;
 }
 
-get_struct_literal_type :: (file: *Program_File, literal: *Literal, from_scope: *Block = null) -> *Node {
+get_struct_literal_type :: (file: *Program_File, literal: *Literal, from_block: *Block = null) -> *Node {
     if literal.value_type != .STRUCT return null;
     
     if literal.struct_literal_info.type {
@@ -591,7 +679,7 @@ get_struct_literal_type :: (file: *Program_File, literal: *Literal, from_scope: 
 
     
     if binary_op.left.kind == .IDENTIFIER {
-        decl := get_declaration(file, (cast(*Identifier)binary_op.left).name, from_scope);
+        decl := get_declaration(file, (cast(*Identifier)binary_op.left).name, from_block);
         if !decl return null;
         return get_decl_type_ident(decl);
     }

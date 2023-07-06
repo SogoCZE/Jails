@@ -1,7 +1,7 @@
 
 handle_goto :: (request: LSP_Request_Message_Definition) {
-    file_path := request.params.textDocument.uri;
-    file_path_without_uri_prefix := replace(file_path, "file://", "");
+    file_path := normalize_path(request.params.textDocument.uri);
+    defer free(file_path);
 
     file := get_file(file_path);
     if !file {
@@ -20,18 +20,18 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    cursor_block := get_node_nearest_block(node);
-
     if node.kind != .IDENTIFIER {
         lsp_respond(request.id, null);
         return;
     }
 
+    cursor_block := get_node_nearest_block(node);
     ident := cast(*Identifier) node;
 
     log("Clicked node: % (%)", node.kind, ident.name);
 
-    decls := get_declarations(file, ident.name, cursor_block);
+    decls := get_declarations(file, ident.name, cursor_block, *ident.location);
+    defer array_free(decls);
 
     locations: [..]LSP_Location;
     defer array_free(locations);

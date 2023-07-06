@@ -700,6 +700,7 @@ lsp_log :: (message : string, data : *void, info : Log_Info) {
 
 lsp_send :: (data: $T) {
     body := json_write_string(data);
+    defer free(body);
     print("Content-Length: %\r\n\r\n%", body.count, body);
 }
 

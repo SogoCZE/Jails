@@ -263,6 +263,8 @@ main :: () {
         }
 
         handle_request(request, body);
+
+        // reset_temporary_storage();
     }
 
     log("Shutdown");
