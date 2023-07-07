@@ -1,3 +1,5 @@
+
+
 handle_completitions :: (request: LSP_Request_Message_Completion) {
     file_path := normalize_path(request.params.textDocument.uri);
 
@@ -26,11 +28,16 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
         lsp_loc := node_location_to_lsp_location(decl.location);
 
+        procedure_header_builder: String_Builder;
+        init_string_builder(*procedure_header_builder);        
+        render_procedure_header(*procedure_header_builder, xx decl.expression); // @Memory @TODO: we need to free this afterwards!!
+        procedure_header_preview := builder_to_string(*procedure_header_builder);
+
         array_add(*completions, .{
             label=decl.name,
             kind=xx LSP_Completion_Item.Kind.Function,
             insertText=tprint("%()", decl.name),
-            // labelDetails = .{ description=peeked_procedure }
+            labelDetails = .{ description=procedure_header_preview }
         });
     }
 

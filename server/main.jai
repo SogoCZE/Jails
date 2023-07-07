@@ -304,6 +304,7 @@ array_reverse :: (array: []$T) {
 #load "lsp_interface.jai";
 #load "program.jai";
 #load "memory_files.jai";
+#load "render.jai";
 
 #load "completition.jai";
 #load "goto.jai";
