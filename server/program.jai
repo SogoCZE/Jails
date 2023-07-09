@@ -9,10 +9,13 @@ Program_File :: struct {
     loads: [..]*Directive_Load;
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
+    resolved_identifiers: Table(*Node, []*Declaration);
+    linked_files: []*Program_File; // @TODO: this is probably stupid name for this!
 }
 
 init_file :: (using file: Program_File) {
     init(*declarations);
+    init(*resolved_identifiers);
 }
 
 deinit_file :: (using file: Program_File) {
@@ -95,6 +98,10 @@ parse_file :: (path: string, force := false) {
     while !end(parser.lexer) {
         parse(*parser, null);
     }
+
+    file.linked_files = get_file_links(file);
+    
+    resolve_identifiers(file);
 
     // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
 }
@@ -203,6 +210,29 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     }
 }
 
+resolve_identifiers :: (file: *Program_File) {
+    log("Resolving identifiers for file: %", file.path);
+
+    for node: file.nodes {
+        if node.kind == .IDENTIFIER {
+            ident := cast(*Identifier) node;
+            // log("Ident: %", ident.name);
+
+            block := get_node_nearest_block(ident);
+            decls := get_declarations(file, ident.name, block, *ident.location);
+            if decls.count < 1 {
+                // log_error("Did not find any decl for '%'!", ident.name);
+                continue;
+            }
+
+            table_add(*file.resolved_identifiers, ident, decls);
+        }
+
+    }
+
+    log("Resolved identifiers for: %", file.path);
+}
+
 get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
     nearest_node: *Node;
 
@@ -220,10 +250,9 @@ get_node_by_location :: (file: *Program_File, location: Node.Location, filter: N
     return nearest_node;
 }
 
-get_declarations :: (file: *Program_File, name: string, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
-    unfiltered_decls: [..]*Declaration;
-    array_free(unfiltered_decls);
-
+get_file_links :: (file: *Program_File) -> []*Program_File {
+    files: [..]*Program_File;
+    
     files_that_load_this_file := get_files_that_load(file);
     defer array_free(files_that_load_this_file);
 
@@ -249,14 +278,15 @@ get_declarations :: (file: *Program_File, name: string, from_block: *Block = nul
             if !is_avaiable_from_one_of_the_parents && !is_avaiable_from(file, it.path, *already_checked) continue;
         } 
 
-        decls := table_find_multiple(*it.declarations, name);
-        for decl: decls {
-            array_add(*unfiltered_decls, decl);
-        }
+        array_add(*files, it);
     }
 
-    decls: [..]*Declaration;
+    return files;
+}
 
+get_declarations :: (file: *Program_File, name: string, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
+    decls: [..]*Declaration;
+    
     // Procedure or Struct params
     if from_block && from_block.parent {
         
@@ -284,21 +314,25 @@ get_declarations :: (file: *Program_File, name: string, from_block: *Block = nul
 
     }
 
-    for decl: unfiltered_decls {
-        decl_block := get_node_nearest_block(decl);
-        global := is_global(decl);
+    for linked_file: file.linked_files {
+        unfiltered_decls := table_find_multiple(*linked_file.declarations, name);       
 
-        if !global {
-            if decl.const {
-                if !is_child_of_block(decl_block, from_block) continue;
-            } else {
-                // log("Scopes, % ?? %", decl_block, from_block);
-                if decl_block != from_block continue;
-                if from_loc && from_loc.l0 < decl.location.l0 continue;
+        for decl: unfiltered_decls {
+            decl_block := get_node_nearest_block(decl);
+            global := is_global(decl);
+
+            if !global {
+                if decl.const {
+                    if !is_child_of_block(decl_block, from_block) continue;
+                } else {
+                    // log("Scopes, % ?? %", decl_block, from_block);
+                    if decl_block != from_block continue;
+                    if from_loc && from_loc.l0 < decl.location.l0 continue;
+                }
             }
-        }
 
-        array_add(*decls, decl);   
+            array_add(*decls, decl);   
+        }
     }
 
     return decls;
@@ -307,38 +341,6 @@ get_declarations :: (file: *Program_File, name: string, from_block: *Block = nul
 // @TODO: this is copypasta of the procedure get_declarations - we need to split it more and reuse it. 
 // Here we dont want to find specific decl by name but filter all avaiable decls in provided context.
 get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
-    unfiltered_decls: [..]*Declaration;
-
-    files_that_load_this_file := get_files_that_load(file);
-    defer array_free(files_that_load_this_file);
-
-    for server.files {
-        // This ensure we take into account only files that are being loaded or imported...
-        if file.path != it.path {
-
-            is_avaiable_from_one_of_the_parents: bool;
-
-            for file_that_load_this_file: files_that_load_this_file {
-                already_checked: [..]string;
-                defer array_free(already_checked);
-    
-                if !is_avaiable_from(file_that_load_this_file, it.path, *already_checked) continue;
-    
-                is_avaiable_from_one_of_the_parents = true;
-                break;
-            }
-    
-            already_checked: [..]string;
-            defer array_free(already_checked);
-    
-            if !is_avaiable_from_one_of_the_parents && !is_avaiable_from(file, it.path, *already_checked) continue;
-        } 
-
-        for decl: it.declarations {
-            array_add(*unfiltered_decls, decl);
-        }
-    }
-
     decls: [..]*Declaration;
 
     // Procedure or Struct params
@@ -368,21 +370,25 @@ get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_lo
 
     }
 
-    for decl: unfiltered_decls {
-        decl_block := get_node_nearest_block(decl);
-        global := is_global(decl);
+    for linked_file: file.linked_files {
+        
+        for decl: linked_file.declarations {
+            decl_block := get_node_nearest_block(decl);
+            global := is_global(decl);
 
-        if !global {
-            if decl.const {
-                if !is_child_of_block(decl_block, from_block) continue;
-            } else {
-                // log("Scopes, % ?? %", decl_block, from_block);
-                if decl_block != from_block continue;
-                if from_loc && from_loc.l0 < decl.location.l0 continue;
+            if !global {
+                if decl.const {
+                    if !is_child_of_block(decl_block, from_block) continue;
+                } else {
+                    // log("Scopes, % ?? %", decl_block, from_block);
+                    if decl_block != from_block continue;
+                    if from_loc && from_loc.l0 < decl.location.l0 continue;
+                }
             }
+
+            array_add(*decls, decl);   
         }
 
-        array_add(*decls, decl);   
     }
 
     return decls;

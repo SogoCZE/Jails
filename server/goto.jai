@@ -25,18 +25,20 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    cursor_block := get_node_nearest_block(node);
     ident := cast(*Identifier) node;
 
     log("Clicked node: % (%)", node.kind, ident.name);
 
-    decls := get_declarations(file, ident.name, cursor_block, *ident.location);
-    defer array_free(decls);
+    decls, ok := table_find(*file.resolved_identifiers, ident);
+    if !ok {
+        lsp_respond(request.id, null);
+        return;
+    }
 
-    locations: [..]LSP_Location;
+    locations := NewArray(decls.count, LSP_Location);
     defer array_free(locations);
 
-    for decls array_add(*locations, node_location_to_lsp_location(it.location));
+    for decls locations[it_index] = node_location_to_lsp_location(it.location);
 
     lsp_respond(request.id, locations);
 }
