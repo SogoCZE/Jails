@@ -30,7 +30,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
         procedure_header_builder: String_Builder;
         init_string_builder(*procedure_header_builder);        
-        render_procedure_header(*procedure_header_builder, xx decl.expression); // @Memory @TODO: we need to free this afterwards!!
+        ast_print_procedure_header(*procedure_header_builder, xx decl.expression); // @Memory @TODO: we need to free this afterwards!!
         procedure_header_preview := builder_to_string(*procedure_header_builder);
 
         array_add(*completions, .{
