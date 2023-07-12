@@ -541,15 +541,23 @@ LSP_Completion_Item :: struct {
     detail: string;
     insertText: string;
     documentation: string;
+    deprecated: bool;
 
     labelDetails: struct {
         detail: string;
         description: string;
     };
 
+    Insert_Text_Format :: enum u8 {
+        PLAIN_TEXT :: 1;
+        SNIPPET :: 2;
+    }
+
+    insertTextFormat: u8 = xx Insert_Text_Format.PLAIN_TEXT;
+
     kind: u8;
 
-    Kind: enum u8 {
+    Kind :: enum u8 {
         Text :: 1;
         Method :: 2;
         Function :: 3;

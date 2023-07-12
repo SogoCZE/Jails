@@ -565,129 +565,62 @@ get_path_of_binary_operation :: (root: *Node) -> []*Node, *Binary_Operation {
     return path, op;
 }
 
-// @InComplete
-resolve_struct_member_by_path :: (file: *Program_File, path: []*Node, from_block: *Block = null) -> *Declaration {
-    curr_decl: *Declaration;
+get_identifier_decl :: (file: *Program_File, ident: *Identifier) -> []*Declaration {
+    decls, ok := table_find(*file.resolved_identifiers, ident);
+    if !ok return .[];
+    return decls;
+}
 
-    base := path[0];
-    if base.kind != .IDENTIFIER return null;
-    
-    base_ident := cast(*Identifier) base; 
+get_identifier_type :: (file: *Program_File, ident: *Identifier) -> *Node {
+    current_ident: *Identifier = ident;
 
-    curr_decl = get_declaration(file, base_ident.name, from_block); // @TODO: Handle more of them
-    curr_block: *Block;
+    while true {
+        ident_decls := get_identifier_decl(file, current_ident);
+        if ident_decls.count == 0 return null;
+        decl := ident_decls[0];
 
-    for part: path {
-        if it_index == 0 continue; // Skip the base
-        if part.kind != .IDENTIFIER break;
+        if decl.expression {
 
-        part_ident := cast(*Identifier) part;
-        decl_type := get_decl_type(file, curr_decl, curr_block);
-        if !decl_type break;
+            if decl.expression.kind == .STRUCT || decl.expression.kind == .ENUM || decl.expression.kind == .UNION {
+                return decl.expression;
+            }
 
-        if decl_type.kind == .STRUCT {
-            _struct := cast(*Struct) decl_type;
-            if !_struct.block return null;
-            curr_block = _struct.block;
+            // @TODO:
+            break;
+        }
 
-            for _struct.block.members {
-                if it.kind != .DECLARATION continue; // Skip all
+        if decl.type_inst {
 
-                member_decl := cast(*Declaration) it;
-
-                if member_decl.name == part_ident.name {
-                    curr_decl = member_decl;
-                    break;
-                }
+            if decl.type_inst.kind == .IDENTIFIER {
+                current_ident = xx decl.type_inst;
+                continue;
             }
 
         }
-    }
 
-    return curr_decl;
-}
-
-// @InComplete
-get_decl_type_ident :: (decl: *Declaration) -> *Identifier {
-
-    // @TODO: Path... decl: Entity.Stats;
-    if decl.type_inst && decl.type_inst.kind == .IDENTIFIER {
-        return xx decl.type_inst;
-    }
-
-    if decl.expression && decl.expression.kind == .IDENTIFIER {
-        return xx decl.expression;
-    }
+        break;
+    }   
 
     return null;
 }
 
-// @InComplete
-get_decl_type :: (file: *Program_File, decl: *Declaration, from_block: *Block = null) -> *Node {
+get_decl_type :: (decl: *Declaration) -> *Identifier {
     if decl.type_inst {
 
-        if decl.type_inst.kind == {
-
-            case .IDENTIFIER;
-                ident := cast(*Identifier) decl.type_inst;
-                type_inst_decl := get_declaration(file, ident.name, from_block);
-                if !type_inst_decl return null;
-
-                return get_decl_type(file, type_inst_decl);
-
+        if decl.type_inst.kind == .IDENTIFIER {
+            return xx decl.type_inst;
         }
-
-        // @TODO
-    }
-
-    if !decl.expression return null;
-
-    if decl.expression.kind == {
-        
-        case .STRUCT;
-            return decl.expression;
-
-        case .LITERAL;
-            literal := cast(*Literal) decl.expression;
-
-            if literal.value_type != .STRUCT return null;
-            if !literal.struct_literal_info.type return null;
-
-            if literal.struct_literal_info.type.kind == .IDENTIFIER {
-                ident := cast(*Identifier) literal.struct_literal_info.type;
-
-                decl := get_declaration(file, ident.name, from_block);
-                if !decl return null;
-
-                return get_decl_type(file, decl);
-            }
-
 
     }
 
     return null;
 }
 
-get_struct_literal_type :: (file: *Program_File, literal: *Literal, from_block: *Block = null) -> *Node {
-    if literal.value_type != .STRUCT return null;
-    
-    if literal.struct_literal_info.type {
-        if literal.struct_literal_info.type.kind != .IDENTIFIER return null; // @TODO: Entity.Stats.{speed=20};
-        literal_type_ident := cast(*Identifier) literal.struct_literal_info.type;
-        return literal_type_ident;
-    }
-
-    // If the struct is infer we need to find type from decl
-    if !literal.parent || literal.parent.kind != .BINARY_OPERATION return null;
-    binary_op := cast(*Binary_Operation) literal.parent;
-
-    if binary_op.operation != .ASSING return null;
-
-    
-    if binary_op.left.kind == .IDENTIFIER {
-        decl := get_declaration(file, (cast(*Identifier)binary_op.left).name, from_block);
-        if !decl return null;
-        return get_decl_type_ident(decl);
+get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
+    for member: block.members {
+        if member.kind != .DECLARATION continue;
+        decl := cast(*Declaration) member;
+        if decl.name == ident.name return xx member;
     }
 
     return null;

@@ -3,40 +3,74 @@
 handle_completitions :: (request: LSP_Request_Message_Completion) {
     file_path := normalize_path(request.params.textDocument.uri);
 
+    _exit :: () #expand {
+        `lsp_respond(request.id, null);
+        `return;
+    }
+
     file := get_file(file_path);
     if !file {
-        log_error("File does not exists or has not been parser yet! (%)", file_path);
-        lsp_respond(request.id, null);
-        return;
+        _exit();
     }
 
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
-    block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
+    cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
+    cursor_node := get_node_by_location(file, cursor_location);
 
-    if block {
-        log("Block: %", block.*);
-    }
+    // We don't wanna to give completions inside strings and comments... 
+    if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
 
-    decls := get_all_declarations(file, block, *cursor_location);
+    if cursor_block log("Block: %", cursor_block.*);
+
+    decls := get_all_declarations(file, cursor_block, *cursor_location);
     defer array_free(decls);
 
     completions: [..]LSP_Completion_Item;
     defer array_free(completions);
 
     for decl: decls {
-        if !decl.expression || decl.expression.kind != .PROCEDURE continue;
+        if !decl.expression && !decl.type_inst continue;
+
+        kind: LSP_Completion_Item.Kind;
+        preview_node: *Node;
+        insert_text: string;
+
+        if decl.expression {
+            preview_node = decl.expression;
+        } else {
+            preview_node = decl.type_inst;
+        }
+
+        if preview_node.kind == {
+            case .PROCEDURE; 
+                kind = .Function;
+                insert_text = sprint("%($0)", decl.name);
+
+            case .STRUCT; 
+                kind = .Struct;
+                insert_text = decl.name;
+
+            case .ENUM; 
+                kind = .Enum;
+                insert_text = decl.name;
+            
+            case; 
+                kind = .Variable;
+                insert_text = decl.name;
+        }
 
         lsp_loc := node_location_to_lsp_location(decl.location);
 
         procedure_header_builder: String_Builder;
         init_string_builder(*procedure_header_builder);        
-        ast_print_procedure_header(*procedure_header_builder, xx decl.expression); // @Memory @TODO: we need to free this afterwards!!
+        ast_print(*procedure_header_builder, preview_node); // @Memory @TODO: we need to free this afterwards!!
         procedure_header_preview := builder_to_string(*procedure_header_builder);
 
         array_add(*completions, .{
             label=decl.name,
-            kind=xx LSP_Completion_Item.Kind.Function,
-            insertText=tprint("%()", decl.name),
+            kind=xx kind,
+            insertText=insert_text,
+            insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
             labelDetails = .{ description=procedure_header_preview }
         });
     }
