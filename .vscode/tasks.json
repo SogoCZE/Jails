@@ -4,12 +4,78 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Compile server",
+            "label": "build",
             "type": "shell",
-            "command": "jai build.jai",
-            "options": {
-                "cwd": "${workspaceFolder}/server"
+            "command": "jai ${workspaceFolder}/build.jai - -vscode",
+            "presentation": {
+                "echo": true,
+                "reveal": "never",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "problemMatcher": [
+                {
+                    "severity": "error",
+                    "fileLocation": "absolute",
+                    "pattern": [
+                        {
+                            "regexp": "^(.*):(\\d+),(\\d+).*Error: (.*)$",
+                            "file": 1,
+                            "line": 2,
+                            "column": 3,
+                            "message": 4
+                        }
+                    ],
+                    "owner": "jai"
+                },
+                {
+                    "severity": "warning",
+                    "fileLocation": "absolute",
+                    "pattern": [
+                        {
+                            "regexp": "^(.*):(\\d+),(\\d+).*Warning: (.*)$",
+                            "file": 1,
+                            "line": 2,
+                            "column": 3,
+                            "message": 4
+                        }
+                    ],
+                    "owner": "jai"
+                },
+                {
+                    "severity": "info",
+                    "fileLocation": "absolute",
+                    "pattern": [
+                        {
+                            "regexp": "^(.*):(\\d+),(\\d+).*Info: (.*)$",
+                            "file": 1,
+                            "line": 2,
+                            "column": 3,
+                            "message": 4
+                        }
+                    ],
+                    "owner": "jai"
+                },
+                {
+                    "severity": "info",
+                    "fileLocation": "absolute",
+                    "pattern": [
+                        {
+                            "regexp": "^(.*)\\((.*):(\\d+)\\)$",
+                            "file": 2,
+                            "line": 3,
+                            "message": 1,
+                        }
+                    ],
+                    "owner": "jai"
+                },
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false,
             }
-        }
+        },
     ]
 }

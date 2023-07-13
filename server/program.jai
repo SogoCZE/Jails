@@ -576,6 +576,7 @@ get_identifier_type :: (file: *Program_File, ident: *Identifier) -> *Node {
 
     while true {
         ident_decls := get_identifier_decl(file, current_ident);
+        log("current_ident: %", current_ident.name);
         if ident_decls.count == 0 return null;
         decl := ident_decls[0];
 
@@ -585,17 +586,13 @@ get_identifier_type :: (file: *Program_File, ident: *Identifier) -> *Node {
                 return decl.expression;
             }
 
-            // @TODO:
-            break;
         }
 
-        if decl.type_inst {
 
-            if decl.type_inst.kind == .IDENTIFIER {
-                current_ident = xx decl.type_inst;
-                continue;
-            }
-
+        unwrapped_ident := unwrap_identifier(decl);
+        if unwrapped_ident {
+            current_ident = unwrapped_ident;
+            continue;
         }
 
         break;
@@ -604,16 +601,40 @@ get_identifier_type :: (file: *Program_File, ident: *Identifier) -> *Node {
     return null;
 }
 
-get_decl_type :: (decl: *Declaration) -> *Identifier {
-    if decl.type_inst {
+unwrap_identifier :: (node: *Node) -> *Identifier {
+    if node.kind == .IDENTIFIER return xx node;
 
-        if decl.type_inst.kind == .IDENTIFIER {
-            return xx decl.type_inst;
-        }
+    // Pointer
+    if node.kind == .UNARY_OPERATION {
+        return unwrap_pointer(xx node);
+    }
 
+    // Cast
+    if node.kind == .CAST {
+        _cast := cast(*Cast) node;
+        return unwrap_identifier(_cast.cast_expression);    
+    }
+
+    if node.kind == .DECLARATION {
+        decl := cast(*Declaration) node;
+        if decl.type_inst  return unwrap_identifier(decl.type_inst);
+        if decl.expression return unwrap_identifier(decl.expression);
     }
 
     return null;
+}
+
+unwrap_pointer :: (unary_op: *Unary_Operation) -> *Identifier {
+    if unary_op.operation != .POINTER return null;
+
+    // nested pointers
+    if unary_op.expression.kind == .UNARY_OPERATION {
+        return unwrap_pointer(xx unary_op.expression);
+    }   
+
+    if unary_op.expression.kind != .IDENTIFIER return null;
+    
+    return xx unary_op.expression;
 }
 
 get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
@@ -621,6 +642,24 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
         if member.kind != .DECLARATION continue;
         decl := cast(*Declaration) member;
         if decl.name == ident.name return xx member;
+    }
+
+    return null;
+}
+
+
+get_declaration_from_base :: (file: *Program_File, base_ident: *Identifier, target: *Identifier) -> *Declaration {
+    base := get_identifier_type(file, base_ident);
+    if !base return null;
+
+    if base.kind == {
+        case .STRUCT; 
+            _struct := cast(*Struct) base;
+            return get_block_member(_struct.block, target);
+
+        case .ENUM; 
+            _enum := cast(*Enum) base;
+            return get_block_member(_enum.block, target);
     }
 
     return null;
