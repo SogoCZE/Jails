@@ -26,6 +26,8 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     ident := cast(*Identifier) node;
 
     if ident.parent && ident.parent.kind == .BINARY_OPERATION {
+        log("Got binary op!");
+        
         result := goto_dot_path_member(file, xx ident.parent, ident);
         if result {
             lsp_respond(request.id, node_location_to_lsp_location(result.location));
@@ -53,6 +55,8 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 goto_dot_path_member :: (file: *Program_File, binary_op: *Binary_Operation, ident: *Identifier) -> *Declaration {
     root_op := get_root_of_dot_path(binary_op);
     if !root_op return null;
+
+    log("Root op: %", root_op);
 
     result := get_dot_path_result(file, root_op, ident);
     if !result return null;

@@ -100,7 +100,6 @@ parse_file :: (path: string, force := false) {
     }
 
     file.linked_files = get_file_links(file);
-    
     resolve_identifiers(file);
 
     // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
@@ -266,6 +265,11 @@ get_file_links :: (file: *Program_File) -> []*Program_File {
                 already_checked: [..]string;
                 defer array_free(already_checked);
     
+                if file_that_load_this_file.path == it.path {
+                    is_avaiable_from_one_of_the_parents = true;
+                    break;    
+                }
+
                 if !is_avaiable_from(file_that_load_this_file, it.path, *already_checked) continue;
     
                 is_avaiable_from_one_of_the_parents = true;
@@ -545,10 +549,14 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     return lsp_location;
 }
 
-get_identifier_decl :: (file: *Program_File, ident: *Identifier) -> []*Declaration {
-    decls, ok := table_find(*file.resolved_identifiers, ident);
-    if !ok return .[];
-    return decls;
+get_identifier_decl :: (__file: *Program_File, ident: *Identifier) -> []*Declaration {
+    for file: server.files {
+        decls, ok := table_find(*file.resolved_identifiers, ident);
+        if !ok continue;
+        return decls;
+    }
+
+    return .[];
 }
 
 // @TODO: Maybe refactor this to be more useful?
@@ -559,6 +567,7 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
 
         if current_node.kind == .IDENTIFIER {
             ident_decls := get_identifier_decl(file, xx current_node);
+            log("ident_decls = % for %", ident_decls, (cast(*Identifier) current_node).name);
             if ident_decls.count == 0 return null;
             current_node = ident_decls[0];
             continue;
@@ -684,7 +693,9 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Ide
 
     if current_op.left.kind != .IDENTIFIER return null;
 
+
     current_type := get_node_type(file, current_op.left); // STRUCT, ENUM, UNION ...
+    log("current_op.left = %, current_type = %", (cast(*Identifier) current_op.left).name, current_type);
     if !current_type return null;
 
     if current_op.left == target {
