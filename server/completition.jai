@@ -20,11 +20,64 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     // We don't wanna to give completions inside strings and comments... 
     if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
 
-    if cursor_block log("Block: %", cursor_block.*);
+    log("Cursor node: %", cursor_node.kind);
 
-    decls := get_all_declarations(file, cursor_block, *cursor_location);
+
+    decls: []*Declaration;
     defer array_free(decls);
 
+    // Binary OP
+    if cursor_node && cursor_node.kind == .BINARY_OPERATION {
+        decls = get_dot_path_members(file, xx cursor_node);
+        send_completions_decls(request, decls);
+        return;
+    }
+
+    if cursor_node && cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
+        decls = get_dot_path_members(file, xx cursor_node.parent);
+        send_completions_decls(request, decls);
+        return;
+    }
+    
+
+    if cursor_block log("Block: %", cursor_block.*);
+
+    // General 
+
+    decls = get_all_declarations(file, cursor_block, *cursor_location);
+
+    send_completions_decls(request, decls);
+}
+
+
+// @TODO: maybe move this to program?
+get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> []*Declaration {
+    members: [..]*Declaration;
+
+    decl := goto_dot_path_member(file, binary_op, xx binary_op.left);
+    if !decl return members;
+
+    log("Decl: %", decl.name);
+
+    decl_type := get_node_type(file, decl);
+    if !decl_type return members;
+
+    log("Got here!!");
+
+    block := get_block_of(decl_type);
+    if !block return members;
+
+    log("Over block!");
+
+    for member: block.members {
+        if member.kind != .DECLARATION continue;
+        array_add(*members, xx member);
+    }
+
+    return members;
+}
+
+send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration) {
     completions: [..]LSP_Completion_Item;
     defer array_free(completions);
 
@@ -77,4 +130,3 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
     lsp_respond(request.id, completions);
 }
-

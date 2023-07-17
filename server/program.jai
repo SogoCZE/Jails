@@ -545,53 +545,81 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     return lsp_location;
 }
 
-get_path_of_binary_operation :: (root: *Node) -> []*Node, *Binary_Operation {
-    path: [..]*Node;
-    if !root.parent || root.parent.kind != .BINARY_OPERATION return path, null;
-
-    op := cast(*Binary_Operation) root.parent;
-
-    if op.right == root array_add(*path, root);
-    array_add(*path, op.left);
-
-    while op.parent && op.parent.kind == .BINARY_OPERATION {
-        parent_binary_op := cast(*Binary_Operation) op.parent;
-        array_add(*path, parent_binary_op.left);
-        op = parent_binary_op; 
-    }
-
-    array_reverse(path);
-
-    return path, op;
-}
-
 get_identifier_decl :: (file: *Program_File, ident: *Identifier) -> []*Declaration {
     decls, ok := table_find(*file.resolved_identifiers, ident);
     if !ok return .[];
     return decls;
 }
 
-get_identifier_type :: (file: *Program_File, ident: *Identifier) -> *Node {
-    current_ident: *Identifier = ident;
+// @TODO: Maybe refactor this to be more useful?
+get_node_type :: (file: *Program_File, root: *Node) -> *Node {
+    current_node: *Node = root;
 
     while true {
-        ident_decls := get_identifier_decl(file, current_ident);
-        log("current_ident: %", current_ident.name);
-        if ident_decls.count == 0 return null;
-        decl := ident_decls[0];
 
-        if decl.expression {
+        if current_node.kind == .IDENTIFIER {
+            ident_decls := get_identifier_decl(file, xx current_node);
+            if ident_decls.count == 0 return null;
+            current_node = ident_decls[0];
+            continue;
+        }
 
-            if decl.expression.kind == .STRUCT || decl.expression.kind == .ENUM || decl.expression.kind == .UNION {
-                return decl.expression;
+        if current_node.kind == .DECLARATION {
+            decl := cast(*Declaration) current_node;
+
+            if decl.expression {
+
+                if decl.expression.kind == .STRUCT || decl.expression.kind == .ENUM || decl.expression.kind == .UNION {
+                    return decl.expression;
+                }
+
+                if decl.expression.kind == .PROCEDURE {
+                    proc := cast(*Procedure) decl.expression;
+                    if proc.returns.count > 0 {
+                        current_node = proc.returns[0];
+                        continue;
+                    }
+                }
+
+            }
+
+            if decl.type_inst  {
+                current_node = decl.type_inst;
+                continue;
+            }
+
+            if decl.expression {
+                current_node = decl.expression;
+                continue;
             }
 
         }
 
+        if current_node.kind == .RETURN_VALUE {
+            return_value := cast(*Return_Value) current_node;
+            current_node = return_value.expression;
+            continue;
+        }
+        
+        if current_node.kind == .BINARY_OPERATION {
+            current_node = get_dot_path_result(file, xx current_node);
+            continue;
+        }
 
-        unwrapped_ident := unwrap_identifier(decl);
-        if unwrapped_ident {
-            current_ident = unwrapped_ident;
+        if current_node.kind == .PROCEDURE_CALL {
+            proc_call := cast(*Procedure_Call) current_node;
+            current_node = proc_call.procedure;
+            continue;
+        }
+
+        if current_node.kind == .UNARY_OPERATION {
+            current_node = unwrap_pointer(xx current_node);
+            continue;
+        }
+
+        if current_node.kind == .CAST {
+            _cast := cast(*Cast) current_node;
+            current_node = _cast.cast_expression;
             continue;
         }
 
@@ -601,40 +629,43 @@ get_identifier_type :: (file: *Program_File, ident: *Identifier) -> *Node {
     return null;
 }
 
-unwrap_identifier :: (node: *Node) -> *Identifier {
-    if node.kind == .IDENTIFIER return xx node;
-
-    // Pointer
-    if node.kind == .UNARY_OPERATION {
-        return unwrap_pointer(xx node);
-    }
-
-    // Cast
-    if node.kind == .CAST {
-        _cast := cast(*Cast) node;
-        return unwrap_identifier(_cast.cast_expression);    
-    }
-
-    if node.kind == .DECLARATION {
-        decl := cast(*Declaration) node;
-        if decl.type_inst  return unwrap_identifier(decl.type_inst);
-        if decl.expression return unwrap_identifier(decl.expression);
-    }
-
-    return null;
-}
-
-unwrap_pointer :: (unary_op: *Unary_Operation) -> *Identifier {
-    if unary_op.operation != .POINTER return null;
+unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
+    if unary_op.operation != .POINTER return unary_op;
 
     // nested pointers
     if unary_op.expression.kind == .UNARY_OPERATION {
         return unwrap_pointer(xx unary_op.expression);
     }   
 
-    if unary_op.expression.kind != .IDENTIFIER return null;
+    return unary_op.expression;
+}
+
+get_block_of :: (node: *Node) -> *Block {
+    if node.kind == {
+        case .STRUCT; return (cast(*Struct) node).block;
+        case .ENUM;   return (cast(*Enum) node).block;
+        case .UNION;  return (cast(*Union) node).block;
+    }
+
+    return null;
+}
+
+get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
+    block := get_block_of(parent);
+    if !block return null;
+    return get_block_member(block, ident);
+}
+
+get_root_of_dot_path :: (op: *Binary_Operation) -> *Binary_Operation {
+    current := op;
     
-    return xx unary_op.expression;
+    while current.parent && current.parent.kind == .BINARY_OPERATION {
+        parent := cast(*Binary_Operation) current.parent;
+        if parent.operation != .DOT break;
+        current = parent;
+    }
+
+    return current;
 }
 
 get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
@@ -647,20 +678,54 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
     return null;
 }
 
+get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Identifier = null) -> *Declaration {
+    decl: *Declaration;
+    current_op := op;
 
-get_declaration_from_base :: (file: *Program_File, base_ident: *Identifier, target: *Identifier) -> *Declaration {
-    base := get_identifier_type(file, base_ident);
-    if !base return null;
+    if current_op.left.kind != .IDENTIFIER return null;
 
-    if base.kind == {
-        case .STRUCT; 
-            _struct := cast(*Struct) base;
-            return get_block_member(_struct.block, target);
+    current_type := get_node_type(file, current_op.left); // STRUCT, ENUM, UNION ...
+    if !current_type return null;
 
-        case .ENUM; 
-            _enum := cast(*Enum) base;
-            return get_block_member(_enum.block, target);
+    if current_op.left == target {
+        decls := get_identifier_decl(file, xx current_op.left);
+        if decls.count == 0 return null;
+        return decls[0];
     }
 
-    return null;
+    while true {
+        if current_op.operation != .DOT break;
+        if !current_op.right break;
+        
+        ident: *Identifier;
+        end := false;
+
+        if current_op.right.kind == {
+    
+            case .IDENTIFIER;
+                ident = xx current_op.right;
+                end = true;
+
+            case .BINARY_OPERATION;
+                current_op = cast(*Binary_Operation) current_op.right;
+                ident = cast(*Identifier) current_op.left;
+
+            case; break;
+
+        } 
+
+        if ident == target {
+            end = true;
+        }
+
+        member := get_member_in(current_type, ident);        
+        if !member break;
+        decl = member;
+
+        if end break;
+
+        current_type = get_node_type(file, decl);
+    }
+
+    return decl;
 }

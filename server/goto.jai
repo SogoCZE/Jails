@@ -26,32 +26,11 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     ident := cast(*Identifier) node;
 
     if ident.parent && ident.parent.kind == .BINARY_OPERATION {
-        path, binary_op := get_path_of_binary_operation(ident);
-
-        if path.count > 1 && binary_op.operation == .DOT {
-            current_base := cast(*Identifier) path[0];
-            current_decl: *Declaration;
-
-            i := 1;
-            for i..path.count-1 {
-                target := cast(*Identifier) path[i];
-                
-                current_decl = get_declaration_from_base(file, current_base, target);
-                if !current_decl break;
-
-                current_base = unwrap_identifier(current_decl);
-                i += 1;
-            }        
-
-            if !current_decl {
-                lsp_respond(request.id, null);
-                return;
-            }
-
-            lsp_respond(request.id, node_location_to_lsp_location(current_decl.location));
+        result := goto_dot_path_member(file, xx ident.parent, ident);
+        if result {
+            lsp_respond(request.id, node_location_to_lsp_location(result.location));
             return;
         }
-        
     }
 
     log("Clicked node: % (%)", node.kind, ident.name);
@@ -68,4 +47,15 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     for decls locations[it_index] = node_location_to_lsp_location(it.location);
 
     lsp_respond(request.id, locations);
+}
+
+// @TODO: maybe move this to program?
+goto_dot_path_member :: (file: *Program_File, binary_op: *Binary_Operation, ident: *Identifier) -> *Declaration {
+    root_op := get_root_of_dot_path(binary_op);
+    if !root_op return null;
+
+    result := get_dot_path_result(file, root_op, ident);
+    if !result return null;
+
+    return result;
 }
