@@ -57,17 +57,11 @@ get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> [
     decl := goto_dot_path_member(file, binary_op, xx binary_op.left);
     if !decl return members;
 
-    log("Decl: %", decl.name);
-
     decl_type := get_node_type(file, decl);
     if !decl_type return members;
 
-    log("Got here!!");
-
     block := get_block_of(decl_type);
     if !block return members;
-
-    log("Over block!");
 
     for member: block.members {
         if member.kind != .DECLARATION continue;
