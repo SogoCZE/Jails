@@ -53,6 +53,8 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
 // @TODO: maybe move this to program?
 goto_dot_path_member :: (file: *Program_File, binary_op: *Binary_Operation, ident: *Identifier) -> *Declaration {
+    if binary_op.operation != .DOT return null;
+
     root_op := get_root_of_dot_path(binary_op);
     if !root_op return null;
 

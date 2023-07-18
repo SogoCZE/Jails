@@ -10,7 +10,12 @@ Program_File :: struct {
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
     resolved_identifiers: Table(*Node, []*Declaration);
-    linked_files: []*Program_File; // @TODO: this is probably stupid name for this!
+    linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
+}
+
+Linked_File :: struct {
+    from_import: bool;
+    file: *Program_File;
 }
 
 init_file :: (using file: Program_File) {
@@ -249,14 +254,16 @@ get_node_by_location :: (file: *Program_File, location: Node.Location, filter: N
     return nearest_node;
 }
 
-get_file_links :: (file: *Program_File) -> []*Program_File {
-    files: [..]*Program_File;
+get_file_links :: (file: *Program_File) -> []Linked_File {
+    linked_files: [..]Linked_File;
     
     files_that_load_this_file := get_files_that_load(file);
     defer array_free(files_that_load_this_file);
 
     for server.files {
         // This ensure we take into account only files that are being loaded or imported...
+        from_import: bool;
+
         if file.path != it.path {
 
             is_avaiable_from_one_of_the_parents: bool;
@@ -270,7 +277,8 @@ get_file_links :: (file: *Program_File) -> []*Program_File {
                     break;    
                 }
 
-                if !is_avaiable_from(file_that_load_this_file, it.path, *already_checked) continue;
+                avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
+                if !avaiable continue;
     
                 is_avaiable_from_one_of_the_parents = true;
                 break;
@@ -279,18 +287,21 @@ get_file_links :: (file: *Program_File) -> []*Program_File {
             already_checked: [..]string;
             defer array_free(already_checked);
     
-            if !is_avaiable_from_one_of_the_parents && !is_avaiable_from(file, it.path, *already_checked) continue;
+            if !is_avaiable_from_one_of_the_parents {
+                avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
+                if !avaiable continue;
+            } 
         } 
 
-        array_add(*files, it);
+        array_add(*linked_files, .{ file=it, from_import=from_import });
     }
 
-    return files;
+    return linked_files;
 }
 
 get_declarations :: (file: *Program_File, name: string, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
     decls: [..]*Declaration;
-    
+
     // Procedure or Struct params
     if from_block && from_block.parent {
         
@@ -319,11 +330,11 @@ get_declarations :: (file: *Program_File, name: string, from_block: *Block = nul
     }
 
     for linked_file: file.linked_files {
-        unfiltered_decls := table_find_multiple(*linked_file.declarations, name);       
+        unfiltered_decls := table_find_multiple(*linked_file.file.declarations, name);       
 
         for decl: unfiltered_decls {
             decl_block := get_node_nearest_block(decl);
-            global := is_global(decl);
+            global := is_global(decl, linked_file.from_import);
 
             if !global {
                 if decl.const {
@@ -376,9 +387,9 @@ get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_lo
 
     for linked_file: file.linked_files {
         
-        for decl: linked_file.declarations {
+        for decl: linked_file.file.declarations {
             decl_block := get_node_nearest_block(decl);
-            global := is_global(decl);
+            global := is_global(decl, linked_file.from_import);
 
             if !global {
                 if decl.const {
@@ -398,14 +409,17 @@ get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_lo
     return decls;
 }
 
-is_global :: (node: *Node) -> bool {
+is_global :: (node: *Node, from_import: bool) -> bool {
     if !node.parent return true;
 
-    // @TODO: #scope_file, #scope_module ...
+    // @TODO: #scope_file ...
     if node.parent.kind == .DIRECTIVE_SCOPE {
         directive_scope := cast(*Directive_Scope) node.parent;
+
+        if directive_scope.scope_kind == .MODULE return true;
         if directive_scope.scope_kind == .EXPORT return true;
     } 
+
     return false;
 }
 
@@ -422,21 +436,24 @@ get_files_that_load :: (target_file: *Program_File) -> []*Program_File {
     return files;
 }
 
-is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]string, $loads_only := false) -> bool {
+is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]string, $loads_only := false) -> bool, bool {
+    from_import: bool;
     loaded: bool;
 
-    if !loads_only {
+    #if !loads_only {
         for file.imports {
             if array_find(already_checked.*, it.root) continue;
             array_add(already_checked, it.root);
 
             if it.root == path {
+                from_import = true;
                 loaded = true;
                 break;
             }
 
             next_file := get_file(it.root);
             if next_file && is_avaiable_from(next_file, path, already_checked) {
+                from_import = true;
                 loaded = true;
                 break;
             }
@@ -465,7 +482,7 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
         }
     }
 
-    return loaded;
+    return loaded, from_import;
 }
 
 get_declaration :: (file: *Program_File, name: string, from_block: *Block = null) -> *Declaration {
