@@ -20,9 +20,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     // We don't wanna to give completions inside strings and comments... 
     if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
 
-    log("Cursor node: %", cursor_node.kind);
-
-
     decls: []*Declaration;
     defer array_free(decls);
 
@@ -53,6 +50,8 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 // @TODO: maybe move this to program?
 get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> []*Declaration {
     members: [..]*Declaration;
+
+    if !binary_op.left return members;
 
     decl := goto_dot_path_member(file, binary_op, xx binary_op.left);
     if !decl return members;

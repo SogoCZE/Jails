@@ -215,8 +215,6 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 }
 
 resolve_identifiers :: (file: *Program_File) {
-    log("Resolving identifiers for file: %", file.path);
-
     for node: file.nodes {
         if node.kind == .IDENTIFIER {
             ident := cast(*Identifier) node;
@@ -233,8 +231,6 @@ resolve_identifiers :: (file: *Program_File) {
         }
 
     }
-
-    log("Resolved identifiers for: %", file.path);
 }
 
 get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
@@ -546,6 +542,12 @@ contains :: (a: Node.Location, b: Node.Location) -> bool {
     return true;
 }
 
+is_after :: (a: Node.Location, b: Node.Location) -> bool {
+    if b.l0 > a.l1 return true;
+    if b.c0 > a.c1 return true;
+    return false;
+}
+
 lsp_location_to_node_location :: (location: LSP_Position, file := "") -> Node.Location {
     node_location: Node.Location;
     node_location.file = file;
@@ -581,10 +583,11 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
     current_node: *Node = root;
 
     while true {
+        if !current_node break;
 
         if current_node.kind == .IDENTIFIER {
             ident_decls := get_identifier_decl(file, xx current_node);
-            log("ident_decls = % for %", ident_decls, (cast(*Identifier) current_node).name);
+            // log("ident_decls = % for %", ident_decls, (cast(*Identifier) current_node).name);
             if ident_decls.count == 0 return null;
             current_node = ident_decls[0];
             continue;
@@ -708,11 +711,9 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Ide
     decl: *Declaration;
     current_op := op;
 
-    if current_op.left.kind != .IDENTIFIER return null;
-
+    if !current_op.left || current_op.left.kind != .IDENTIFIER return null;
 
     current_type := get_node_type(file, current_op.left); // STRUCT, ENUM, UNION ...
-    log("current_op.left = %, current_type = %", (cast(*Identifier) current_op.left).name, current_type);
     if !current_type return null;
 
     if current_op.left == target {

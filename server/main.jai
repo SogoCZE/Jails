@@ -224,6 +224,15 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             handle_completitions(body);
 
+        case "textDocument/signatureHelp";
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Signature_Help);
+            if !success {
+                log_error("Unable to parse textDocument/completion message");
+                return;
+            }
+
+            handle_signature_help(body);
+
     }
 }
 
@@ -307,6 +316,7 @@ array_reverse :: (array: []$T) {
 
 #load "completition.jai";
 #load "goto.jai";
+#load "signature_help.jai";
 
 #if OS == .WINDOWS {
     #import "Windows";

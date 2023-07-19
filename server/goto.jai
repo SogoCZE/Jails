@@ -58,8 +58,6 @@ goto_dot_path_member :: (file: *Program_File, binary_op: *Binary_Operation, iden
     root_op := get_root_of_dot_path(binary_op);
     if !root_op return null;
 
-    log("Root op: %", root_op);
-
     result := get_dot_path_result(file, root_op, ident);
     if !result return null;
 

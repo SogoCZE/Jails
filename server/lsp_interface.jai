@@ -494,6 +494,11 @@ LSP_Result_Initialize :: struct {
         // documentSymbolProvider := true;
         definitionProvider := true;
 
+        signatureHelpProvider: struct {
+            triggerCharacters   := string.["("];
+            retriggerCharacters := string.[","];
+        }
+
         completionProvider: struct {
             triggerCharacters := string.[".", ":", "="];
         };
@@ -534,6 +539,41 @@ LSP_Request_Message_Completion :: struct {
             triggerCharacter: string;
         } @JsonName(context)
     }
+}
+
+LSP_Request_Message_Signature_Help :: struct {
+    using request: LSP_Request_Message;
+    params: struct {
+        using base: LSP_Text_Document_Position;
+        _context: struct {
+            triggerKind: enum {
+                Invoked :: 1;
+                TriggerCharacter :: 2;
+                ContentChange :: 3;
+            }
+            triggerCharacter: string;
+            isRetrigger: bool;
+            activeSignatureHelp: *LSP_Signature_Help;
+        } @JsonName(context)
+    }
+}
+
+LSP_Signature_Help :: struct {
+    signatures: []LSP_Signature_Information;
+    activeSignature: u32;
+    activeParameter: u32;
+}
+
+LSP_Signature_Information :: struct {
+    label: string;
+    documentation: string;
+    parameters: []LSP_Parameter_Information;
+    activeParameter: u32;
+}
+
+LSP_Parameter_Information :: struct {
+    label: string;
+    documentation: string;
 }
 
 LSP_Completion_Item :: struct {
