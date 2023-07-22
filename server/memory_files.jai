@@ -33,8 +33,10 @@ edit_memory_file :: (file_path: string, changes: []LSP_Content_Change) {
     for change: changes {
         from := change.range.start;
         to := change.range.end;
-        apply_change(content, from, to, xx change.text);
+        apply_change(content, from, to, change.text);
     }
+
+    // write_entire_file("/Users/patriksmely/Documents/Projekty/jai_language_server/bin/edited", cast(string) content.*);
 }
 
 remove_memory_file :: (file_path: string) {
@@ -194,6 +196,8 @@ find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, No
         c1=end_index
     };
 
+    Node;
+
     return to_string(*content[start_index], end_index-start_index), location;
 }
 
@@ -203,15 +207,16 @@ DEBUG_AC :: false;
 
 // @todo:
 // - unicode support
-// - {}, "", () when the editor (for example vscode) auto-closes parentheses behaves badly.
 // Mutates in memory file
-apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: []u8) {
+apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: string) {
     current_line: int;
     start_index: int = -1;
     end_index: int = -1;
 
+    log("Text: %, %, %", text, from, to);
+
     // We get index of starting and ending byte of the range.
-    for char: <<content {
+    for char: content.* {
         if current_line == from.line && start_index == -1 {
             start_index = it_index + from.character;
         }
@@ -227,6 +232,10 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
         if start_index > -1 && end_index > -1 {
             break;
         }
+    }
+
+    if start_index < 0 || end_index < 0 {
+        start_index, end_index = content.count;
     }
 
     #if DEBUG_AC {
@@ -250,9 +259,11 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: [
 
     // Inserting only
     if start_index == end_index {
-        for char: text {
-            array_insert_at(content, char, start_index + it_index);
-            #if DEBUG_AC log("inserting % at %", to_string(*char, 1), start_index + it_index);
+        for i: 0..text.count-1 {
+            char := text[i];
+            // log("%: %", i, char);
+            array_insert_at(content, char, start_index + i);
+            #if DEBUG_AC log("inserting % at %", to_string(*char, 1), start_index + i);
         }
         return;
     }
