@@ -72,6 +72,8 @@ parse_file :: (path: string, force := false) {
     log("Parse file: %", path);
 
     content := cast(string) get_memory_file(path);
+    content_from_disc: bool;
+
     if content.count == 0 {
         exists: bool;
 
@@ -107,6 +109,7 @@ parse_file :: (path: string, force := false) {
     file.linked_files = get_file_links(file);
     resolve_identifiers(file);
 
+    if content_from_disc free(content);
     // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
 }
 

@@ -232,6 +232,15 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             handle_signature_help(body);
+        
+        case "textDocument/hover";
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Hover);
+            if !success {
+                log_error("Unable to parse textDocument/completion message");
+                return;
+            }
+
+            handle_hover(body);
 
     }
 }
@@ -300,6 +309,7 @@ array_reverse :: (array: []$T) {
 #import "File";
 #import "File_Utilities";
 #import "jason";
+#import "unicode_utils";
 #import "String";
 #import "Shared_Memory_Channel";
 #import "Hash_Table";
@@ -307,6 +317,7 @@ array_reverse :: (array: []$T) {
 #import "Process";
 #import "Reflection";
 #import "Thread";
+#import "Pool";
 #import "jai_parser";
 
 #load "rpc.jai";
@@ -317,6 +328,7 @@ array_reverse :: (array: []$T) {
 #load "completition.jai";
 #load "goto.jai";
 #load "signature_help.jai";
+#load "hover.jai";
 
 #if OS == .WINDOWS {
     #import "Windows";

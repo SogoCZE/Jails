@@ -489,10 +489,11 @@ LSP_Request_Message_Initialize :: struct {
 
 LSP_Result_Initialize :: struct {
     capabilities: struct {
-        // hoverProvider := true;
         // semanticTokensProvider := true;
         // documentSymbolProvider := true;
+        
         definitionProvider := true;
+        // hoverProvider := true;
 
         signatureHelpProvider: struct {
             triggerCharacters   := string.["("];
