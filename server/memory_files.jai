@@ -17,7 +17,6 @@ create_memory_file :: (file_path: string, content: string) {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
     table_set(*server.memory_files, file_path, content_dynamic);
-    // dump_server_memory_files();
 }
 
 edit_memory_file :: (file_path: string, changes: []LSP_Content_Change) {
