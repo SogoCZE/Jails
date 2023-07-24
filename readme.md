@@ -5,6 +5,7 @@ Jails is an experimental language server for the Jai programming language.
 - Basic Go-To Definition
 - Autocomplete for available symbols (types, procedures etc)
 - Signature help for procedure calls
+- Error reporting from the compiler
 
 In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc. 
 
