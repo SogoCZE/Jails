@@ -877,7 +877,7 @@ run_diagnostics :: () {
     diagnostics: [1]LSP_Diagnostic;
     diagnostics[0] = diagnostic;
 
-    file = tprint("file://%", file);
+    file = tprint("file://%", normalize_path(file));
     file = copy_string(file); // split_from_right and slice don't allocate memory so copy the file in case the string with compiler output is freed
 
     lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
