@@ -2,7 +2,7 @@
   "name": "jails",
   "displayName": "Jai Language Server",
   "description": "Language Server for Jai",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "Patrik Smělý",
   "author": "Patrik Smělý",
   "main": "./out/extension.js",

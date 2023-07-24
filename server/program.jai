@@ -149,55 +149,9 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
     array_add(*file.nodes, node);
 
     if node.kind == .DIRECTIVE_IMPORT {
-
-        get_module_entry :: (module: string) -> string {
-            uri := join(module, "/module.jai");
-            if file_exists(uri) return uri;
-
-            uri = join(module, ".jai");
-            if file_exists(uri) return uri;
-
-            return "";
-        }
-
-        get_module :: (module_name: string) -> string {
-            for local_modules_folder: server.local_modules {
-                absolute_path: string;
-                if starts_with(local_modules_folder, "/") {
-                    absolute_path = local_modules_folder;
-                } else {
-                    absolute_path = join(server.project_root, local_modules_folder, separator="/");
-                }
-
-                entry := get_module_entry(join(absolute_path, module_name, separator="/"));
-                if entry.count > 0 return entry;
-            }
-
-            jai_modules := join(server.args.jai_path, "/modules");
-
-            entry := get_module_entry(join(jai_modules, module_name, separator="/"));
-            if entry.count > 0 return entry;
-
-            return "";
-        }
-
         _import := cast(*Directive_Import) node;
-        path: string;
 
-        if _import.import_kind == {
-            case .MODULE;
-                path = get_module(_import.module);
-                if path.count == 0 return;
-            case .FILE;
-                path = sprint("%/%", data.path_without_filename, _import.module); 
-            case .DIR;
-                relative_path := sprint("%/%", data.path_without_filename, _import.module); 
-                path = get_module_entry(relative_path);
-                if path.count == 0 return;
-            case .STRING;
-                return;
-                // @TODO: Do we wanna parse the string here?
-        }
+        path := get_module_import_path(_import, data.path_without_filename);
 
         module_import: Module_Import;
         module_import.root = path;
@@ -215,6 +169,59 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         array_add(*data.file.loads, _load);
         parse_file(load_relative_path); // @TODO: Run this in another thread?
     }
+}
+
+get_module_import_path :: (_import: *Directive_Import, current_path: string) -> string {
+        
+    get_module_entry :: (module: string) -> string {
+        uri := join(module, "/module.jai");
+        if file_exists(uri) return uri;
+
+        uri = join(module, ".jai");
+        if file_exists(uri) return uri;
+
+        return "";
+    }
+
+    get_module :: (module_name: string) -> string {
+        for local_modules_folder: server.local_modules {
+            absolute_path: string;
+            if starts_with(local_modules_folder, "/") {
+                absolute_path = local_modules_folder;
+            } else {
+                absolute_path = join(server.project_root, local_modules_folder, separator="/");
+            }
+
+            entry := get_module_entry(join(absolute_path, module_name, separator="/"));
+            if entry.count > 0 return entry;
+        }
+
+        jai_modules := join(server.args.jai_path, "/modules");
+
+        entry := get_module_entry(join(jai_modules, module_name, separator="/"));
+        if entry.count > 0 return entry;
+
+        return "";
+    }
+
+    path: string;
+
+    if _import.import_kind == {
+        case .MODULE;
+            path = get_module(_import.module);
+            if path.count == 0 return "";
+        case .FILE;
+            path = sprint("%/%", current_path, _import.module); 
+        case .DIR;
+            relative_path := sprint("%/%", current_path, _import.module); 
+            path = get_module_entry(relative_path);
+            if path.count == 0 return "";
+        case .STRING;
+            return "";
+            // @TODO: Do we wanna parse the string here?
+    }
+
+    return path;
 }
 
 resolve_identifiers :: (file: *Program_File) {
@@ -333,7 +340,7 @@ get_declarations :: (file: *Program_File, name: string, from_block: *Block = nul
 
         for decl: unfiltered_decls {
             decl_block := get_node_nearest_block(decl);
-            global := is_global(decl, linked_file.from_import);
+            global := is_global(decl, file, linked_file.file, linked_file.from_import);
 
             if !global {
                 if decl.const {
@@ -388,7 +395,7 @@ get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_lo
         
         for decl: linked_file.file.declarations {
             decl_block := get_node_nearest_block(decl);
-            global := is_global(decl, linked_file.from_import);
+            global := is_global(decl, file, linked_file.file, linked_file.from_import);
 
             if !global {
                 if decl.const {
@@ -408,15 +415,22 @@ get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_lo
     return decls;
 }
 
-is_global :: (node: *Node, from_import: bool) -> bool {
+is_global :: (node: *Node, from_file: *Program_File, it_file: *Program_File, from_import: bool) -> bool {
     if !node.parent return true;
 
-    // @TODO: #scope_file ...
+    // @TODO: Make this more robust!
+    if node.parent.kind == .IF {
+        _if := cast(*If) node;
+        if !_if.compile_time return false;
+        return is_global(_if, from_file, it_file, from_import);
+    }
+
     if node.parent.kind == .DIRECTIVE_SCOPE {
         directive_scope := cast(*Directive_Scope) node.parent;
 
-        if directive_scope.scope_kind == .MODULE return true;
+        if directive_scope.scope_kind == .MODULE && !from_import return true;
         if directive_scope.scope_kind == .EXPORT return true;
+        if directive_scope.scope_kind == .FILE && from_file == it_file return true;
     } 
 
     return false;
@@ -451,7 +465,7 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
             }
 
             next_file := get_file(it.root);
-            if next_file && is_avaiable_from(next_file, path, already_checked) {
+            if next_file && is_avaiable_from(next_file, path, already_checked, true) {
                 from_import = true;
                 loaded = true;
                 break;
@@ -475,7 +489,7 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
         }
 
         next_file := get_file(load_relative_path);
-        if next_file && is_avaiable_from(next_file, path, already_checked) {
+        if next_file && is_avaiable_from(next_file, path, already_checked, loads_only) {
             loaded = true;
             break;
         }

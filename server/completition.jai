@@ -26,14 +26,18 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     // Binary OP
     if cursor_node && cursor_node.kind == .BINARY_OPERATION {
         decls = get_dot_path_members(file, xx cursor_node);
-        send_completions_decls(request, decls);
-        return;
+        if decls.count > 0 {
+            send_completions_decls(request, decls);
+            return;
+        }
     }
 
     if cursor_node && cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
         decls = get_dot_path_members(file, xx cursor_node.parent);
-        send_completions_decls(request, decls);
-        return;
+        if decls.count > 0 {
+            send_completions_decls(request, decls);
+            return;
+        }
     }
     
 
@@ -50,6 +54,8 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 // @TODO: maybe move this to program?
 get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> []*Declaration {
     members: [..]*Declaration;
+
+    if binary_op.operation != .DOT return members;
 
     if !binary_op.left return members;
 

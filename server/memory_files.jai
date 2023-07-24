@@ -35,8 +35,6 @@ edit_memory_file :: (file_path: string, changes: []LSP_Content_Change) {
         to := change.range.end;
         apply_change(content, from, to, change.text);
     }
-
-    // write_entire_file("/Users/patriksmely/Documents/Projekty/jai_language_server/bin/edited", cast(string) content.*);
 }
 
 remove_memory_file :: (file_path: string) {
@@ -210,32 +208,47 @@ DEBUG_AC :: false;
 // Mutates in memory file
 apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: string) {
     current_line: int;
+    current_char: int;
     start_index: int = -1;
     end_index: int = -1;
 
-    log("Text: %, %, %", text, from, to);
+    curr: int;
 
     // We get index of starting and ending byte of the range.
     for char: content.* {
-        if current_line == from.line && start_index == -1 {
-            start_index = it_index + from.character;
+
+        if is_utf_cont(char) {
+            curr += 1;
+            continue;
         }
 
-        if current_line == to.line && end_index == -1 {
-            end_index = it_index + to.character;
+        if current_line == from.line && from.character == current_char {
+            start_index = curr;
         }
 
-        if char == #char "\n" {
-            current_line += 1;
+        if current_line == to.line && to.character == current_char {
+            end_index = curr;
         }
 
         if start_index > -1 && end_index > -1 {
             break;
         }
+
+        curr += 1;
+        current_char += 1;
+
+        if char == #char "\n" {
+            current_line += 1;
+            current_char = 0;
+        }
     }
 
-    if start_index < 0 || end_index < 0 {
-        start_index, end_index = content.count;
+    if start_index < 0 {
+        start_index = content.count;
+    }
+    
+    if end_index < 0 {
+        end_index = content.count;
     }
 
     #if DEBUG_AC {
@@ -261,8 +274,7 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: s
     if start_index == end_index {
         for i: 0..text.count-1 {
             char := text[i];
-            // log("%: %", i, char);
-            array_insert_at(content, char, start_index + i);
+            array_insert_at(content, char, start_index+i);
             #if DEBUG_AC log("inserting % at %", to_string(*char, 1), start_index + i);
         }
         return;

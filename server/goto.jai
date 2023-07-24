@@ -1,3 +1,32 @@
+handle_goto_load :: (request: LSP_Request_Message_Definition, file: *Program_File, _load: *Directive_Load) {
+    file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
+    load_absolute_path := join(file_path_without_filename, _load.file, separator="/");
+
+    load_node_loc := node_location_to_lsp_location(_load.location);
+    load_node_loc.range.end.character -= 1;
+    load_node_loc.range.start.character = cast(u32) (load_node_loc.range.start.character + load_node_loc.range.end.character - _load.file.count-1);
+
+    lsp_location: LSP_Location_Link;
+    lsp_location.originSelectionRange = load_node_loc.range;
+    lsp_location.targetUri = path_to_lsp_path(load_absolute_path);
+
+    lsp_respond(request.id, lsp_location);
+}
+
+handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_File, _import: *Directive_Import) {
+    file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
+    module_absolute_path := get_module_import_path(_import, file_path_without_filename);
+
+    import_node_loc := node_location_to_lsp_location(_import.location);
+    import_node_loc.range.end.character -= 1;
+    import_node_loc.range.start.character = cast(u32) (import_node_loc.range.start.character + import_node_loc.range.end.character - _import.module.count-1);
+
+    lsp_location: LSP_Location_Link;
+    lsp_location.originSelectionRange = import_node_loc.range;
+    lsp_location.targetUri = path_to_lsp_path(module_absolute_path);
+
+    lsp_respond(request.id, lsp_location);
+}
 
 handle_goto :: (request: LSP_Request_Message_Definition) {
     file_path := normalize_path(request.params.textDocument.uri);
@@ -18,6 +47,16 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
+    if node.kind == .DIRECTIVE_LOAD {
+        handle_goto_load(request, file, xx node);
+        return;
+    }
+
+    if node.kind == .DIRECTIVE_IMPORT {
+        handle_goto_import(request, file, xx node);
+        return;
+    }
+
     if node.kind != .IDENTIFIER {
         lsp_respond(request.id, null);
         return;
@@ -25,15 +64,24 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     ident := cast(*Identifier) node;
 
+    log("Clicked node: % (%)", node.kind, ident.name);
+
     if ident.parent && ident.parent.kind == .BINARY_OPERATION {
-        result := goto_dot_path_member(file, xx ident.parent, ident);
+        binary_op := cast(*Binary_Operation) ident.parent;
+
+        // @TODO: make this more robust!
+        // For cases like entity.name = "Foo";
+        if binary_op.operation != .DOT && binary_op.parent && binary_op.parent.kind == .BINARY_OPERATION {
+            binary_op = xx binary_op.parent;
+        }
+
+        result := goto_dot_path_member(file, binary_op, ident);
         if result {
             lsp_respond(request.id, node_location_to_lsp_location(result.location));
             return;
         }
     }
 
-    log("Clicked node: % (%)", node.kind, ident.name);
 
     decls := get_identifier_decl(file, ident);
     if decls.count == 0 {
