@@ -1,5 +1,8 @@
 VERSION :: "1.0.0";
 
+PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "..");
+METAPROGRAM_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
+
 Args :: struct {
     verbose: bool;
     profile: bool;
@@ -13,12 +16,15 @@ Server :: struct {
     // This is from the config file
     local_modules: []string;
     roots: []string;
+    build_root: string;
 
     project_root: string;
     files: Table(string, *Program_File);
 
     memory_files_lock: Mutex;
     memory_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
+
+    previously_errored_file: string;
 }
 
 server: Server;
@@ -62,6 +68,39 @@ decode_url :: (url: string) -> string {
     return out_url;
 }
 
+find_entry_file :: (root: string) -> string {
+
+    contains_main_procedure :: (file: string) -> bool {
+        content := read_entire_file(file);
+        return contains(content, "main ::") || contains(content, "main::");
+    }
+
+    // @Fixme: This does not take the root into account!
+    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Maybe build.jai ... etc?
+
+    for path: COMMON_MAIN_PATH {
+        if file_exists(join(root, path, separator = "/")) && contains_main_procedure(path) {
+            return path;
+        }
+    }
+
+    files := file_list(root, true);
+
+    for file: files {
+        if contains(file, "main.jai") && contains_main_procedure(file) {
+            return file;
+        }
+    }
+
+    for file: files {
+        if contains_main_procedure(file) {
+            return file;
+        }
+    }
+
+    return ""; // TODO: What we gonna do when we do not find any?
+}
+
 find_jai_path :: () -> string {
     raw_path: string;
     #if OS == .WINDOWS {
@@ -97,6 +136,7 @@ load_config_file :: () {
     Config :: struct {
         local_modules: []string;
         roots: []string;
+        build_root: string;
         jai_path: string;
     }
     
@@ -113,6 +153,7 @@ load_config_file :: () {
 
     server.local_modules = config.local_modules;
     server.roots = config.roots;
+    server.build_root = config.build_root;
 
     if config.jai_path.count > 0 {
         server.args.jai_path = config.jai_path; 
@@ -139,6 +180,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             server.project_root = body.params.rootPath.*;
 
             load_config_file();
+
+            if server.build_root.count == 0 {
+                server.build_root = find_entry_file(server.project_root);
+            }
+
+            if server.roots.count == 0 {
+                server.roots = .[find_entry_file(server.project_root)];
+            }
 
             log("Server.local_modules: %", server.local_modules);
             log("Server.roots: %", server.roots);
@@ -173,6 +222,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 log_error("Unable to parse textDocument/divSave message");
                 return;
             }
+
+            run_diagnostics();
 
             file_path := normalize_path(body.params.textDocument.uri);
 

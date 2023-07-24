@@ -22,7 +22,10 @@ Compile the release version of the server with `jai build - -release`. Jails bin
 This process will create `jails-x.x.x.vsix` which you can install and use.
 
 ### Config file
-You can create a config file to specify roots (`main.jai`, `build.jai`) and the local modules folder.
+You can create a config file to specify:
+- `roots` (`main.jai`, `build.jai`) - this is used to set up files that are being parsed on init - you don't need to set this but it will improve your experience.
+- `local modules` (`modules`) - this tells the language server to also search for modules in these folders.
+- `build_root` - entry file for compiling (currently used for running compiler diagnostics - errors in the editor)
 
 ```json
 {
@@ -32,7 +35,8 @@ You can create a config file to specify roots (`main.jai`, `build.jai`) and the 
     "roots": [
         "server/main.jai",
         "build.jai"
-    ]
+    ],
+    "build_root": "build.jai"
 }
 ```
 
