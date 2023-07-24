@@ -51,6 +51,7 @@ normalize_path :: (path: string) -> string {
         normalized_path = replace(normalized_path, "file://", "");
     }
 
+
     return normalized_path;
 }
 
@@ -418,9 +419,13 @@ get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_lo
 is_global :: (node: *Node, from_file: *Program_File, it_file: *Program_File, from_import: bool) -> bool {
     if !node.parent return true;
 
+    if node.parent.kind == .BLOCK {
+        return is_global(node.parent, from_file, it_file, from_import);
+    }
+
     // @TODO: Make this more robust!
     if node.parent.kind == .IF {
-        _if := cast(*If) node;
+        _if := cast(*If) node.parent;
         if !_if.compile_time return false;
         return is_global(_if, from_file, it_file, from_import);
     }
