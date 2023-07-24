@@ -820,7 +820,7 @@ run_diagnostics :: () {
         return;
     }
 
-    free(*command);
+    // free(*command);
 
     lines := split(error, "\n");
 
