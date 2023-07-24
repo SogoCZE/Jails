@@ -88,13 +88,13 @@ find_entry_file :: (root: string) -> string {
 
     for file: files {
         if contains(file, "main.jai") && contains_main_procedure(file) {
-            return file;
+            return replace(file, root, "");
         }
     }
 
     for file: files {
         if contains_main_procedure(file) {
-            return file;
+            return replace(file, root, "");
         }
     }
 
