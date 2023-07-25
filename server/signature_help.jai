@@ -95,6 +95,10 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
                 signature_help_info.activeParameter = xx it_index;
                 already_have_active_arg = true;
             }
+
+            if it_index == proc_call.arguments.count-1 && !already_have_active_arg && it_index != procedure.arguments.count-1 {
+                signature_help_info.activeParameter = xx (it_index+1);
+            }
             
         }
     
