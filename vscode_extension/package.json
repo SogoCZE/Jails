@@ -38,6 +38,23 @@
     "Jai"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "jails.restart",
+        "title": "Restart",
+        "category": "Jails"
+      },
+      {
+        "command": "jails.start",
+        "title": "Start",
+        "category": "Jails"
+      },
+      {
+        "command": "jails.stop",
+        "title": "Stop",
+        "category": "Jails"
+      }
+    ],
     "languages": [
       {
         "id": "jai",

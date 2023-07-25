@@ -166,6 +166,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
     if request.method == {
         case "shutdown";
             server.quit = true;
+            lsp_respond(request.id, null);
         case "initialize";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize);
             if !success {
@@ -337,6 +338,7 @@ main :: () {
     }
 
     log("Shutdown");
+    exit(0);
 }
 
 // @TODO: Move this to some utils file or something?

@@ -1,4 +1,4 @@
-import { ExtensionContext, window } from "vscode";
+import { ExtensionContext, commands, window } from "vscode";
 
 import {
     LanguageClient,
@@ -21,12 +21,15 @@ export function activate(context: ExtensionContext) {
 
     let clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: "file", language: "jai" }],
-        outputChannel: window.createOutputChannel("Jai Language Server"),
     };
 
     client = new LanguageClient(
         "jails", "Jai Language Server", serverOptions, clientOptions
     );
+
+    commands.registerCommand("jails.start", () => client.start());
+    commands.registerCommand("jails.stop", async () => await client.stop());
+    commands.registerCommand("jails.restart", async () => await client.restart());
 
     client.start();
 }
