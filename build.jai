@@ -12,7 +12,6 @@
     profile_server := array_find(args, "-profile_server");
     launch_vscode := array_find(args, "-vscode");
     release := array_find(args, "-release");
-    copy := array_find(args, "-copy");
 
     ok: bool;
 
@@ -84,20 +83,6 @@
         }
 
         run_command(vscode_path, "--profile=jails_dev", vscode_extension_development_path);
-    }
-
-    if ok && copy {
-        dir_ok := make_directory_if_it_does_not_exist("./vscode_extension/out/", true);
-        if !dir_ok {
-            log_error("Failed to create directory 'vscode_extension/out'.");
-            return;
-        }
-
-        copy_ok := copy_file("./bin/jails", "./vscode_extension/out/jails");
-        if !copy_ok {
-            log_error("Failed to copy Jails binary to vscode_extension/out folder.");
-            return;
-        }
     }
 }
 

@@ -44,8 +44,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     if cursor_block log("Block: %", cursor_block.*);
 
     // General 
-
-    decls = get_all_declarations(file, cursor_block, *cursor_location);
+    decls = get_declarations(file, cursor_block, *cursor_location);
 
     send_completions_decls(request, decls);
 }

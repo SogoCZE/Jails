@@ -232,7 +232,7 @@ resolve_identifiers :: (file: *Program_File) {
             // log("Ident: %", ident.name);
 
             block := get_node_nearest_block(ident);
-            decls := get_declarations(file, ident.name, block, *ident.location);
+            decls := get_declarations(file, block, *ident.location, ident.name);
             if decls.count < 1 {
                 // log_error("Did not find any decl for '%'!", ident.name);
                 continue;
@@ -306,114 +306,122 @@ get_file_links :: (file: *Program_File) -> []Linked_File {
     return linked_files;
 }
 
-get_declarations :: (file: *Program_File, name: string, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
+get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "") -> []*Declaration {
     decls: [..]*Declaration;
 
-    // Procedure or Struct params
-    if from_block && from_block.parent {
-        
-        if from_block.parent.kind == {
+    if from_block {
 
-            case .PROCEDURE;
-                proc := cast(*Procedure) from_block.parent;
-        
-                for arg: proc.arguments {
-                    if arg.kind != .DECLARATION continue;
-                    decl := cast(*Declaration) arg;
-                    if decl.name == name array_add(*decls, decl);   
-                }  
+        parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION);
 
-            case .STRUCT;
-                _struct := cast(*Struct) from_block.parent;
+        // Procedure or Struct params
+        if parent_type {
 
-                for arg: _struct.polymorphic_arguments {
-                    if arg.kind != .DECLARATION continue;
-                    decl := cast(*Declaration) arg;
-                    if decl.name == name array_add(*decls, decl);   
-                }  
+            if parent_type.kind == {
+
+                case .PROCEDURE;
+                    proc := cast(*Procedure) parent_type;
             
+                    for arg: proc.arguments {
+                        if arg.kind != .DECLARATION continue;
+                        decl := cast(*Declaration) arg;
+
+                        if name.count == 0 || decl.name == name array_add(*decls, decl);
+                    }  
+
+                case .STRUCT;
+                    _struct := cast(*Struct) parent_type;
+
+                    for arg: _struct.polymorphic_arguments {
+                        if arg.kind != .DECLARATION continue;
+                        decl := cast(*Declaration) arg;
+
+                        if name.count == 0 || decl.name == name array_add(*decls, decl);
+                    }  
+
+                case .UNION;
+                    _union := cast(*Union) parent_type;
+
+                    for arg: _union.polymorphic_arguments {
+                        if arg.kind != .DECLARATION continue;
+                        decl := cast(*Declaration) arg;
+
+                        if name.count == 0 || decl.name == name array_add(*decls, decl);
+                    }  
+                
+            }
+
         }
 
     }
 
-    for linked_file: file.linked_files {
-        unfiltered_decls := table_find_multiple(*linked_file.file.declarations, name);       
+    should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *Block, from_loc: *Node.Location, decl: *Declaration) -> bool {
+        decl_block := get_node_nearest_block(decl);
+        global := is_global(decl, file, linked_file.file, linked_file.from_import);
 
-        for decl: unfiltered_decls {
-            decl_block := get_node_nearest_block(decl);
-            global := is_global(decl, file, linked_file.file, linked_file.from_import);
-
-            if !global {
-                if decl.const {
-                    if !is_child_of_block(decl_block, from_block) continue;
-                } else {
-                    // log("Scopes, % ?? %", decl_block, from_block);
-                    if decl_block != from_block continue;
-                    if from_loc && from_loc.l0 < decl.location.l0 continue;
-                }
+        if !global {
+            if decl.const {
+                if !is_child_of_block(decl_block, from_block) return false;
+            } else {
+                // log("Scopes, % ?? %", decl_block, from_block);
+                if decl_block != from_block return false;
+                if from_loc && from_loc.l0 < decl.location.l0 return false;
             }
-
-            array_add(*decls, decl);   
         }
+
+        return true;
+    }
+
+    for linked_file: file.linked_files {
+
+        if name.count > 0 {
+            for decl: table_find_multiple(*linked_file.file.declarations, name) {
+                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);   
+            }
+        } else {
+            for decl: linked_file.file.declarations {
+                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);   
+            }
+        }
+        
     }
 
     return decls;
 }
 
-// @TODO: this is copypasta of the procedure get_declarations - we need to split it more and reuse it. 
-// Here we dont want to find specific decl by name but filter all avaiable decls in provided context.
-get_all_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null) -> []*Declaration {
-    decls: [..]*Declaration;
+get_node_nearest_parent :: (node: *Node, predicate: (Node.Kind) -> bool, limit := 15) -> *Node {
+    current: *Node = node;
+    i: int;
 
-    // Procedure or Struct params
-    if from_block && from_block.parent {
-        
-        if from_block.parent.kind == {
+    while true {
+        if predicate(current.kind) return xx current;
 
-            case .PROCEDURE;
-                proc := cast(*Procedure) from_block.parent;
-        
-                for arg: proc.arguments {
-                    if arg.kind != .DECLARATION continue;
-                    decl := cast(*Declaration) arg;
-                    array_add(*decls, decl);   
-                }  
+        if i >= limit break;
+        i += 1;
+        if !current.parent break;
 
-            case .STRUCT;
-                _struct := cast(*Struct) from_block.parent;
-
-                for arg: _struct.polymorphic_arguments {
-                    if arg.kind != .DECLARATION continue;
-                    decl := cast(*Declaration) arg;
-                    array_add(*decls, decl);   
-                }  
-            
-        }
-
+        current = current.parent;        
     }
 
-    for linked_file: file.linked_files {
-        
-        for decl: linked_file.file.declarations {
-            decl_block := get_node_nearest_block(decl);
-            global := is_global(decl, file, linked_file.file, linked_file.from_import);
+    return null;
+}
 
-            if !global {
-                if decl.const {
-                    if !is_child_of_block(decl_block, from_block) continue;
-                } else {
-                    // log("Scopes, % ?? %", decl_block, from_block);
-                    if decl_block != from_block continue;
-                    if from_loc && from_loc.l0 < decl.location.l0 continue;
-                }
-            }
+is_parent_of :: (parent: *Node, node: *Node, limit := 5) -> bool {
+    if parent == node return true;
 
-            array_add(*decls, decl);   
-        }
+    current: *Node = node;
+    i: int;
 
+    while true {
+        if current == parent return true;
+
+        if i >= limit break;
+        i += 1;
+        if !current.parent break;
+
+        current = current.parent;        
     }
 
-    return decls;
+    return false;
 }
 
 is_global :: (node: *Node, from_file: *Program_File, it_file: *Program_File, from_import: bool) -> bool {
@@ -503,11 +511,11 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
     return loaded, from_import;
 }
 
-get_declaration :: (file: *Program_File, name: string, from_block: *Block = null) -> *Declaration {
-    decls := get_declarations(file, name, from_block);
-    if decls.count == 0 return null;
-    return decls[0];
-}
+// get_declaration :: (file: *Program_File, name: string, from_block: *Block = null) -> *Declaration {
+//     decls := get_declarations(file, from_block);
+//     if decls.count == 0 return null;
+//     return decls[0];
+// }
 
 get_node_nearest_block :: (node: *Node) -> *Block {
     current_node := node;

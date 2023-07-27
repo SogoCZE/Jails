@@ -1,41 +1,3 @@
-// @TODO: maybe move this to program and make it more general like "get_node_nearest" and provide Node kind to filter.
-get_node_nearest_procedure_call :: (node: *Node, limit := 5) -> *Procedure_Call {
-    current: *Node = node;
-    i: int;
-
-    while true {
-        if current.kind == .PROCEDURE_CALL return xx current;
-
-        if i >= limit break;
-        i += 1;
-        if !current.parent break;
-
-        current = current.parent;        
-    }
-
-    return null;
-}
-
-// @TODO: move this to the program.jai
-is_parent_of :: (parent: *Node, node: *Node, limit := 5) -> bool {
-    if parent == node return true;
-
-    current: *Node = node;
-    i: int;
-
-    while true {
-        if current == parent return true;
-
-        if i >= limit break;
-        i += 1;
-        if !current.parent break;
-
-        current = current.parent;        
-    }
-
-    return false;
-}
-
 handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     file_path := normalize_path(request.params.textDocument.uri);
 
@@ -49,7 +11,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
 
-    proc_call := get_node_nearest_procedure_call(cursor_node);
+    proc_call := cast(*Procedure_Call) get_node_nearest_parent(cursor_node, kind => kind == .PROCEDURE_CALL);
     if !proc_call {
         lsp_respond(request.id, null);
         return;
@@ -57,7 +19,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
 
     proc_call_ident := cast(*Identifier) proc_call.procedure;
 
-    decls := get_declarations(file, proc_call_ident.name, cursor_block, *cursor_location);
+    decls := get_declarations(file, cursor_block, *cursor_location, proc_call_ident.name);
     if decls.count == 0 {
         lsp_respond(request.id, null);
         return;

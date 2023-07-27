@@ -34,12 +34,13 @@ handle_hover :: (request: LSP_Request_Message_Hover) {
         }
     }
 
-    decls := get_identifier_decl(file, ident);
-    if decls.count == 0 {
+    type := get_node_type(file, ident);
+    if !type {
         lsp_respond(request.id, null);
         return;
     }
 
-    ast_print(*builder, decls[0]);
+
+    ast_print(*builder, type);
     lsp_respond(request.id, LSP_Hover.{ contents=builder_to_string(*builder) });
 }
