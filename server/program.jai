@@ -107,11 +107,17 @@ parse_file :: (path: string, force := false) {
         parse(*parser, null);
     }
 
-    file.linked_files = get_file_links(file);
-    resolve_identifiers(file);
-
     if content_from_disc free(content);
     // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
+
+    array_add(*server.files_to_be_analyzed, file);
+}
+
+analyze_files :: () {
+    for file: server.files_to_be_analyzed {
+        file.linked_files = get_file_links(file);
+        resolve_identifiers(file);
+    }
 }
 
 Node_Visit_Data :: struct {
@@ -813,7 +819,7 @@ run_diagnostics :: () {
     command: [..] string;
 
     array_add(*command, "jai");
-    array_add(*command, build_root_absolute, "-quiet", "-no_color", "-plug", "jails_diagnostics");
+    array_add(*command, build_root_absolute, "-x64", "-quiet", "-no_color", "-plug", "jails_diagnostics");
 
     for local_module_folder: server.local_modules {
         array_add(*command, "-import_dir", local_module_folder);

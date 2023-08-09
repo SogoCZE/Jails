@@ -20,6 +20,7 @@ Server :: struct {
 
     project_root: string;
     files: Table(string, *Program_File);
+    files_to_be_analyzed: [..]*Program_File;
 
     memory_files_lock: Mutex;
     memory_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
@@ -205,6 +206,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 parse_file(absolute_path, true);
             }
 
+            analyze_files();
+
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
 
@@ -229,6 +232,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := normalize_path(body.params.textDocument.uri);
 
             parse_file(file_path, true);
+            analyze_files();
 
         case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document);
@@ -243,6 +247,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             create_memory_file(file_path, content);
             
             parse_file(file_path);
+            analyze_files();
 
             log("File_path: %", file_path);
 
@@ -256,6 +261,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := normalize_path(body.params.textDocument.uri);
             edit_memory_file(file_path, body.params.contentChanges);
             parse_file(file_path, true);
+            analyze_files();
 
         case "textDocument/didClose";
             success, body := json_parse_string(raw_request, LSP_Did_Close_Text_Document);

@@ -47,6 +47,8 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
+    log("Clicked node: %", node.kind);
+
     if node.kind == .DIRECTIVE_LOAD {
         handle_goto_load(request, file, xx node);
         return;
@@ -63,14 +65,14 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
     ident := cast(*Identifier) node;
-
-    log("Clicked node: % (%)", node.kind, ident.name);
+    log("Ident: %", ident.name);
 
     if ident.parent && ident.parent.kind == .BINARY_OPERATION {
         binary_op := cast(*Binary_Operation) ident.parent;
 
         // @TODO: make this more robust!
-        // For cases like entity.name = "Foo";
+        // --------
+        // This is for cases like entity.name = "Foo";
         if binary_op.operation != .DOT && binary_op.parent && binary_op.parent.kind == .BINARY_OPERATION {
             binary_op = xx binary_op.parent;
         }
