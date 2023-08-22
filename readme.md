@@ -16,14 +16,15 @@ Be aware that this language server is still pretty much unstable... Nonetheless,
 Compile the release version of the server with `jai build - -release`. Jails binary will be generated in the `bin` folder.
 
 ### VSCode
-1. You need to [build](#building) Jails and install npm dependencies inside `vscode_extension` with `npm i`
-2. Run `npm run compile` to generate an extension bundle
-3. Run `npm run pack:unix` or `npm run pack:windows`.
+1. Install the Visual Studio Code Extension Manager with `npm i -g @vscode/vsce`
+2. You need to [build](#building) Jails and install npm dependencies inside `vscode_extension` with `npm i`
+3. Run `npm run compile` to generate an extension bundle
+4. Run `npm run pack:unix` or `npm run pack:windows`.
 
 This process will create `jails-x.x.x.vsix` which you can install and use.
 
 ### Config file
-You can create a config file to specify:
+You can create a config file `jails.json` inside your project root to specify:
 - `roots` (`main.jai`, `build.jai`) - this is used to set up files that are being parsed on init - you don't need to set this but it will improve your experience.
 - `local modules` (`modules`) - this tells the language server to also search for modules in these folders.
 - `build_root` - entry file for compiling (currently used for running compiler diagnostics - errors in the editor)
