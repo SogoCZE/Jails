@@ -118,6 +118,8 @@ analyze_files :: () {
         file.linked_files = get_file_links(file);
         resolve_identifiers(file);
     }
+
+    array_reset(*server.files_to_be_analyzed);
 }
 
 Node_Visit_Data :: struct {
