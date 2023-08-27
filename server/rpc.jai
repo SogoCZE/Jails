@@ -2,6 +2,7 @@
 
 read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
     readed: u32;
+    read_this_time: s64;
 
     #if OS == .WINDOWS {
         win32 :: #import "Windows";
@@ -12,12 +13,12 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
 
     while bytes_to_read > readed  {
         #if OS != .WINDOWS { // Linux, MacOS 
-            read_this_time := posix.read(posix.STDIN_FILENO, buffer+readed, bytes_to_read-readed);
+            read_this_time = posix.read(posix.STDIN_FILENO, buffer+readed, bytes_to_read-readed);
             if read_this_time < 0 {
               // probably EAGAIN or EINTR?
               err := posix.errno();
               if err != posix.EINTR && err != posix.EAGAIN {
-                  log_error( "Reading the stdin failed with errno: %", posix.errno());
+                  log_error("Reading the stdin failed with errno: %", posix.errno());
                   return readed;
               } else {
                   // we should retry
@@ -29,7 +30,10 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
               readed += xx read_this_time;
             }
         } else { // Windows
-            win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *readed);
+            read_this_time = 0;
+            ok := win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *read_this_time);
+            if ok && read_this_time == 0 return readed; // EOF
+            readed += xx read_this_time;
         }
     }
 
@@ -60,7 +64,7 @@ parse_header :: (header : string) -> s32, success: bool {
     return nb_bytes, success;
 }
 
-get_message :: () -> string, bool {
+read_message_from_stdin :: () -> string, bool {
     buffer: [0xFFFF]u8;
 
     header_bytes := read_line_from_stdin(buffer);
@@ -72,6 +76,7 @@ get_message :: () -> string, bool {
 
     body_size, success := parse_header(header);
     if !success {
+        log_error("Couldnt parse header!");
         return "", false;
     }
 
@@ -80,7 +85,7 @@ get_message :: () -> string, bool {
     body_buffer.count = body_size;
 
     if read_from_stdin(buffer.data + header.count, 2) < 2 {
-      log_error("Couldn't read CRLF");
+      log_error("Couldn't read CRLF!");
       return "", false;
     } // @todo: this is somewhat weird
 
@@ -93,7 +98,7 @@ get_message :: () -> string, bool {
     body_read := read_from_stdin(body_buffer.data, xx body_buffer.count);
 
     if body_read != xx body_size {
-        log_error("Expected % bytes, got %.\n", body_size, body_read);
+        log_error("Expected % bytes, got %!", body_size, body_read);
         return "", false;
     }
 
@@ -106,3 +111,4 @@ send_message :: (data: $T) {
     body := json_write_string(data);
     print("Content-Length: %\r\n\r\n%", body.count, body);
 }
+
