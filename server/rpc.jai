@@ -1,4 +1,5 @@
 #import "String";
+#import "File";
 
 read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
     readed: u32;
@@ -6,6 +7,7 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
     #if OS == .WINDOWS {
         win32 :: #import "Windows";
         handle := win32.GetStdHandle(win32.STD_INPUT_HANDLE);
+	read_this_time_windows: u32;
     } else {
         posix :: #import "POSIX";
     }
@@ -29,7 +31,9 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
               readed += xx read_this_time;
             }
         } else { // Windows
-            win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *readed);
+            ok := win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *read_this_time_windows);
+	    if ok && read_this_time_windows == 0 return readed; // EOF
+	    readed += read_this_time_windows;
         }
     }
 
@@ -60,18 +64,20 @@ parse_header :: (header : string) -> s32, success: bool {
     return nb_bytes, success;
 }
 
-get_message :: () -> string, bool {
+read_message_from_stdin :: () -> string, bool {
+    log("Reading message from stdin");
     buffer: [0xFFFF]u8;
 
     header_bytes := read_line_from_stdin(buffer);
     if header_bytes <= 0 {
-      log_error("The input channel was closed!");
+      log("The input channel was closed! Skipping message.");
       return "", false;
     }
     header := to_string(buffer.data, header_bytes);
 
     body_size, success := parse_header(header);
     if !success {
+	log("Couldnt parse header! Skipping message.");
         return "", false;
     }
 
@@ -80,7 +86,7 @@ get_message :: () -> string, bool {
     body_buffer.count = body_size;
 
     if read_from_stdin(buffer.data + header.count, 2) < 2 {
-      log_error("Couldn't read CRLF");
+      log("Couldn't read CRLF. Skipping message.");
       return "", false;
     } // @todo: this is somewhat weird
 
@@ -93,11 +99,12 @@ get_message :: () -> string, bool {
     body_read := read_from_stdin(body_buffer.data, xx body_buffer.count);
 
     if body_read != xx body_size {
-        log_error("Expected % bytes, got %.\n", body_size, body_read);
+        log("Expected % bytes, got %. Skipping message.", body_size, body_read);
         return "", false;
     }
 
     body := to_string(body_buffer.data, body_buffer.count);
+    log("Successfully parsed message");
 
     return body, true;        
 }
@@ -106,3 +113,4 @@ send_message :: (data: $T) {
     body := json_write_string(data);
     print("Content-Length: %\r\n\r\n%", body.count, body);
 }
+

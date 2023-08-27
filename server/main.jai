@@ -326,7 +326,7 @@ main :: () {
     defer deinit_memory_files();
 
     while !server.quit {
-        body, success := get_message();
+        body, success := read_message_from_stdin();
         if !success {
             log("Failed to read message");
             continue;
