@@ -328,7 +328,7 @@ main :: () {
     while !server.quit {
         body, success := read_message_from_stdin();
         if !success {
-            log("Failed to read message");
+            log("Failed to read message. Skipping.");
             continue;
         }
 

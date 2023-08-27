@@ -1,25 +1,24 @@
 #import "String";
-#import "File";
 
 read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
     readed: u32;
+    read_this_time: s64;
 
     #if OS == .WINDOWS {
         win32 :: #import "Windows";
         handle := win32.GetStdHandle(win32.STD_INPUT_HANDLE);
-	read_this_time_windows: u32;
     } else {
         posix :: #import "POSIX";
     }
 
     while bytes_to_read > readed  {
         #if OS != .WINDOWS { // Linux, MacOS 
-            read_this_time := posix.read(posix.STDIN_FILENO, buffer+readed, bytes_to_read-readed);
+            read_this_time = posix.read(posix.STDIN_FILENO, buffer+readed, bytes_to_read-readed);
             if read_this_time < 0 {
               // probably EAGAIN or EINTR?
               err := posix.errno();
               if err != posix.EINTR && err != posix.EAGAIN {
-                  log_error( "Reading the stdin failed with errno: %", posix.errno());
+                  log_error("Reading the stdin failed with errno: %", posix.errno());
                   return readed;
               } else {
                   // we should retry
@@ -31,9 +30,10 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
               readed += xx read_this_time;
             }
         } else { // Windows
-            ok := win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *read_this_time_windows);
-	    if ok && read_this_time_windows == 0 return readed; // EOF
-	    readed += read_this_time_windows;
+            read_this_time = 0;
+            ok := win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *read_this_time);
+            if ok && read_this_time == 0 return readed; // EOF
+            readed += xx read_this_time;
         }
     }
 
@@ -65,19 +65,18 @@ parse_header :: (header : string) -> s32, success: bool {
 }
 
 read_message_from_stdin :: () -> string, bool {
-    log("Reading message from stdin");
     buffer: [0xFFFF]u8;
 
     header_bytes := read_line_from_stdin(buffer);
     if header_bytes <= 0 {
-      log("The input channel was closed! Skipping message.");
+      log_error("The input channel was closed!");
       return "", false;
     }
     header := to_string(buffer.data, header_bytes);
 
     body_size, success := parse_header(header);
     if !success {
-	log("Couldnt parse header! Skipping message.");
+        log_error("Couldnt parse header!");
         return "", false;
     }
 
@@ -86,7 +85,7 @@ read_message_from_stdin :: () -> string, bool {
     body_buffer.count = body_size;
 
     if read_from_stdin(buffer.data + header.count, 2) < 2 {
-      log("Couldn't read CRLF. Skipping message.");
+      log_error("Couldn't read CRLF!");
       return "", false;
     } // @todo: this is somewhat weird
 
@@ -99,12 +98,11 @@ read_message_from_stdin :: () -> string, bool {
     body_read := read_from_stdin(body_buffer.data, xx body_buffer.count);
 
     if body_read != xx body_size {
-        log("Expected % bytes, got %. Skipping message.", body_size, body_read);
+        log_error("Expected % bytes, got %!", body_size, body_read);
         return "", false;
     }
 
     body := to_string(body_buffer.data, body_buffer.count);
-    log("Successfully parsed message");
 
     return body, true;        
 }
