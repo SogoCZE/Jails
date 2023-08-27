@@ -1,7 +1,7 @@
 #import "String";
 
-read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
-    readed: u32;
+read_from_stdin :: (buffer: *u8, bytes_to_read: u64) -> u64 {
+    readed: u64;
     read_this_time: s64;
 
     #if OS == .WINDOWS {
@@ -40,8 +40,8 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u32) -> u32 {
     return readed;
 }
 
-read_line_from_stdin :: (buffer: []u8) -> u32 {
-    total_read: u32;
+read_line_from_stdin :: (buffer: []u8) -> u64 {
+    total_read: u64;
 
     while read_from_stdin(buffer.data + total_read, 1) {
         total_read += 1;
@@ -53,14 +53,14 @@ read_line_from_stdin :: (buffer: []u8) -> u32 {
     return total_read;
 }
 
-parse_header :: (header : string) -> s32, success: bool {
+parse_header :: (header : string) -> s64, success: bool {
     split_header := split(header, ": ");
     if split_header[0] != "Content-Length" {
         log_error("Expected length message, got:\n%\n", header);
         return 0, false;
     }
 
-    nb_bytes, success := parse_int(*split_header[1], s32);
+    nb_bytes, success := parse_int(*split_header[1], s64);
     return nb_bytes, success;
 }
 
@@ -72,7 +72,7 @@ read_message_from_stdin :: () -> string, bool {
       log_error("The input channel was closed!");
       return "", false;
     }
-    header := to_string(buffer.data, header_bytes);
+    header := to_string(buffer.data, xx header_bytes);
 
     body_size, success := parse_header(header);
     if !success {
