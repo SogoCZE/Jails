@@ -31,7 +31,7 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u64) -> u64 {
             }
         } else { // Windows
             read_this_time = 0;
-            ok := win32.ReadFile(handle, buffer+readed, bytes_to_read-readed, xx *read_this_time);
+            ok := win32.ReadFile(handle, buffer+readed, xx (bytes_to_read-readed), xx *read_this_time);
             if ok && read_this_time == 0 return readed; // EOF
             readed += xx read_this_time;
         }
