@@ -66,11 +66,11 @@ path_to_lsp_path :: (path: string) -> string {
 parse_file :: (path: string, force := false) {
     file, ok := table_find(*server.files, path);
     if !force && ok {
-        log("Skipping % because it already exists", path);
+        // log("Skipping % because it already exists", path);
         return;
     }
 
-    log("Parse file: %", path);
+    // log("Parse file: %", path);
 
     content := cast(string) get_memory_file(path);
     content_from_disc: bool;
@@ -78,9 +78,9 @@ parse_file :: (path: string, force := false) {
     if content.count == 0 {
         exists: bool;
 
-        content, exists = read_entire_file(path);
+        content, exists = read_entire_file(path, log_errors=false);
         if !exists {
-            log_error("File % does not exists!", path);
+            // log_error("File % does not exists!", path);
             return;
         }
 
