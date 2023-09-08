@@ -257,14 +257,14 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: s
 
         builder: String_Builder;
 
-        for start_index..end_index-1 {
-            char := (<<content)[it];
+        for start_index..end_index {
+            char := (content.*)[it];
             print_to_builder(*builder, "%", to_string(*char, 1));
         }
 
         log("%", builder_to_string(*builder));
 
-        log("- END (%)", end_index);
+        log("- END (%) [%]", end_index, end_index-start_index);
     }
 
     assert(content.count >= start_index && content.count >= end_index);
@@ -292,12 +292,12 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: s
             continue;
         }
 
-        (<<content)[it-removed] = text[text_index];
+        (content.*)[it-removed] = text[text_index];
         text_index += 1;
     }
 
-    // Insertion of leftovers (range is smaller than insrted content)
-    if text_index < text.count-1 {
+    // Insertion of leftovers (range is smaller than inserted content)
+    if text_index < text.count {
         for index: 0..text.count - 1 - text_index {
             char := text[text_index + index];
             array_insert_at(content, char, end_index + index);
