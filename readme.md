@@ -10,18 +10,23 @@ Jails is an experimental language server for the Jai programming language.
 In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc. 
 
 ## Usage
-Be aware that this language server is still pretty much unstable... Nonetheless, it can be quite useful even in this early stage of development. 
+Be aware that this language server is still pretty much unstable... Nonetheless, it can be quite useful even in this early stage of development.
+
+### Cloning
+This repo uses git submodules. Clone it using `git clone --recurse-submodules`.
 
 ### Building
 Compile the release version of the server with `jai build - -release`. Jails binary will be generated in the `bin` folder.
 
-### VSCode
-1. Install the Visual Studio Code Extension Manager with `npm i -g @vscode/vsce`
-2. You need to [build](#building) Jails and install npm dependencies inside `vscode_extension` with `npm i`
-3. Run `npm run compile` to generate an extension bundle
-4. Run `npm run pack:unix` or `npm run pack:windows`.
-
-This process will create `jails-x.x.x.vsix` which you can install and use.
+### VS Code
+1. Make sure this repo is your working directory (e.g. `cd Jails`).
+2. Run `npm install --global @vscode/vsce` to install the Visual Studio Code Extension Manager.
+3. Run `jai build - -release` to build the binary.
+4. Run `cd vscode_extension` to enter the subdirectory `vscode_extension`.
+5. Run `npm install` to install npm dependencies.
+6. Run `npm run compile` to generate an extension bundle.
+7. Run `npm run pack:unix` or `npm run pack:windows` to pack the bundle into a file called something like `jails-x.x.x.vsix`.
+8. Run `code --install-extension jails-x.x.x.vsix` to install the extension in VS Code.
 
 ### Config file
 You can create a config file `jails.json` inside your project root to specify:
