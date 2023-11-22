@@ -21,7 +21,7 @@ Compile the release version of the server with `jai build.jai - -release`. Jails
 ### VS Code
 1. Make sure this repo is your working directory (e.g. `cd Jails`).
 2. Run `npm install --global @vscode/vsce` to install the Visual Studio Code Extension Manager.
-3. Run `jai build - -release` to build the binary.
+3. Run `jai build.jai - -release` to build the binary.
 4. Run `cd vscode_extension` to enter the subdirectory `vscode_extension`.
 5. Run `npm install` to install npm dependencies.
 6. Run `npm run compile` to generate an extension bundle.
