@@ -16,7 +16,7 @@ Be aware that this language server is still pretty much unstable... Nonetheless,
 This repo uses git submodules. Clone it using `git clone --recurse-submodules`.
 
 ### Building
-Compile the release version of the server with `jai build - -release`. Jails binary will be generated in the `bin` folder.
+Compile the release version of the server with `jai build.jai - -release`. Jails binary will be generated in the `bin` folder.
 
 ### VS Code
 1. Make sure this repo is your working directory (e.g. `cd Jails`).
