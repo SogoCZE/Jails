@@ -14,7 +14,7 @@ Server :: struct {
     quit := false;
 
     // This is from the config file
-    local_modules: []string;
+    local_modules: [..]string;
     roots: []string;
     build_root: string;
 
@@ -152,7 +152,7 @@ load_config_file :: () {
         return;
     }
 
-    server.local_modules = config.local_modules;
+    array_add(*server.local_modules, ..config.local_modules);
     server.roots = config.roots;
     server.build_root = config.build_root;
 
@@ -190,6 +190,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             if server.roots.count == 0 {
                 server.roots = .[find_entry_file(server.project_root)];
             }
+
+            // Include $workingDirectory/modules as a default local module path. @TODO: is this good?
+            array_add(*server.local_modules, "modules");
 
             log("Server.local_modules: %", server.local_modules);
             log("Server.roots: %", server.roots);
