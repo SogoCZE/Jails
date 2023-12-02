@@ -2,12 +2,11 @@ handle_goto_load :: (request: LSP_Request_Message_Definition, file: *Program_Fil
     file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
     load_absolute_path := join(file_path_without_filename, _load.file, separator="/");
 
-    load_node_loc := node_location_to_lsp_location(_load.location);
-    load_node_loc.range.end.character -= 1;
-    load_node_loc.range.start.character = cast(u32) (load_node_loc.range.start.character + load_node_loc.range.end.character - _load.file.count-1);
-
     lsp_location: LSP_Location_Link;
-    lsp_location.originSelectionRange = load_node_loc.range;
+    lsp_location.originSelectionRange = .{
+        start=.{line=xx _load.location.l0, character=xx(_load.location.c1 - _load.file.count-1)},
+        end=.{line=xx _load.location.l0, character=xx(_load.location.c1-1)}
+    };
     lsp_location.targetUri = path_to_lsp_path(load_absolute_path);
 
     lsp_respond(request.id, lsp_location);
@@ -17,12 +16,11 @@ handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_F
     file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
     module_absolute_path := get_module_import_path(_import, file_path_without_filename);
 
-    import_node_loc := node_location_to_lsp_location(_import.location);
-    import_node_loc.range.end.character -= 1;
-    import_node_loc.range.start.character = cast(u32) (import_node_loc.range.start.character + import_node_loc.range.end.character - _import.module.count-1);
-
     lsp_location: LSP_Location_Link;
-    lsp_location.originSelectionRange = import_node_loc.range;
+    lsp_location.originSelectionRange = .{
+        start=.{line=xx _import.location.l0, character=xx(_import.location.c1 - _import.module.count-1)},
+        end=.{line=xx _import.location.l0, character=xx(_import.location.c1-1)}
+    };
     lsp_location.targetUri = path_to_lsp_path(module_absolute_path);
 
     lsp_respond(request.id, lsp_location);
