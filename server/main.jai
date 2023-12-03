@@ -103,13 +103,16 @@ find_entry_file :: (root: string) -> string {
 }
 
 find_jai_path :: () -> string {
+    result: Process_Result;
     raw_path: string;
+    err: string;
+
     #if OS == .WINDOWS {
-        _, raw_path = run_command("where.exe", "jai", capture_and_return_output=true);
+        result, raw_path, err = run_command("where.exe", "jai", capture_and_return_output=true);
         path_overwrite_separators(raw_path, #char "/");
         raw_path = trim(raw_path);
     } else {
-        _, raw_path = run_command("whereis", "-q", "jai", capture_and_return_output=true);
+        result, raw_path, err = run_command("whereis", "-q", "jai", capture_and_return_output=true);
         raw_path = trim(raw_path);
 
         BUFFER_SIZE :: 4096;  
@@ -122,7 +125,10 @@ find_jai_path :: () -> string {
     }
 
     // @TODO: error that we cant find jai path
-    if raw_path.count == 0 return "";
+    if raw_path.count == 0 {
+        log_error("Error while resolving Jai path % %.", result, err);
+        return "";
+    } 
     
     path := split(raw_path, "/");
 
@@ -317,7 +323,8 @@ main :: () {
     }
 
     if server.args.jai_path.count == 0 {
-         server.args.jai_path = find_jai_path();
+        server.args.jai_path = find_jai_path();
+        log("Jai path: %", server.args.jai_path);
     }
 
     log("Args are %", server.args);

@@ -116,6 +116,9 @@ parse_file :: (path: string, force := false) {
 analyze_files :: () {
     for file: server.files_to_be_analyzed {
         file.linked_files = get_file_links(file);
+    }
+
+    for file: server.files_to_be_analyzed {
         resolve_identifiers(file);
     }
 
@@ -831,7 +834,7 @@ run_diagnostics :: () {
 
     reset_diagnostics();
 
-    result, _, error := run_command(..command, working_directory=server.project_root, capture_and_return_output=true);
+    result, _, error := run_command(..command, working_directory=server.project_root, capture_and_return_output=true, timeout_ms=2500);
     if result.exit_code == 0 {
         return;
     }

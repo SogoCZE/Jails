@@ -1,8 +1,8 @@
 {
   "name": "jails",
   "displayName": "Jai Language Server",
-  "description": "Language Server for Jai",
-  "version": "0.0.4",
+  "description": "Language Server for Jai programming language",
+  "version": "0.0.5",
   "publisher": "SogoCZE",
   "author": "SogoCZE",
   "main": "./out/extension.js",
@@ -21,18 +21,18 @@
   },
   "license": "MIT",
   "engines": {
-    "vscode": "^1.74.0"
+    "vscode": "^1.84.2"
   },
   "categories": [
     "Programming Languages"
   ],
   "dependencies": {
-    "vscode-languageclient": "8.0.2"
+    "vscode-languageclient": "9.0.1"
   },
   "devDependencies": {
-    "typescript": "4.9.4",
-    "@types/vscode": "1.74.0",
-    "@types/node": "18.11.18"
+    "typescript": "5.3.2",
+    "@types/vscode": "1.84.2",
+    "@types/node": "20.10.2"
   },
   "keywords": [
     "Jai"
