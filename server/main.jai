@@ -112,7 +112,12 @@ find_jai_path :: () -> string {
         path_overwrite_separators(raw_path, #char "/");
         raw_path = trim(raw_path);
     } else {
-        result, raw_path, err = run_command("whereis", "-q", "jai", capture_and_return_output=true);
+        #if OS == .MACOS {
+            result, raw_path, err = run_command("whereis", "-q", "jai", capture_and_return_output=true);
+        } else { // Linux does not have the -q argument.
+            result, raw_path, err = run_command("whereis", "jai", capture_and_return_output=true); 
+        }
+
         raw_path = trim(raw_path);
 
         BUFFER_SIZE :: 4096;  
