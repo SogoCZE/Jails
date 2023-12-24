@@ -2,7 +2,7 @@
   "name": "jails",
   "displayName": "Jai Language Server",
   "description": "Language Server for Jai programming language",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "SogoCZE",
   "author": "SogoCZE",
   "main": "./out/extension.js",

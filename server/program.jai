@@ -198,11 +198,13 @@ get_module_import_path :: (_import: *Directive_Import, current_path: string) -> 
     get_module :: (module_name: string) -> string {
         for local_modules_folder: server.local_modules {
             absolute_path: string;
-            if starts_with(local_modules_folder, "/") {
+            if is_absolute_path(local_modules_folder) {
                 absolute_path = local_modules_folder;
             } else {
                 absolute_path = join(server.project_root, local_modules_folder, separator="/");
             }
+
+            absolute_path = normalize_path(absolute_path);
 
             entry := get_module_entry(join(absolute_path, module_name, separator="/"));
             if entry.count > 0 return entry;
@@ -241,7 +243,6 @@ resolve_identifiers :: (file: *Program_File) {
         if node.kind == .IDENTIFIER {
             ident := cast(*Identifier) node;
             // log("Ident: %", ident.name);
-
             block := get_node_nearest_block(ident);
             decls := get_declarations(file, block, *ident.location, ident.name);
             if decls.count < 1 {
