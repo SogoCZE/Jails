@@ -102,20 +102,20 @@ find_entry_file :: (root: string) -> string {
     return ""; // TODO: What we gonna do when we do not find any?
 }
 
-find_jai_path :: () -> string {
+find_jai_path :: (executable_name: string) -> string {
     result: Process_Result;
     raw_path: string;
     err: string;
 
     #if OS == .WINDOWS {
-        result, raw_path, err = run_command("where.exe", "jai", capture_and_return_output=true);
+        result, raw_path, err = run_command("where.exe", executable_name, capture_and_return_output=true);
         path_overwrite_separators(raw_path, #char "/");
         raw_path = trim(raw_path);
     } else {
         #if OS == .MACOS {
-            result, raw_path, err = run_command("whereis", "-q", "jai", capture_and_return_output=true);
+            result, raw_path, err = run_command("whereis", "-q", executable_name, capture_and_return_output=true);
         } else { // Linux does not have the -q argument.
-            result, raw_path, err = run_command("whereis", "jai", capture_and_return_output=true); 
+            result, raw_path, err = run_command("whereis", executable_name, capture_and_return_output=true); 
         }
 
         raw_path = trim(raw_path);
@@ -132,6 +132,15 @@ find_jai_path :: () -> string {
     // @TODO: error that we cant find jai path
     if raw_path.count == 0 {
         log_error("Error while resolving Jai path % %.", result, err);
+
+        #if OS == .MACOS {
+            if executable_name == "jai-macos" return "";            
+            return find_jai_path("jai-macos");
+        } else #if OS == .LINUX {
+            if executable_name == "jai-linux" return "";            
+            return find_jai_path("jai-linux");
+        }
+
         return "";
     } 
     
@@ -328,7 +337,7 @@ main :: () {
     }
 
     if server.args.jai_path.count == 0 {
-        server.args.jai_path = find_jai_path();
+        server.args.jai_path = find_jai_path("jai");
         log("Jai path: %", server.args.jai_path);
     }
 
