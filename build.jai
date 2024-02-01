@@ -12,6 +12,7 @@
     profile_server := array_find(args, "-profile_server");
     launch_vscode := array_find(args, "-vscode");
     release := array_find(args, "-release");
+    arm := array_find(args, "-arm");
 
     ok: bool;
 
@@ -26,6 +27,8 @@
         options.import_path = import_path;
 
         if release set_optimization(*options, .OPTIMIZED);
+
+        if arm options.cpu_target = .ARM64; 
 
         set_build_options(options, w);
 
