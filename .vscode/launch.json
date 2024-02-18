@@ -9,7 +9,10 @@
             "request": "attach",
             "name": "Debug",
             "program": "${workspaceFolder}/<executable file>",
-            "pid": "${command:pickProcess}"
+            "pid": "${command:pickProcess}",
+            "initCommands": [
+                "command script import ${workspaceFolder}/.vscode/jaitype.py"
+            ]
         }
     ]
 }

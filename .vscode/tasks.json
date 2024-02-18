@@ -6,7 +6,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "jai ${workspaceFolder}/build.jai - -vscode",
+            "command": "jai ${workspaceFolder}/build.jai - -arm -vscode",
             "presentation": {
                 "echo": true,
                 "reveal": "never",

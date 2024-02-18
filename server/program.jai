@@ -84,6 +84,7 @@ parse_file :: (path: string, force := false) {
             return;
         }
 
+        content_from_disc = true;
     }
 
     if ok {
@@ -283,33 +284,32 @@ get_file_links :: (file: *Program_File) -> []Linked_File {
         // This ensure we take into account only files that are being loaded or imported...
         from_import: bool;
 
-        if file.path != it.path {
+        if file.path == it.path continue; // skip self
 
-            is_avaiable_from_one_of_the_parents: bool;
+        is_avaiable_from_one_of_the_parents: bool;
 
-            for file_that_load_this_file: files_that_load_this_file {
-                already_checked: [..]string;
-                defer array_free(already_checked);
-    
-                if file_that_load_this_file.path == it.path {
-                    is_avaiable_from_one_of_the_parents = true;
-                    break;    
-                }
-
-                avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
-                if !avaiable continue;
-    
-                is_avaiable_from_one_of_the_parents = true;
-                break;
-            }
-    
+        for file_that_load_this_file: files_that_load_this_file {
             already_checked: [..]string;
             defer array_free(already_checked);
-    
-            if !is_avaiable_from_one_of_the_parents {
-                avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
-                if !avaiable continue;
-            } 
+
+            if file_that_load_this_file.path == it.path {
+                is_avaiable_from_one_of_the_parents = true;
+                break;    
+            }
+
+            avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
+            if !avaiable continue;
+
+            is_avaiable_from_one_of_the_parents = true;
+            break;
+        }
+
+        already_checked: [..]string;
+        defer array_free(already_checked);
+
+        if !is_avaiable_from_one_of_the_parents {
+            avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
+            if !avaiable continue;
         } 
 
         array_add(*linked_files, .{ file=it, from_import=from_import });
@@ -387,11 +387,11 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
 
         if name.count > 0 {
             for decl: table_find_multiple(*linked_file.file.declarations, name) {
-                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);   
+                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
             }
         } else {
             for decl: linked_file.file.declarations {
-                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);   
+                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
             }
         }
         
@@ -499,11 +499,10 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
         }
     }
 
-    
     for file.loads {
         load_path := trim_right(path_strip_filename(file.path), "/");
         load_relative_path := join(load_path, "/", it.file);
-        defer free(load_relative_path);
+        // @TODO: free load_relative_path
 
         if array_find(already_checked.*, load_relative_path) continue;
         array_add(already_checked, load_relative_path);
