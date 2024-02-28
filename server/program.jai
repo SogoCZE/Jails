@@ -284,33 +284,33 @@ get_file_links :: (file: *Program_File) -> []Linked_File {
         // This ensure we take into account only files that are being loaded or imported...
         from_import: bool;
 
-        if file.path == it.path continue; // skip self
+        if file.path != it.path {
+            is_avaiable_from_one_of_the_parents: bool;
 
-        is_avaiable_from_one_of_the_parents: bool;
+            for file_that_load_this_file: files_that_load_this_file {
+                already_checked: [..]string;
+                defer array_free(already_checked);
 
-        for file_that_load_this_file: files_that_load_this_file {
+                if file_that_load_this_file.path == it.path {
+                    is_avaiable_from_one_of_the_parents = true;
+                    break;    
+                }
+
+                avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
+                if !avaiable continue;
+
+                is_avaiable_from_one_of_the_parents = true;
+                break;
+            }
+
             already_checked: [..]string;
             defer array_free(already_checked);
 
-            if file_that_load_this_file.path == it.path {
-                is_avaiable_from_one_of_the_parents = true;
-                break;    
-            }
-
-            avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
-            if !avaiable continue;
-
-            is_avaiable_from_one_of_the_parents = true;
-            break;
+            if !is_avaiable_from_one_of_the_parents {
+                avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
+                if !avaiable continue;
+            } 
         }
-
-        already_checked: [..]string;
-        defer array_free(already_checked);
-
-        if !is_avaiable_from_one_of_the_parents {
-            avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
-            if !avaiable continue;
-        } 
 
         array_add(*linked_files, .{ file=it, from_import=from_import });
     }
