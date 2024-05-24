@@ -816,6 +816,8 @@ reset_diagnostics :: () {
 // @TODO: Make it work with multiple errors
 // @todo: add support for warnings
 run_diagnostics :: () {
+    // return;
+
     if server.build_root.count == 0 return;
     build_root_absolute := join(server.project_root, server.build_root, separator="/");
 
@@ -824,7 +826,12 @@ run_diagnostics :: () {
     command: [..] string;
 
     array_add(*command, "jai");
-    array_add(*command, build_root_absolute, "-x64", "-quiet", "-no_color", "-plug", "jails_diagnostics");
+    array_add(*command, build_root_absolute, "-quiet", "-no_color", "-plug", "jails_diagnostics");
+
+    // Use fast x64 backend on supported CPUs.
+    if CPU == .X64 {
+        array_add(*command, build_root_absolute, "-x64");
+    } 
 
     for local_module_folder: server.local_modules {
         array_add(*command, "-import_dir", local_module_folder);
@@ -839,7 +846,7 @@ run_diagnostics :: () {
         return;
     }
 
-    // array_free(*command);
+    array_free(command);
 
     lines := split(error, "\n");
 
