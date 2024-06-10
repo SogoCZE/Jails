@@ -322,6 +322,25 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             handle_hover(body);
+        case "textDocument/documentSymbol";
+            //ZoneScoped("textDocument/documentSymbol");
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol);
+            if !success {
+                log_error("Unable to parse textDocument/documentSymbol message");
+                return;
+            }
+
+            handle_document_symbol(body);
+            
+        case "workspace/symbol";
+            //ZoneScoped("workspace/symbol");
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Workspace_Symbol);
+            if !success {
+                log_error("Unable to parse workspace/symbol message");
+                return;
+            }
+
+            handle_workspace_symbol(body);
 
     }
 }
@@ -410,6 +429,7 @@ array_reverse :: (array: []$T) {
 
 #load "completition.jai";
 #load "goto.jai";
+#load "symbols.jai";
 #load "signature_help.jai";
 #load "hover.jai";
 

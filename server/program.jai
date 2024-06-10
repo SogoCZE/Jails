@@ -10,7 +10,9 @@ Program_File :: struct {
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
     resolved_identifiers: Table(*Node, []*Declaration);
-    linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
+    declaration_hierarchy: Table(*Declaration, [..]*Declaration);
+    serialized_workspace_symbols: Table(string, string);
+    linked_files : [] Linked_File; // @TODO: this is probably stupid name for this!
 }
 
 Linked_File :: struct {
@@ -21,15 +23,21 @@ Linked_File :: struct {
 init_file :: (using file: Program_File) {
     init(*declarations);
     init(*resolved_identifiers);
+    init(*declaration_hierarchy);
+    init(*serialized_workspace_symbols);
 }
 
 deinit_file :: (using file: Program_File) {
     deinit(*declarations);
+    deinit(*declaration_hierarchy);
+    deinit(*serialized_workspace_symbols);
     array_free(nodes);
 }
 
 reset_file :: (using file: Program_File) {
     table_reset(*declarations);
+    table_reset(*declaration_hierarchy);
+    table_reset(*serialized_workspace_symbols);
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
@@ -115,12 +123,15 @@ parse_file :: (path: string, force := false) {
 }
 
 analyze_files :: () {
+    //ZoneScoped();
     for file: server.files_to_be_analyzed {
         file.linked_files = get_file_links(file);
     }
 
     for file: server.files_to_be_analyzed {
         resolve_identifiers(file);
+        build_declaration_hierarchy(file);
+        generate_and_serialize_workspace_symbols_for_file(file);
     }
 
     array_reset(*server.files_to_be_analyzed);
@@ -255,6 +266,23 @@ resolve_identifiers :: (file: *Program_File) {
         }
 
     }
+}
+
+build_declaration_hierarchy :: (file: *Program_File) {
+    //ZoneScoped();
+    for file.declarations{
+        parent_declaration: *Declaration;
+
+        if it.parent
+            parent_declaration = cast(*Declaration) get_node_nearest_parent(it.parent, kind => kind == .DECLARATION);
+
+        children := find_or_add(*file.declaration_hierarchy, parent_declaration);
+
+        array_add(children, it);
+    }
+
+    for file.declaration_hierarchy
+        quick_sort(it, (a, b) => ifx a.location.l0 != b.location.l0 then a.location.l0 - b.location.l0 else a.location.c0 - b.location.c0);
 }
 
 get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
@@ -919,3 +947,5 @@ run_diagnostics :: () {
 
     server.previously_errored_file = file;
 }
+
+#import "Sort";
