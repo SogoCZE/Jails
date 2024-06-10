@@ -830,8 +830,8 @@ run_diagnostics :: () {
 
     // Use fast x64 backend on supported CPUs.
     if CPU == .X64 {
-        array_add(*command, build_root_absolute, "-x64");
-    } 
+        array_add(*command, "-x64");
+    }
 
     for local_module_folder: server.local_modules {
         array_add(*command, "-import_dir", local_module_folder);
