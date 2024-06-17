@@ -150,13 +150,13 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
             decl.location = decl_ident.location;
             decl.name = decl_ident.name;
 
-            table_add(*file.declarations, decl.name, decl);        
+            table_add(*file.declarations, decl.name, decl);
         }
     }
 
     if node.kind == .DECLARATION {
         decl := cast(*Declaration) node;
-        table_add(*file.declarations, decl.name, decl);        
+        table_add(*file.declarations, decl.name, decl);
     }
 
     array_add(*file.nodes, node);
@@ -185,7 +185,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 }
 
 get_module_import_path :: (_import: *Directive_Import, current_path: string) -> string {
-        
+
     get_module_entry :: (module: string) -> string {
         uri := join(module, "/module.jai");
         if file_exists(uri) return uri;
@@ -226,9 +226,9 @@ get_module_import_path :: (_import: *Directive_Import, current_path: string) -> 
             path = get_module(_import.module);
             if path.count == 0 return "";
         case .FILE;
-            path = sprint("%/%", current_path, _import.module); 
+            path = sprint("%/%", current_path, _import.module);
         case .DIR;
-            relative_path := sprint("%/%", current_path, _import.module); 
+            relative_path := sprint("%/%", current_path, _import.module);
             path = get_module_entry(relative_path);
             if path.count == 0 return "";
         case .STRING;
@@ -276,7 +276,7 @@ get_node_by_location :: (file: *Program_File, location: Node.Location, filter: N
 
 get_file_links :: (file: *Program_File) -> []Linked_File {
     linked_files: [..]Linked_File;
-    
+
     files_that_load_this_file := get_files_that_load(file);
     defer array_free(files_that_load_this_file);
 
@@ -293,7 +293,7 @@ get_file_links :: (file: *Program_File) -> []Linked_File {
 
                 if file_that_load_this_file.path == it.path {
                     is_avaiable_from_one_of_the_parents = true;
-                    break;    
+                    break;
                 }
 
                 avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
@@ -309,7 +309,7 @@ get_file_links :: (file: *Program_File) -> []Linked_File {
             if !is_avaiable_from_one_of_the_parents {
                 avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
                 if !avaiable continue;
-            } 
+            }
         }
 
         array_add(*linked_files, .{ file=it, from_import=from_import });
@@ -332,13 +332,13 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
 
                 case .PROCEDURE;
                     proc := cast(*Procedure) parent_type;
-            
+
                     for arg: proc.arguments {
                         if arg.kind != .DECLARATION continue;
                         decl := cast(*Declaration) arg;
 
                         if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }  
+                    }
 
                 case .STRUCT;
                     _struct := cast(*Struct) parent_type;
@@ -348,7 +348,7 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
                         decl := cast(*Declaration) arg;
 
                         if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }  
+                    }
 
                 case .UNION;
                     _union := cast(*Union) parent_type;
@@ -358,8 +358,8 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
                         decl := cast(*Declaration) arg;
 
                         if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }  
-                
+                    }
+
             }
 
         }
@@ -394,7 +394,7 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
                 if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
             }
         }
-        
+
     }
 
     return decls;
@@ -411,7 +411,7 @@ get_node_nearest_parent :: (node: *Node, predicate: (Node.Kind) -> bool, limit :
         i += 1;
         if !current.parent break;
 
-        current = current.parent;        
+        current = current.parent;
     }
 
     return null;
@@ -430,7 +430,7 @@ is_parent_of :: (parent: *Node, node: *Node, limit := 5) -> bool {
         i += 1;
         if !current.parent break;
 
-        current = current.parent;        
+        current = current.parent;
     }
 
     return false;
@@ -456,7 +456,7 @@ is_global :: (node: *Node, from_file: *Program_File, it_file: *Program_File, fro
         if directive_scope.scope_kind == .MODULE && !from_import return true;
         if directive_scope.scope_kind == .EXPORT return true;
         if directive_scope.scope_kind == .FILE && from_file == it_file return true;
-    } 
+    }
 
     return false;
 }
@@ -538,8 +538,8 @@ get_node_nearest_block :: (node: *Node) -> *Block {
         if current_node.kind == .PROCEDURE || current_node.kind == .STRUCT break;
 
         if current_node.kind == .BLOCK {
-            block := cast(*Block) current_node; 
-            current_block = xx block;  
+            block := cast(*Block) current_node;
+            current_block = xx block;
 
             if !block.parent break;
 
@@ -592,10 +592,10 @@ is_after :: (a: Node.Location, b: Node.Location) -> bool {
 lsp_location_to_node_location :: (location: LSP_Position, file := "") -> Node.Location {
     node_location: Node.Location;
     node_location.file = file;
-    node_location.l0 = location.line;    
-    node_location.c0 = location.character;    
-    node_location.l1 = location.line;    
-    node_location.c1 = location.character;    
+    node_location.l0 = location.line;
+    node_location.c0 = location.character;
+    node_location.l1 = location.line;
+    node_location.c1 = location.character;
     return node_location;
 }
 
@@ -670,7 +670,7 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
             current_node = return_value.expression;
             continue;
         }
-        
+
         if current_node.kind == .BINARY_OPERATION {
             current_node = get_dot_path_result(file, xx current_node);
             continue;
@@ -694,7 +694,7 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
         }
 
         break;
-    }   
+    }
 
     return null;
 }
@@ -705,7 +705,7 @@ unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
     // nested pointers
     if unary_op.expression.kind == .UNARY_OPERATION {
         return unwrap_pointer(xx unary_op.expression);
-    }   
+    }
 
     return unary_op.expression;
 }
@@ -728,7 +728,7 @@ get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
 
 get_root_of_dot_path :: (op: *Binary_Operation) -> *Binary_Operation {
     current := op;
-    
+
     while current.parent && current.parent.kind == .BINARY_OPERATION {
         parent := cast(*Binary_Operation) current.parent;
         if parent.operation != .DOT break;
@@ -766,12 +766,12 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Ide
     while true {
         if current_op.operation != .DOT break;
         if !current_op.right break;
-        
+
         ident: *Identifier;
         end := false;
 
         if current_op.right.kind == {
-    
+
             case .IDENTIFIER;
                 ident = xx current_op.right;
                 end = true;
@@ -782,13 +782,13 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Ide
 
             case; break;
 
-        } 
+        }
 
         if ident == target {
             end = true;
         }
 
-        member := get_member_in(current_type, ident);        
+        member := get_member_in(current_type, ident);
         if !member break;
         decl = member;
 
@@ -861,7 +861,7 @@ run_diagnostics :: () {
         message_index := find_index_from_right(output_line, ERROR_MARKER);
         message := slice(output_line, message_index + ERROR_MARKER.count, output_line.count - message_index);
         rest := slice(output_line, 0, message_index);
-        
+
         ok: bool;
         location: string;
         ok, file, location = split_from_right(rest, ":");
