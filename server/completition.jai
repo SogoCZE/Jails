@@ -1,6 +1,8 @@
 
 
 handle_completitions :: (request: LSP_Request_Message_Completion) {
+    push_allocator(temp);
+
     file_path := normalize_path(request.params.textDocument.uri);
 
     _exit :: () #expand {
@@ -17,7 +19,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
 
-    // We don't wanna to give completions inside strings and comments... 
+    // We don't wanna to give completions inside strings and comments...
     if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
 
     decls: []*Declaration;
@@ -39,11 +41,11 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
             return;
         }
     }
-    
+
 
     if cursor_block log("Block: %", cursor_block.*);
 
-    // General 
+    // General
     decls = get_declarations(file, cursor_block, *cursor_location);
 
     send_completions_decls(request, decls);
@@ -93,19 +95,19 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         }
 
         if preview_node.kind == {
-            case .PROCEDURE; 
+            case .PROCEDURE;
                 kind = .Function;
                 insert_text = sprint("%($0)", decl.name);
 
-            case .STRUCT; 
+            case .STRUCT;
                 kind = .Struct;
                 insert_text = decl.name;
 
-            case .ENUM; 
+            case .ENUM;
                 kind = .Enum;
                 insert_text = decl.name;
-            
-            case; 
+
+            case;
                 kind = .Variable;
                 insert_text = decl.name;
         }
@@ -113,7 +115,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         lsp_loc := node_location_to_lsp_location(decl.location);
 
         procedure_header_builder: String_Builder;
-        init_string_builder(*procedure_header_builder);        
+        init_string_builder(*procedure_header_builder);
         ast_print(*procedure_header_builder, preview_node); // @Memory @TODO: we need to free this afterwards!!
         procedure_header_preview := builder_to_string(*procedure_header_builder);
 

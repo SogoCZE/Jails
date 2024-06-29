@@ -1,4 +1,6 @@
 handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
+    push_allocator(temp);
+
     file_path := normalize_path(request.params.textDocument.uri);
 
     file := get_file(file_path);
@@ -29,8 +31,8 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     if !proc_decl.expression || proc_decl.expression.kind != .PROCEDURE {
         lsp_respond(request.id, null);
         return;
-    } 
-    
+    }
+
     procedure := cast(*Procedure) proc_decl.expression;
 
     builder: String_Builder;
@@ -43,7 +45,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     if proc_call.arguments.count > 0 {
         signature_help_info.activeParameter = cast(u32) proc_call.arguments.count-1;
     }
-    
+
     signature_help_info.parameters = NewArray(procedure.arguments.count, LSP_Parameter_Information);
 
     already_have_active_arg: bool;
@@ -61,9 +63,9 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
             if it_index == proc_call.arguments.count-1 && !already_have_active_arg && it_index != procedure.arguments.count-1 {
                 signature_help_info.activeParameter = xx (it_index+1);
             }
-            
+
         }
-    
+
         reset(*builder);
         ast_print(*builder, arg);
         signature_help_info.parameters[it_index] = .{

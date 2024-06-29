@@ -491,7 +491,7 @@ LSP_Result_Initialize :: struct {
     capabilities: struct {
         // semanticTokensProvider := true;
         // documentSymbolProvider := true;
-        
+
         definitionProvider := true;
         // hoverProvider := true;
 
