@@ -165,7 +165,6 @@ load_config_file :: () {
     config_path := join(server.project_root, "/jails.json");
     if !file_exists(config_path) return;
 
-
     config_content := read_entire_file(config_path);
 
     ok, config := json_parse_string(config_content, Config);
@@ -174,7 +173,10 @@ load_config_file :: () {
         return;
     }
 
-    array_add(*server.local_modules, ..config.local_modules);
+    for config.local_modules {
+        array_add_if_unique(*server.local_modules, it);
+    }
+
     server.roots = config.roots;
     server.build_root = config.build_root;
 
@@ -214,7 +216,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             // Include $workingDirectory/modules as a default local module path. @TODO: is this good?
-            array_add(*server.local_modules, "modules");
+            array_add_if_unique(*server.local_modules, "modules");
 
             log("Server.local_modules: %", server.local_modules);
             log("Server.roots: %", server.roots);

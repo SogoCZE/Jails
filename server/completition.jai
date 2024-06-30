@@ -22,6 +22,12 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     // We don't wanna to give completions inside strings and comments...
     if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
 
+    if cursor_node && cursor_node.kind == .DIRECTIVE_IMPORT {
+        handle_completitions_import(request, xx cursor_node);
+        return;
+    }
+
+
     decls: []*Declaration;
     defer array_free(decls);
 
@@ -51,6 +57,41 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     send_completions_decls(request, decls);
 }
 
+handle_completitions_import :: (request: LSP_Request_Message_Completion, directive_import: *Directive_Import) {
+    completions: [..]LSP_Completion_Item;
+
+    modules_dir := sprint("%/modules", server.args.jai_path);
+
+    visit_modules :: (info: *File_Visit_Info, completions: *[..]LSP_Completion_Item) {
+        if !info.is_directory && !contains(info.short_name, ".jai") return;
+
+        module_name := info.short_name;
+        if !info.is_directory {
+            module_name = replace(info.short_name, ".jai", "");
+        } else {
+            if !file_exists(sprint("%/module.jai", info.full_name)) return;
+        }
+
+        array_add(completions, .{
+            label=module_name,
+            kind=xx LSP_Completion_Item.Kind.Module,
+            insertText=info.short_name,
+            insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
+            labelDetails = .{ description=info.full_name }
+        });
+    }
+
+    // Compiler modules
+    visit_files(modules_dir, false, *completions, visit_modules, true, true);
+
+    // Local modules
+    for local_module: server.local_modules {
+        local_modules_dir := sprint("%/%", server.project_root, local_module);
+        visit_files(local_modules_dir, false, *completions, visit_modules, true, true);
+    }
+
+    lsp_respond(request.id, completions);
+}
 
 // @TODO: maybe move this to program?
 get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> []*Declaration {
