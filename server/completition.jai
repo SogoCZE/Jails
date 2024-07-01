@@ -27,6 +27,11 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         return;
     }
 
+    if cursor_node && cursor_node.kind == .DIRECTIVE_LOAD {
+        handle_completitions_load(request, file, xx cursor_node);
+        return;
+    }
+
 
     decls: []*Declaration;
     defer array_free(decls);
@@ -55,6 +60,38 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     decls = get_declarations(file, cursor_block, *cursor_location);
 
     send_completions_decls(request, decls);
+}
+
+handle_completitions_load :: (request: LSP_Request_Message_Completion, file: *Program_File, directive_load: *Directive_Load) {
+    completions: [..]LSP_Completion_Item;
+    current_file_dir := path_strip_filename(file.path);
+
+    visit_file :: (info: *File_Visit_Info, completions: *[..]LSP_Completion_Item) {
+        if !info.is_directory && !contains(info.short_name, ".jai") return;
+
+        array_add(completions, .{
+            label=info.short_name,
+            kind=xx (ifx info.is_directory then LSP_Completion_Item.Kind.Folder else LSP_Completion_Item.Kind.File),
+            insertText=info.short_name,
+            insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
+            labelDetails = .{ description=info.full_name }
+        });
+    }
+
+    path_to_visit := current_file_dir;
+    if contains(directive_load.file, "/") {
+        path_to_visit = sprint("%/%", path_to_visit, directive_load.file);
+    }
+
+    is_dir, ok := is_directory(path_to_visit);
+    if !is_dir || !ok {
+        lsp_respond(request.id, null);
+        return;
+    }
+
+    visit_files(path_to_visit, false, *completions, visit_file, true, true);
+
+    lsp_respond(request.id, completions);
 }
 
 handle_completitions_import :: (request: LSP_Request_Message_Completion, directive_import: *Directive_Import) {
