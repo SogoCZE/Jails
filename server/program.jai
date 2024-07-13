@@ -644,7 +644,18 @@ get_identifier_decl :: (__file: *Program_File, ident: *Identifier) -> []*Declara
         return decls;
     }
 
-    return .[];
+    //the loop above fails to find identifier declarations for many common symbols. As a hacky fix, we fall back to searching for declarations that match the name of the identifier. This may lead to false positives obviously, but I do not know if this is any worse than what the loop above does. And since we only do this when the loop above has not been successfull in finding something, I would argue that getting a 90% correct answer is better than no answer.
+
+    declarations: [..]*Declaration;
+
+    for file: server.files {
+        file_decl, found := table_find(*file.declarations, ident.name);
+
+        if found
+            array_add(*declarations, file_decl);
+    }
+
+    return declarations;
 }
 
 // @TODO: Maybe refactor this to be more useful?
