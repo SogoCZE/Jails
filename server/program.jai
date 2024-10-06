@@ -149,8 +149,31 @@ analyze_files :: () {
         release(*file.analysis_pool);
     }
 
+    preload_file: *Program_File;
+    runtime_support_file: *Program_File;
+
+    for file: server.files {
+        if !runtime_support_file && contains(file.path, "Runtime_Support.jai") {
+            runtime_support_file = file;
+        }
+
+        if !preload_file && contains(file.path, "Preload.jai") {
+            preload_file = file;
+        }
+    }
+
     for file: server.files_to_be_analyzed {
-        file.linked_files = get_file_links(file,, pool_alloc(*file.analysis_pool));
+        linked_files := get_file_links(file,, pool_alloc(*file.analysis_pool));
+
+        if file != preload_file && preload_file {
+            array_add(*linked_files, .{ file=preload_file, from_import=true });
+        }
+
+        if file != runtime_support_file && runtime_support_file {
+            array_add(*linked_files, .{ file=runtime_support_file, from_import=true });
+        }
+
+        file.linked_files = linked_files;
     }
 
     for file: server.files_to_be_analyzed {
@@ -315,7 +338,7 @@ get_node_by_location :: (file: *Program_File, location: Node.Location, filter: N
     return nearest_node;
 }
 
-get_file_links :: (file: *Program_File) -> []Linked_File {
+get_file_links :: (file: *Program_File) -> [..]Linked_File {
     linked_files: [..]Linked_File;
 
     files_that_load_this_file := get_files_that_load(file);

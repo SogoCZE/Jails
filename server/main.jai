@@ -215,7 +215,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 server.roots = .[find_entry_file(server.project_root)];
             }
 
-            // Include $workingDirectory/modules as a default local module path. @TODO: is this good?
+            // Include $workingDirectory/modules as a default local module path (like a compiler)
             array_add_if_unique(*server.local_modules, "modules");
 
             log("Server.local_modules: %", server.local_modules);
@@ -231,6 +231,13 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
                 absolute_path = normalize_path(absolute_path,, temp);
                 parse_file(absolute_path, true);
+            }
+
+            // Parse Runtime Support and Preload
+            {
+                parse_file(tprint("%/modules/Runtime_Support.jai",
+                server.args.jai_path), true);
+                parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
             }
 
             analyze_files();
