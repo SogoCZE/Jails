@@ -12,11 +12,11 @@ create_memory_file :: (file_path: string, content: string) {
     content_dynamic: [..]u8;
 
     array_copy(*content_dynamic, cast([]u8) content);
-    free(content);
+    // free(content);
 
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
-    table_set(*server.memory_files, file_path, content_dynamic);
+    table_set(*server.memory_files, copy_string(file_path), content_dynamic);
 }
 
 edit_memory_file :: (file_path: string, changes: []LSP_Content_Change) {
@@ -39,6 +39,10 @@ edit_memory_file :: (file_path: string, changes: []LSP_Content_Change) {
 remove_memory_file :: (file_path: string) {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
+
+    content, ok := table_find(*server.memory_files, file_path);
+    if !ok return;
+    array_free(content);
 
     found := table_remove(*server.memory_files, file_path);
     if !found {
@@ -93,7 +97,7 @@ find_line_in_memory_file :: (file: string, position: LSP_Position) -> string {
     start_index: int = -1;
     end_index := content.count;
 
-    // @SPEED: This searching could be probably done faster if we had server.memory_files stored as array of lines instead of file content. 
+    // @SPEED: This searching could be probably done faster if we had server.memory_files stored as array of lines instead of file content.
     for char: content {
         if char == #char "\n" {
             final_line += 1;
@@ -144,7 +148,7 @@ find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, No
     final_line: int;
     pointer_index: int = -1;
 
-    // @SPEED: This searching could be probably done faster if we had server.memory_files stored as array of lines instead of file content. 
+    // @SPEED: This searching could be probably done faster if we had server.memory_files stored as array of lines instead of file content.
     for char: content {
         if char == #char "\n" {
             final_line += 1;
@@ -245,7 +249,7 @@ apply_change :: (content: *[..]u8, from: LSP_Position, to: LSP_Position, text: s
     if start_index < 0 {
         start_index = content.count;
     }
-    
+
     if end_index < 0 {
         end_index = content.count;
     }

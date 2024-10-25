@@ -1,6 +1,8 @@
 handle_hover :: (request: LSP_Request_Message_Hover) {
+    push_allocator(temp);
+
     file_path := normalize_path(request.params.textDocument.uri);
- 
+
     file := get_file(file_path);
     if !file {
         lsp_respond(request.id, null);

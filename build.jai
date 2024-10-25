@@ -16,7 +16,7 @@
 
     ok: bool;
 
-    // Server 
+    // Server
     {
         w := compiler_create_workspace("Server");
 
@@ -28,7 +28,7 @@
 
         if release set_optimization(*options, .OPTIMIZED);
 
-        if arm options.cpu_target = .ARM64; 
+        if arm options.cpu_target = .ARM64;
 
         set_build_options(options, w);
 
@@ -64,7 +64,7 @@
 
         print("%\n", vscode_extension_development_path);
 
-        assert(OS == .WINDOWS || OS == .MACOS, "Openning vscode on Linux is not supported at the time.");
+        assert(OS == .WINDOWS || OS == .MACOS, "Opening vscode on Linux is not supported at the time.");
 
         vscode_path: string;
 
@@ -90,10 +90,14 @@
 }
 
 message_loop :: (w: Workspace, args: []string, tracy: *Metaprogram_Plugin) -> bool {
+    options := get_build_options(w);
+
     while true {
         message := compiler_wait_for_message();
         if tracy && tracy.message tracy.message(tracy, message);
         if message.kind != .COMPLETE continue;
+
+        if options.os_target == .MACOS macos_codesign(w);
 
         complete := cast(*Message_Complete) message;
         if complete.error_code != .NONE {
@@ -104,6 +108,13 @@ message_loop :: (w: Workspace, args: []string, tracy: *Metaprogram_Plugin) -> bo
     }
 
     return true;
+}
+
+// CodeSign for MacOS instruments
+macos_codesign :: (w: Workspace) {
+    build_options := get_build_options(w);
+    executable_path := tprint("%/%", build_options.output_path, build_options.output_executable_name);
+    run_command("codesign", "-s", "-", "-v", "-f", "--entitlements", "./debug.plist", executable_path);
 }
 
 #import "Basic";

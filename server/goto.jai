@@ -13,6 +13,8 @@ handle_goto_load :: (request: LSP_Request_Message_Definition, file: *Program_Fil
 }
 
 handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_File, _import: *Directive_Import) {
+    push_allocator(temp);
+
     file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
     module_absolute_path := get_module_import_path(_import, file_path_without_filename);
 
@@ -27,8 +29,9 @@ handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_F
 }
 
 handle_goto :: (request: LSP_Request_Message_Definition) {
+    push_allocator(temp);
+
     file_path := normalize_path(request.params.textDocument.uri);
-    defer free(file_path);
 
     file := get_file(file_path);
     if !file {

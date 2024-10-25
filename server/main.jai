@@ -3,6 +3,8 @@ VERSION :: "1.0.0";
 PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "..");
 METAPROGRAM_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
 
+MEMORY_DEBUG :: false;
+
 Args :: struct {
     verbose: bool;
     profile: bool;
@@ -52,7 +54,7 @@ decode_url :: (url: string) -> string {
         if out_url[i] != #char "%" || out_url[i+1] == 0 {
             out_url[j] = out_url[i];
             continue;
-        } 
+        }
 
         if is_hex_digit(out_url[i+1]) && is_hex_digit(out_url[i+2]) {
             hex[0] = out_url[i+1];
@@ -115,12 +117,12 @@ find_jai_path :: (executable_name: string) -> string {
         #if OS == .MACOS {
             result, raw_path, err = run_command("whereis", "-q", executable_name, capture_and_return_output=true);
         } else { // Linux does not have the -q argument.
-            result, raw_path, err = run_command("whereis", executable_name, capture_and_return_output=true); 
+            result, raw_path, err = run_command("whereis", executable_name, capture_and_return_output=true);
         }
 
         raw_path = trim(raw_path);
 
-        BUFFER_SIZE :: 4096;  
+        BUFFER_SIZE :: 4096;
         buf: [BUFFER_SIZE] u8;
 
         length := readlink(to_c_string(raw_path), buf.data, BUFFER_SIZE);
@@ -134,16 +136,16 @@ find_jai_path :: (executable_name: string) -> string {
         log_error("Error while resolving Jai path % %.", result, err);
 
         #if OS == .MACOS {
-            if executable_name == "jai-macos" return "";            
+            if executable_name == "jai-macos" return "";
             return find_jai_path("jai-macos");
         } else #if OS == .LINUX {
-            if executable_name == "jai-linux" return "";            
+            if executable_name == "jai-linux" return "";
             return find_jai_path("jai-linux");
         }
 
         return "";
-    } 
-    
+    }
+
     path := split(raw_path, "/");
 
     pop(*path); // jai.exe or jai
@@ -153,14 +155,13 @@ find_jai_path :: (executable_name: string) -> string {
 }
 
 load_config_file :: () {
-    
     Config :: struct {
         local_modules: []string;
         roots: []string;
         build_root: string;
         jai_path: string;
     }
-    
+
     config_path := join(server.project_root, "/jails.json");
     if !file_exists(config_path) return;
 
@@ -172,12 +173,15 @@ load_config_file :: () {
         return;
     }
 
-    array_add(*server.local_modules, ..config.local_modules);
+    for config.local_modules {
+        array_add_if_unique(*server.local_modules, it);
+    }
+
     server.roots = config.roots;
     server.build_root = config.build_root;
 
     if config.jai_path.count > 0 {
-        server.args.jai_path = config.jai_path; 
+        server.args.jai_path = config.jai_path;
     }
 }
 
@@ -189,7 +193,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             server.quit = true;
             lsp_respond(request.id, null);
         case "initialize";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize);
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Initialize,, temp);
             if !success {
                 log_error("Unable to parse initialize message");
                 // @Incomplete: report error back!
@@ -199,7 +203,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("Root URI: %", body.params.rootUri.*);
             log("Root Path: %", body.params.rootPath.*);
 
-            server.project_root = body.params.rootPath.*;
+            server.project_root = copy_string(body.params.rootPath.*);
 
             load_config_file();
 
@@ -211,8 +215,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 server.roots = .[find_entry_file(server.project_root)];
             }
 
-            // Include $workingDirectory/modules as a default local module path. @TODO: is this good?
-            array_add(*server.local_modules, "modules");
+            // Include $workingDirectory/modules as a default local module path (like a compiler)
+            array_add_if_unique(*server.local_modules, "modules");
 
             log("Server.local_modules: %", server.local_modules);
             log("Server.roots: %", server.roots);
@@ -222,11 +226,18 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 if starts_with(root, "/") {
                     absolute_path = root;
                 } else {
-                    absolute_path = join(server.project_root, root, separator="/");
+                    absolute_path = join(server.project_root, root, separator="/",, temp);
                 }
 
-                absolute_path = normalize_path(absolute_path);
+                absolute_path = normalize_path(absolute_path,, temp);
                 parse_file(absolute_path, true);
+            }
+
+            // Parse Runtime Support and Preload
+            {
+                parse_file(tprint("%/modules/Runtime_Support.jai",
+                server.args.jai_path), true);
+                parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
             }
 
             analyze_files();
@@ -234,17 +245,20 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
 
+            json_free(xx body);
+
         case "textDocument/definition";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Definition);
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Definition,, temp);
             if !success {
                 log_error("Unable to parse textDocument/definition message");
                 return;
             }
 
             handle_goto(body);
+            json_free(xx body);
 
         case "textDocument/didSave";
-            success, body := json_parse_string(raw_request, LSP_Did_Save_Text_Document);
+            success, body := json_parse_string(raw_request, LSP_Did_Save_Text_Document,, temp);
             if !success {
                 log_error("Unable to parse textDocument/divSave message");
                 return;
@@ -252,52 +266,62 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             run_diagnostics();
 
-            file_path := normalize_path(body.params.textDocument.uri);
+            file_path := normalize_path(body.params.textDocument.uri,, temp);
 
             parse_file(file_path, true);
             analyze_files();
 
+            json_free(xx body);
+
         case "textDocument/didOpen";
-            success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document);
+            success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document,, temp);
             if !success {
                 log_error("Unable to parse textDocument/didOpen message");
                 return;
             }
 
-            file_path := normalize_path(body.params.textDocument.uri);
+            file_path := normalize_path(body.params.textDocument.uri,, temp);
+
             content := body.params.textDocument.text;
 
             create_memory_file(file_path, content);
-            
+
             parse_file(file_path);
             analyze_files();
 
             log("File_path: %", file_path);
 
+            json_free(xx body);
+
         case "textDocument/didChange";
-            success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document);
+
+            success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document,, temp);
             if !success {
                 log_error("Unable to parse textDocument/didChange message");
                 return;
             }
 
-            file_path := normalize_path(body.params.textDocument.uri);
+            file_path := normalize_path(body.params.textDocument.uri,, temp);
             edit_memory_file(file_path, body.params.contentChanges);
             parse_file(file_path, true);
             analyze_files();
 
+            json_free(xx body);
+
         case "textDocument/didClose";
-            success, body := json_parse_string(raw_request, LSP_Did_Close_Text_Document);
+            success, body := json_parse_string(raw_request, LSP_Did_Close_Text_Document,, temp);
             if !success {
                 log_error("Unable to parse textDocument/dicClose message");
                 return;
             }
 
-            file_path := normalize_path(body.params.textDocument.uri);
+            file_path := normalize_path(body.params.textDocument.uri,, temp);
             remove_memory_file(file_path);
 
+            json_free(xx body);
+
         case "textDocument/completion";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Completion);
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Completion,, temp);
             if !success {
                 log_error("Unable to parse textDocument/completion message");
                 return;
@@ -305,23 +329,29 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             handle_completitions(body);
 
+            json_free(xx body);
+
         case "textDocument/signatureHelp";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Signature_Help);
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Signature_Help,, temp);
             if !success {
                 log_error("Unable to parse textDocument/completion message");
                 return;
             }
 
             handle_signature_help(body);
-        
+
+            json_free(xx body);
+
         case "textDocument/hover";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Hover);
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
             if !success {
                 log_error("Unable to parse textDocument/completion message");
                 return;
             }
 
             handle_hover(body);
+            json_free(xx body);
+            
         case "textDocument/documentSymbol";
             //ZoneScoped("textDocument/documentSymbol");
             success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol);
@@ -365,17 +395,19 @@ main :: () {
     init(*server.files);
     defer deinit(*server.files);
 
+    server.files_to_be_analyzed.allocator = context.default_allocator;
+
     init_memory_files();
     defer deinit_memory_files();
 
     while !server.quit {
-        body, success := read_message_from_stdin();
+        body, success := read_message_from_stdin(,, temp);
         if !success {
             log("Failed to read message. Skipping.");
             continue;
         }
 
-        parseOK, request := json_parse_string(body, LSP_Request_Message);
+        parseOK, request := json_parse_string(body, LSP_Request_Message,, temp);
         if !parseOK {
             log_error("Unable to parse as json:\n%\n\n", body);
             continue;
@@ -383,30 +415,16 @@ main :: () {
 
         handle_request(request, body);
 
-        // reset_temporary_storage();
+        reset_temporary_storage();
+        #if MEMORY_DEBUG report_memory_leaks();
     }
 
     log("Shutdown");
     exit(0);
 }
 
-// @TODO: Move this to some utils file or something?
-array_reverse :: (array: []$T) {
-    temp: T;
-    start := 0;
-    end := array.count-1;
-
-    while start < end {
-        temp = array[start];  
-        array[start] = array[end];
-        array[end] = temp;
-        start += 1;
-        end -= 1;
-    }
-}
-
 #import "Compiler";
-#import "Basic";
+#import "Basic"()(MEMORY_DEBUGGER=MEMORY_DEBUG);
 #import "Command_Line";
 #import "File";
 #import "File_Utilities";
@@ -421,6 +439,7 @@ array_reverse :: (array: []$T) {
 #import "Thread";
 #import "Pool";
 #import "jai_parser";
+#import "Default_Allocator";
 
 #load "rpc.jai";
 #load "lsp_interface.jai";

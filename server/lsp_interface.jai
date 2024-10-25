@@ -486,7 +486,7 @@ LSP_Result_Initialize :: struct {
         }
 
         completionProvider: struct {
-            triggerCharacters := string.[".", ":", "="];
+            triggerCharacters := string.[".", ":", "=", "\"", "#", "/"];
         };
 
         textDocumentSync: struct {

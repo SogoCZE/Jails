@@ -13,6 +13,9 @@ Program_File :: struct {
     declaration_hierarchy: Table(*Declaration, [..]*Declaration);
     serialized_workspace_symbols: Table(string, string);
     linked_files : [] Linked_File; // @TODO: this is probably stupid name for this!
+
+    ast_pool: Pool;
+    analysis_pool: Pool;
 }
 
 Linked_File :: struct {
@@ -32,6 +35,10 @@ deinit_file :: (using file: Program_File) {
     deinit(*declaration_hierarchy);
     deinit(*serialized_workspace_symbols);
     array_free(nodes);
+    array_free(loads);
+    array_free(imports);
+    release(*file.ast_pool);
+    release(*file.analysis_pool);
 }
 
 reset_file :: (using file: Program_File) {
@@ -41,6 +48,7 @@ reset_file :: (using file: Program_File) {
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
+    release(*file.ast_pool);
 }
 
 get_file :: (path: string) -> *Program_File {
@@ -59,7 +67,6 @@ normalize_path :: (path: string) -> string {
         normalized_path = replace(normalized_path, "file://", "");
     }
 
-
     return normalized_path;
 }
 
@@ -71,7 +78,14 @@ path_to_lsp_path :: (path: string) -> string {
     }
 }
 
+pool_alloc :: (pool: *Pool) -> Allocator {
+    return .{pool_allocator_proc, pool};
+}
+
 parse_file :: (path: string, force := false) {
+    // Reset back to default allocator, we dont want to use pool from "parent" file...
+    context.allocator = context.default_allocator;
+
     file, ok := table_find(*server.files, path);
     if !force && ok {
         // log("Skipping % because it already exists", path);
@@ -99,37 +113,82 @@ parse_file :: (path: string, force := false) {
         reset_file(file); // clear old data
     } else {
         file = New(Program_File);
-        file.path = path;
+        file.path = copy_string(path);
+        set_allocators(*file.ast_pool, context.default_allocator);
+        set_allocators(*file.analysis_pool, context.default_allocator);
         init_file(file);
-        table_add(*server.files, path, file);
+        table_add(*server.files, file.path, file);
     }
 
-    path_without_filename := trim_right(path_strip_filename(path), "/");
+    path_without_filename := trim_right(path_strip_filename(file.path), "/");
 
-    parser: Parser(Node_Visit_Data);
-    parser.user_data.file = file;
-    parser.user_data.path_without_filename = normalize_path(path_without_filename);
-    parser.node_visit = node_visit;
-    parser.lexer = *create_lexer(content, path);
+    {
+        _pool := pool_alloc(*file.ast_pool);
 
-    while !end(parser.lexer) {
-        parse(*parser, null);
+        push_allocator(_pool);
+
+        parser: Parser(Node_Visit_Data);
+        parser.user_data.allocator = _pool;
+        parser.user_data.file = file;
+        parser.user_data.path_without_filename = normalize_path(path_without_filename);
+        parser.node_visit = node_visit;
+        parser.lexer = *create_lexer(content, file.path);
+
+        while !end(parser.lexer) {
+            parse(*parser, null);
+        }
+
     }
 
     if content_from_disc free(content);
     // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
 
-    array_add(*server.files_to_be_analyzed, file);
+    array_add_if_unique(*server.files_to_be_analyzed, file);
+
+    // We must revalidate all files that are using this file in some way.
+    files_avaiable_from_this_file := get_files_that_are_avaiable_from(file,, temp);
+    for file_that_load_this_file: files_avaiable_from_this_file {
+        array_add_if_unique(*server.files_to_be_analyzed, file_that_load_this_file);
+    }
 }
 
 analyze_files :: () {
     //ZoneScoped();
     for file: server.files_to_be_analyzed {
-        file.linked_files = get_file_links(file);
+        release(*file.analysis_pool);
+    }
+
+    preload_file: *Program_File;
+    runtime_support_file: *Program_File;
+
+    for file: server.files {
+        if !runtime_support_file && contains(file.path, "Runtime_Support.jai") {
+            runtime_support_file = file;
+        }
+
+        if !preload_file && contains(file.path, "Preload.jai") {
+            preload_file = file;
+        }
     }
 
     for file: server.files_to_be_analyzed {
-        resolve_identifiers(file);
+        linked_files := get_file_links(file,, pool_alloc(*file.analysis_pool));
+
+        if file != preload_file && preload_file {
+            array_add(*linked_files, .{ file=preload_file, from_import=true });
+        }
+
+        if file != runtime_support_file && runtime_support_file {
+            array_add(*linked_files, .{ file=runtime_support_file, from_import=true });
+        }
+
+        file.linked_files = linked_files;
+    }
+
+    for file: server.files_to_be_analyzed {
+        table_reset(*file.resolved_identifiers);
+        resolve_identifiers(file,, pool_alloc(*file.analysis_pool));
+        // log("Analyzed: %", file.path);
         build_declaration_hierarchy(file);
         generate_and_serialize_workspace_symbols_for_file(file);
     }
@@ -139,11 +198,14 @@ analyze_files :: () {
 
 Node_Visit_Data :: struct {
     file: *Program_File;
+    allocator: Allocator;
     path_without_filename: string;
 }
 
 node_visit :: (node: *Node, data: Node_Visit_Data) {
     if !node return;
+
+    push_allocator(data.allocator);
 
     file := data.file;
 
@@ -161,13 +223,13 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
             decl.location = decl_ident.location;
             decl.name = decl_ident.name;
 
-            table_add(*file.declarations, decl.name, decl);        
+            table_add(*file.declarations, decl.name, decl);
         }
     }
 
     if node.kind == .DECLARATION {
         decl := cast(*Declaration) node;
-        table_add(*file.declarations, decl.name, decl);        
+        table_add(*file.declarations, decl.name, decl);
     }
 
     array_add(*file.nodes, node);
@@ -196,7 +258,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
 }
 
 get_module_import_path :: (_import: *Directive_Import, current_path: string) -> string {
-        
+
     get_module_entry :: (module: string) -> string {
         uri := join(module, "/module.jai");
         if file_exists(uri) return uri;
@@ -237,9 +299,9 @@ get_module_import_path :: (_import: *Directive_Import, current_path: string) -> 
             path = get_module(_import.module);
             if path.count == 0 return "";
         case .FILE;
-            path = sprint("%/%", current_path, _import.module); 
+            path = sprint("%/%", current_path, _import.module);
         case .DIR;
-            relative_path := sprint("%/%", current_path, _import.module); 
+            relative_path := sprint("%/%", current_path, _import.module);
             path = get_module_entry(relative_path);
             if path.count == 0 return "";
         case .STRING;
@@ -258,7 +320,9 @@ resolve_identifiers :: (file: *Program_File) {
             block := get_node_nearest_block(ident);
             decls := get_declarations(file, block, *ident.location, ident.name);
             if decls.count < 1 {
-                // log_error("Did not find any decl for '%'!", ident.name);
+                if ident.name == "print" {
+                    log_error("Did not find any decl for '%'!", ident.name);
+                }
                 continue;
             }
 
@@ -302,9 +366,9 @@ get_node_by_location :: (file: *Program_File, location: Node.Location, filter: N
     return nearest_node;
 }
 
-get_file_links :: (file: *Program_File) -> []Linked_File {
+get_file_links :: (file: *Program_File) -> [..]Linked_File {
     linked_files: [..]Linked_File;
-    
+
     files_that_load_this_file := get_files_that_load(file);
     defer array_free(files_that_load_this_file);
 
@@ -321,7 +385,7 @@ get_file_links :: (file: *Program_File) -> []Linked_File {
 
                 if file_that_load_this_file.path == it.path {
                     is_avaiable_from_one_of_the_parents = true;
-                    break;    
+                    break;
                 }
 
                 avaiable, from_import= := is_avaiable_from(file_that_load_this_file, it.path, *already_checked);
@@ -337,7 +401,7 @@ get_file_links :: (file: *Program_File) -> []Linked_File {
             if !is_avaiable_from_one_of_the_parents {
                 avaiable, from_import= := is_avaiable_from(file, it.path, *already_checked);
                 if !avaiable continue;
-            } 
+            }
         }
 
         array_add(*linked_files, .{ file=it, from_import=from_import });
@@ -360,13 +424,13 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
 
                 case .PROCEDURE;
                     proc := cast(*Procedure) parent_type;
-            
+
                     for arg: proc.arguments {
                         if arg.kind != .DECLARATION continue;
                         decl := cast(*Declaration) arg;
 
                         if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }  
+                    }
 
                 case .STRUCT;
                     _struct := cast(*Struct) parent_type;
@@ -376,7 +440,7 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
                         decl := cast(*Declaration) arg;
 
                         if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }  
+                    }
 
                 case .UNION;
                     _union := cast(*Union) parent_type;
@@ -386,8 +450,8 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
                         decl := cast(*Declaration) arg;
 
                         if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }  
-                
+                    }
+
             }
 
         }
@@ -422,7 +486,7 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
                 if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
             }
         }
-        
+
     }
 
     return decls;
@@ -439,7 +503,7 @@ get_node_nearest_parent :: (node: *Node, predicate: (Node.Kind) -> bool, limit :
         i += 1;
         if !current.parent break;
 
-        current = current.parent;        
+        current = current.parent;
     }
 
     return null;
@@ -458,7 +522,7 @@ is_parent_of :: (parent: *Node, node: *Node, limit := 5) -> bool {
         i += 1;
         if !current.parent break;
 
-        current = current.parent;        
+        current = current.parent;
     }
 
     return false;
@@ -484,9 +548,22 @@ is_global :: (node: *Node, from_file: *Program_File, it_file: *Program_File, fro
         if directive_scope.scope_kind == .MODULE && !from_import return true;
         if directive_scope.scope_kind == .EXPORT return true;
         if directive_scope.scope_kind == .FILE && from_file == it_file return true;
-    } 
+    }
 
     return false;
+}
+
+get_files_that_are_avaiable_from :: (target_file: *Program_File) -> []*Program_File {
+    files: [..]*Program_File;
+
+    for file: server.files {
+        already_checked: [..]string;
+        defer array_free(already_checked);
+        if !is_avaiable_from(file, target_file.path, *already_checked) continue;
+        array_add(*files, file);
+    }
+
+    return files;
 }
 
 get_files_that_load :: (target_file: *Program_File) -> []*Program_File {
@@ -531,6 +608,7 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
         load_path := trim_right(path_strip_filename(file.path), "/");
         load_relative_path := join(load_path, "/", it.file);
         // @TODO: free load_relative_path
+        // defer free(load_relative_path);
 
         if array_find(already_checked.*, load_relative_path) continue;
         array_add(already_checked, load_relative_path);
@@ -550,12 +628,6 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
     return loaded, from_import;
 }
 
-// get_declaration :: (file: *Program_File, name: string, from_block: *Block = null) -> *Declaration {
-//     decls := get_declarations(file, from_block);
-//     if decls.count == 0 return null;
-//     return decls[0];
-// }
-
 get_node_nearest_block :: (node: *Node) -> *Block {
     current_node := node;
     current_block: *Block;
@@ -566,8 +638,8 @@ get_node_nearest_block :: (node: *Node) -> *Block {
         if current_node.kind == .PROCEDURE || current_node.kind == .STRUCT break;
 
         if current_node.kind == .BLOCK {
-            block := cast(*Block) current_node; 
-            current_block = xx block;  
+            block := cast(*Block) current_node;
+            current_block = xx block;
 
             if !block.parent break;
 
@@ -620,10 +692,10 @@ is_after :: (a: Node.Location, b: Node.Location) -> bool {
 lsp_location_to_node_location :: (location: LSP_Position, file := "") -> Node.Location {
     node_location: Node.Location;
     node_location.file = file;
-    node_location.l0 = location.line;    
-    node_location.c0 = location.character;    
-    node_location.l1 = location.line;    
-    node_location.c1 = location.character;    
+    node_location.l0 = location.line;
+    node_location.c0 = location.character;
+    node_location.l1 = location.line;
+    node_location.c1 = location.character;
     return node_location;
 }
 
@@ -709,7 +781,7 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
             current_node = return_value.expression;
             continue;
         }
-        
+
         if current_node.kind == .BINARY_OPERATION {
             current_node = get_dot_path_result(file, xx current_node);
             continue;
@@ -733,7 +805,7 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
         }
 
         break;
-    }   
+    }
 
     return null;
 }
@@ -744,7 +816,7 @@ unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
     // nested pointers
     if unary_op.expression.kind == .UNARY_OPERATION {
         return unwrap_pointer(xx unary_op.expression);
-    }   
+    }
 
     return unary_op.expression;
 }
@@ -767,7 +839,7 @@ get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
 
 get_root_of_dot_path :: (op: *Binary_Operation) -> *Binary_Operation {
     current := op;
-    
+
     while current.parent && current.parent.kind == .BINARY_OPERATION {
         parent := cast(*Binary_Operation) current.parent;
         if parent.operation != .DOT break;
@@ -805,12 +877,12 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Ide
     while true {
         if current_op.operation != .DOT break;
         if !current_op.right break;
-        
+
         ident: *Identifier;
         end := false;
 
         if current_op.right.kind == {
-    
+
             case .IDENTIFIER;
                 ident = xx current_op.right;
                 end = true;
@@ -821,13 +893,13 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Ide
 
             case; break;
 
-        } 
+        }
 
         if ident == target {
             end = true;
         }
 
-        member := get_member_in(current_type, ident);        
+        member := get_member_in(current_type, ident);
         if !member break;
         decl = member;
 
@@ -855,22 +927,22 @@ reset_diagnostics :: () {
 // @TODO: Make it work with multiple errors
 // @todo: add support for warnings
 run_diagnostics :: () {
-    // return;
-
     if server.build_root.count == 0 return;
     build_root_absolute := join(server.project_root, server.build_root, separator="/");
+    defer free(build_root_absolute);
 
     log("Running diagnostics %", build_root_absolute);
 
     command: [..] string;
+    defer array_free(command);
 
     array_add(*command, "jai");
     array_add(*command, build_root_absolute, "-quiet", "-no_color", "-plug", "jails_diagnostics");
 
     // Use fast x64 backend on supported CPUs.
     if CPU == .X64 {
-        array_add(*command, build_root_absolute, "-x64");
-    } 
+        array_add(*command, "-x64");
+    }
 
     for local_module_folder: server.local_modules {
         array_add(*command, "-import_dir", local_module_folder);
@@ -885,9 +957,8 @@ run_diagnostics :: () {
         return;
     }
 
-    array_free(command);
-
     lines := split(error, "\n");
+    defer array_free(lines);
 
     file: string;
     diagnostic: LSP_Diagnostic;
@@ -900,7 +971,7 @@ run_diagnostics :: () {
         message_index := find_index_from_right(output_line, ERROR_MARKER);
         message := slice(output_line, message_index + ERROR_MARKER.count, output_line.count - message_index);
         rest := slice(output_line, 0, message_index);
-        
+
         ok: bool;
         location: string;
         ok, file, location = split_from_right(rest, ":");
@@ -942,7 +1013,7 @@ run_diagnostics :: () {
     diagnostics: [1]LSP_Diagnostic;
     diagnostics[0] = diagnostic;
 
-    file = path_to_lsp_path(normalize_path(file)); // split_from_right and slice don't allocate memory so copy the file in case the string with compiler output is freed
+    file = path_to_lsp_path(normalize_path(file,, temp)); // split_from_right and slice don't allocate memory so copy the file in case the string with compiler output is freed
 
     lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
         method="textDocument/publishDiagnostics",
