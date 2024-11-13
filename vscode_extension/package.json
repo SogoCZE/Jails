@@ -2,9 +2,10 @@
   "name": "jails",
   "displayName": "Jails",
   "description": "Experimental language server for Jai programming language",
+  "icon": "images/icon.png",
   "version": "0.0.10",
-  "publisher": "SogoCZE",
-  "author": "SogoCZE",
+  "publisher": "ApparentlyStudio",
+  "author": "Patrik Smělý (SogoCZE)",
   "main": "./out/extension.js",
   "activationEvents": [
     "onLanguage:jai"
@@ -17,8 +18,8 @@
     "compile": "tsc -b",
     "watch": "tsc --watch",
     "pack:linux": "cp ../bin/jails ./out/jails-linux && vsce package",
-    "pack:mac": "cp ../bin/jails ./out/jails-mac && vsce package",
-    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win.exe && vsce package"
+    "pack:mac": "cp ../bin/jails ./out/jails-darwin-arm64 && vsce package",
+    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win32-x64.exe && vsce package"
   },
   "license": "MIT",
   "engines": {
