@@ -1,8 +1,5 @@
 VERSION :: "1.0.0";
 
-PROJECT_FOLDER_PATH :: #run join(path_strip_filename(#file), "..");
-METAPROGRAM_PATH :: #run tprint("%/metaprogram", PROJECT_FOLDER_PATH);
-
 MEMORY_DEBUG :: false;
 
 Args :: struct {
@@ -28,6 +25,8 @@ Server :: struct {
     memory_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
 
     previously_errored_file: string;
+
+    diagnostics_metaprogram_path: string;
 }
 
 server: Server;
@@ -185,6 +184,31 @@ load_config_file :: () {
     }
 }
 
+create_diagnostics_metaprogram :: () {
+    METAPROGRAM_SOURCE := #run -> string {
+        project_dir := join(path_strip_filename(#file), "..");
+        metaprogram_dir := tprint("%/metaprogram", project_dir);
+        return read_entire_file(tprint("%/jails_diagnostics.jai", metaprogram_dir));
+    };
+
+    jails_exe_dir := trim_right(path_strip_filename(get_path_of_running_executable()), "/");
+    metaprogram_dir := sprint("%/metaprogram", jails_exe_dir);
+    if !make_directory_if_it_does_not_exist(metaprogram_dir) {
+        log_error("Failed to create metaprogram directory!");
+        return;
+    }
+
+    metaprogram_source_file_path := tprint("%/jails_diagnostics.jai", metaprogram_dir);
+
+    if !write_entire_file(metaprogram_source_file_path, METAPROGRAM_SOURCE) {
+        log_error("Failed to create metaprogram file!");
+        return;
+    }
+
+    server.diagnostics_metaprogram_path = metaprogram_dir;
+    log("Metaprogram file created! (%)", metaprogram_source_file_path);
+}
+
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
     log("Got %", request.method);
 
@@ -199,6 +223,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 // @Incomplete: report error back!
                 return;
             }
+
+            create_diagnostics_metaprogram();
 
             log("Root URI: %", body.params.rootUri.*);
             log("Root Path: %", body.params.rootPath.*);
@@ -235,8 +261,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             // Parse Runtime Support and Preload
             {
-                parse_file(tprint("%/modules/Runtime_Support.jai",
-                server.args.jai_path), true);
+                parse_file(tprint("%/modules/Runtime_Support.jai", server.args.jai_path), true);
                 parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
             }
 
@@ -419,6 +444,7 @@ main :: () {
 #import "Pool";
 #import "jai_parser";
 #import "Default_Allocator";
+#import "System";
 
 #load "rpc.jai";
 #load "lsp_interface.jai";

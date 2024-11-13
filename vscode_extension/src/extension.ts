@@ -1,5 +1,7 @@
 import { ExtensionContext, commands, window } from "vscode";
 
+import * as path from "path";
+
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -9,10 +11,24 @@ import {
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
-    var isWin = process.platform === "win32";
-    const pathDelimeter = isWin ? "\\" : "/";
+    let jails_executable: string;
+    switch (process.platform) {
+        case "darwin":
+            jails_executable = "jails_mac";
+            break;
+        case "win32":
+            jails_executable = "jails_win.exe";
+            break;
+        // case "linux":
+        //     jails_executable = "jails_linux";
+        //     break;
+        default:
+            window.showErrorMessage(`Platform ${process.platform} is not yet supported. But can build Jails yourself https://github.com/SogoCZE/Jails?tab=readme-ov-file#vs-code.`);
+            process.exit();
+    }
 
-    const devServerPath = __dirname.replace(`vscode_extension${pathDelimeter}out`, `bin`) + pathDelimeter + "jails" + (isWin ? ".exe" : "");
+    const extensionPath = context.extensionPath;
+    const devServerPath = path.normalize(`${extensionPath}/out/${jails_executable}`);
 
     let serverOptions: ServerOptions = {
         command: devServerPath,
@@ -34,10 +50,9 @@ export function activate(context: ExtensionContext) {
     client.start();
 }
 
-
 export function deactivate() {
     if (!client) {
-        return undefined;
+        return;
     }
 
     return client.stop();

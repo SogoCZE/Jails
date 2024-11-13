@@ -2,7 +2,7 @@
   "name": "jails",
   "displayName": "Jai Language Server",
   "description": "Language Server for Jai programming language",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "publisher": "SogoCZE",
   "author": "SogoCZE",
   "main": "./out/extension.js",
@@ -16,8 +16,9 @@
   "scripts": {
     "compile": "tsc -b",
     "watch": "tsc --watch",
-    "pack:unix": "cp ../bin/jails ./out/ && vsce package",
-    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\ && vsce package"
+    "pack:linux": "cp ../bin/jails ./out/jails-linux && vsce package",
+    "pack:mac": "cp ../bin/jails ./out/jails-mac && vsce package",
+    "pack:windows": "copy ..\\jails.exe .\\out\\bin\\jails-win.exe && vsce package"
   },
   "license": "MIT",
   "engines": {
@@ -30,9 +31,9 @@
     "vscode-languageclient": "9.0.1"
   },
   "devDependencies": {
-    "typescript": "5.3.2",
+    "@types/node": "20.10.2",
     "@types/vscode": "1.84.2",
-    "@types/node": "20.10.2"
+    "typescript": "5.3.2"
   },
   "keywords": [
     "Jai"

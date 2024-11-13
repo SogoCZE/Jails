@@ -909,7 +909,7 @@ run_diagnostics :: () {
         array_add(*command, "-import_dir", local_module_folder);
     }
 
-    array_add(*command, "---", "import_dir", METAPROGRAM_PATH);
+    array_add(*command, "---", "import_dir", server.diagnostics_metaprogram_path);
 
     reset_diagnostics();
 
