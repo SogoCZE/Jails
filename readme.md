@@ -19,6 +19,10 @@ This repo uses git submodules. Clone it using `git clone --recurse-submodules`.
 Compile the release version of the server with `jai build.jai - -release`. Jails binary will be generated in the `bin` folder.
 
 ### VS Code
+Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ApparentlyStudio.jails) or you can build it yourself. The prebuilt version supports x64 Windows and ARM64 MacOS at the moment.
+
+#### Manual build
+
 1. Make sure this repo is your working directory (e.g. `cd Jails`).
 2. Run `npm install --global @vscode/vsce` to install the Visual Studio Code Extension Manager.
 3. Run `jai build.jai - -release` to build the binary.
