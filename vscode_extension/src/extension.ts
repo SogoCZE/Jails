@@ -13,6 +13,10 @@ let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
     let jails_executable = `jails-${process.platform}-${process.arch}`;
+    if (process.platform == "win32") {
+        jails_executable += ".exe";
+    }
+
     const extensionPath = context.extensionPath;
     const devServerPath = path.normalize(`${extensionPath}/out/${jails_executable}`);
 
