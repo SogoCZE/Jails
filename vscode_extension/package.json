@@ -1,8 +1,8 @@
 {
   "name": "jails",
-  "displayName": "Jai Language Server",
-  "description": "Language Server for Jai programming language",
-  "version": "0.0.9",
+  "displayName": "Jails",
+  "description": "Experimental language server for Jai programming language",
+  "version": "0.0.10",
   "publisher": "SogoCZE",
   "author": "SogoCZE",
   "main": "./out/extension.js",
@@ -18,7 +18,7 @@
     "watch": "tsc --watch",
     "pack:linux": "cp ../bin/jails ./out/jails-linux && vsce package",
     "pack:mac": "cp ../bin/jails ./out/jails-mac && vsce package",
-    "pack:windows": "copy ..\\jails.exe .\\out\\bin\\jails-win.exe && vsce package"
+    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win.exe && vsce package"
   },
   "license": "MIT",
   "engines": {

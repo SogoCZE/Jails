@@ -14,13 +14,13 @@ export function activate(context: ExtensionContext) {
     let jails_executable: string;
     switch (process.platform) {
         case "darwin":
-            jails_executable = "jails_mac";
+            jails_executable = "jails-mac";
             break;
         case "win32":
-            jails_executable = "jails_win.exe";
+            jails_executable = "jails-win.exe";
             break;
         // case "linux":
-        //     jails_executable = "jails_linux";
+        //     jails_executable = "jails-linux";
         //     break;
         default:
             window.showErrorMessage(`Platform ${process.platform} is not yet supported. But can build Jails yourself https://github.com/SogoCZE/Jails?tab=readme-ov-file#vs-code.`);
