@@ -9,6 +9,21 @@ Jails is an experimental language server for the Jai programming language.
 
 In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc. 
 
+### When using a custom Build program
+By default Jails does not generate any output files, however, when using a custom build program it will output whatever your build program is set to. In that case you should use disable the output on your own, by combining "JAILS_DIAGNOSTICS_BUILD " with "#exists" to detect if it is build by the lsp.
+```
+#if #exists(JAILS_DIAGNOSTICS_BUILD) options.output_type = .NO_OUTPUT;
+```
+
+If you happen to have more than one layer of metaprogramms triggering, you can do the following:
+
+```
+default_metaprogram_command_lind := get_build_options(1).compile_time_command_line;
+found, index := array_find(default_metaprogram_command_lind, "jails_diagnostics");
+if found  child_options.output_type = .NO_OUTPUT;
+```
+
+
 ## Usage
 Be aware that this language server is still pretty much unstable... Nonetheless, it can be quite useful even in this early stage of development.
 
