@@ -49,3 +49,30 @@ Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketpla
 
 ### Config file
 You can create a config file `jails.json` inside your project root to specify:
+### Config file
+You can create a config file `jails.json` inside your project root to specify:
+- `roots` (`main.jai`, `build.jai`) - this is used to set up files that are being parsed on init - you don't need to set this but it will improve your experience.
+- `local modules` (`modules`) - this tells the language server to also search for modules in these folders.
+- `build_root` - entry file for compiling (currently used for running compiler diagnostics - errors in the editor)
+
+```json
+{
+    "local_modules": [
+        "modules"
+    ],
+    "roots": [
+        "server/main.jai",
+        "build.jai"
+    ],
+    "build_root": "build.jai"
+}
+```
+
+## Run (dev)
+Compile server with `jai build.jai` or compile and run test VSCode with preinstalled LSP with `jai build.jai - -vscode`.
+
+## Dependencies
+- [jai_parser](https://github.com/SogoCZE/jai_parser)
+- [Jason](https://github.com/rluba/jason)
+- [Jai unicode](https://github.com/rluba/jai-unicode)
+- [Tracy](https://github.com/rluba/jai-tracy) (profiling)
