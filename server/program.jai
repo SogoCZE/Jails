@@ -10,7 +10,9 @@ Program_File :: struct {
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
     resolved_identifiers: Table(*Node, []*Declaration);
-    linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
+    declaration_hierarchy: Table(*Declaration, [..]*Declaration);
+    serialized_workspace_symbols: Table(string, string);
+    linked_files : [] Linked_File; // @TODO: this is probably stupid name for this!
 
     ast_pool: Pool;
     analysis_pool: Pool;
@@ -24,10 +26,14 @@ Linked_File :: struct {
 init_file :: (using file: Program_File) {
     init(*declarations);
     init(*resolved_identifiers);
+    init(*declaration_hierarchy);
+    init(*serialized_workspace_symbols);
 }
 
 deinit_file :: (using file: Program_File) {
     deinit(*declarations);
+    deinit(*declaration_hierarchy);
+    deinit(*serialized_workspace_symbols);
     array_free(nodes);
     array_free(loads);
     array_free(imports);
@@ -37,6 +43,8 @@ deinit_file :: (using file: Program_File) {
 
 reset_file :: (using file: Program_File) {
     table_reset(*declarations);
+    table_reset(*declaration_hierarchy);
+    table_reset(*serialized_workspace_symbols);
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
@@ -145,6 +153,7 @@ parse_file :: (path: string, force := false) {
 }
 
 analyze_files :: () {
+    //ZoneScoped();
     for file: server.files_to_be_analyzed {
         release(*file.analysis_pool);
     }
@@ -180,6 +189,8 @@ analyze_files :: () {
         table_reset(*file.resolved_identifiers);
         resolve_identifiers(file,, pool_alloc(*file.analysis_pool));
         // log("Analyzed: %", file.path);
+        build_declaration_hierarchy(file);
+        generate_and_serialize_workspace_symbols_for_file(file);
     }
 
     array_reset(*server.files_to_be_analyzed);
@@ -319,6 +330,23 @@ resolve_identifiers :: (file: *Program_File) {
         }
 
     }
+}
+
+build_declaration_hierarchy :: (file: *Program_File) {
+    //ZoneScoped();
+    for file.declarations{
+        parent_declaration: *Declaration;
+
+        if it.parent
+            parent_declaration = cast(*Declaration) get_node_nearest_parent(it.parent, kind => kind == .DECLARATION);
+
+        children := find_or_add(*file.declaration_hierarchy, parent_declaration);
+
+        array_add(children, it);
+    }
+
+    for file.declaration_hierarchy
+        quick_sort(it, (a, b) => ifx a.location.l0 != b.location.l0 then a.location.l0 - b.location.l0 else a.location.c0 - b.location.c0);
 }
 
 get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
@@ -688,7 +716,18 @@ get_identifier_decl :: (__file: *Program_File, ident: *Identifier) -> []*Declara
         return decls;
     }
 
-    return .[];
+    //the loop above fails to find identifier declarations for many common symbols. As a hacky fix, we fall back to searching for declarations that match the name of the identifier. This may lead to false positives obviously, but I do not know if this is any worse than what the loop above does. And since we only do this when the loop above has not been successfull in finding something, I would argue that getting a 90% correct answer is better than no answer.
+
+    declarations: [..]*Declaration;
+
+    for file: server.files {
+        file_decl, found := table_find(*file.declarations, ident.name);
+
+        if found
+            array_add(*declarations, file_decl);
+    }
+
+    return declarations;
 }
 
 // @TODO: Maybe refactor this to be more useful?
@@ -990,3 +1029,5 @@ run_diagnostics :: () {
 
     server.previously_errored_file = file;
 }
+
+#import "Sort";
