@@ -10,12 +10,12 @@ Jails is an experimental language server for the Jai programming language.
 In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc. 
 
 ### When using a custom Build program
-By default Jails does not generate any output files, however, when using a custom build program it will output whatever your build program is set to. In that case you should use disable the output on your own, by combining "JAILS_DIAGNOSTICS_BUILD " with "#exists" to detect if it is build by the lsp.
+By default, Jails does not generate any output files, however, when using a custom build program it will output whatever your build program is set to. In that case, you should disable the output on your own, by combining `JAILS_DIAGNOSTICS_BUILD` with `#exists` to detect if it is build by the LSP.
 ```
 #if #exists(JAILS_DIAGNOSTICS_BUILD) options.output_type = .NO_OUTPUT;
 ```
 
-If you happen to have more than one layer of metaprogramms triggering, you can do the following:
+If you happen to have more than one layer of meta programms triggering, you can do the following:
 
 ```
 default_metaprogram_command_lind := get_build_options(1).compile_time_command_line;
@@ -34,7 +34,7 @@ This repo uses git submodules. Clone it using `git clone --recurse-submodules`.
 Compile the release version of the server with `jai build.jai - -release`. Jails binary will be generated in the `bin` folder.
 
 ### VS Code
-Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ApparentlyStudio.jails) or you can build it yourself. The prebuilt version supports x64 Windows and ARM64 MacOS at the moment.
+Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ApparentlyStudio.jails) or you can build it yourself. The prebuilt version supports x64 Windows and ARM64 MacOS at the moment.
 
 #### Manual build
 
@@ -49,28 +49,3 @@ Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketpl
 
 ### Config file
 You can create a config file `jails.json` inside your project root to specify:
-- `roots` (`main.jai`, `build.jai`) - this is used to set up files that are being parsed on init - you don't need to set this but it will improve your experience.
-- `local modules` (`modules`) - this tells the language server to also search for modules in these folders.
-- `build_root` - entry file for compiling (currently used for running compiler diagnostics - errors in the editor)
-
-```json
-{
-    "local_modules": [
-        "modules"
-    ],
-    "roots": [
-        "server/main.jai",
-        "build.jai"
-    ],
-    "build_root": "build.jai"
-}
-```
-
-## Run (dev)
-Compile server with `jai build.jai` or compile and run test VSCode with preinstalled LSP with `jai build.jai - -vscode`.
-
-## Dependencies
-- [jai_parser](https://github.com/SogoCZE/jai_parser)
-- [Jason](https://github.com/rluba/jason)
-- [Jai unicode](https://github.com/rluba/jai-unicode)
-- [Tracy](https://github.com/rluba/jai-tracy) (profiling)
