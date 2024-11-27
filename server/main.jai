@@ -270,8 +270,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
 
-            json_free(xx body);
-
         case "textDocument/definition";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Definition,, temp);
             if !success {
@@ -280,7 +278,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             handle_goto(body);
-            json_free(xx body);
 
         case "textDocument/didSave";
             success, body := json_parse_string(raw_request, LSP_Did_Save_Text_Document,, temp);
@@ -295,8 +292,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             parse_file(file_path, true);
             analyze_files();
-
-            json_free(xx body);
 
         case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document,, temp);
@@ -316,8 +311,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             log("File_path: %", file_path);
 
-            json_free(xx body);
-
         case "textDocument/didChange";
 
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document,, temp);
@@ -331,8 +324,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             parse_file(file_path, true);
             analyze_files();
 
-            json_free(xx body);
-
         case "textDocument/didClose";
             success, body := json_parse_string(raw_request, LSP_Did_Close_Text_Document,, temp);
             if !success {
@@ -343,8 +334,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := normalize_path(body.params.textDocument.uri,, temp);
             remove_memory_file(file_path);
 
-            json_free(xx body);
-
         case "textDocument/completion";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Completion,, temp);
             if !success {
@@ -353,8 +342,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             handle_completitions(body);
-
-            json_free(xx body);
 
         case "textDocument/signatureHelp";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Signature_Help,, temp);
@@ -365,8 +352,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             handle_signature_help(body);
 
-            json_free(xx body);
-
         case "textDocument/hover";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
             if !success {
@@ -375,7 +360,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             handle_hover(body);
-            json_free(xx body);
     }
 }
 

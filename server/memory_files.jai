@@ -173,10 +173,14 @@ find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, No
     }
 
     // Start search
-    for < index: pointer_index..0 {
+    for #v2 < index: 0..pointer_index {
         char := content[index];
         if is_seperation(char) {
-            start_index = index+1;
+            start_index = index;
+            if !with_start_separator {
+                start_index += 1;
+}
+
             break;
         }
     }
