@@ -137,12 +137,12 @@ get_memory_file :: (name: string) -> []u8 {
     return content;
 }
 
-find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, Node.Location {
+find_word_in_memory_file :: (file: string, position: LSP_Position, with_start_separator := false, with_end_separator := false) -> string {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
     content, ok := table_find(*server.memory_files, file);
     if !ok {
-        return "", .{};
+        return "";
     }
 
     final_line: int;
@@ -161,7 +161,7 @@ find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, No
     }
 
     if pointer_index == -1 {
-        return "", .{};
+        return "";
     }
 
     // Word search
@@ -179,7 +179,7 @@ find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, No
             start_index = index;
             if !with_start_separator {
                 start_index += 1;
-}
+            }
 
             break;
         }
@@ -190,20 +190,15 @@ find_word_in_memory_file :: (file: string, position: LSP_Position) -> string, No
         char := content[index];
         if is_seperation(char) {
             end_index = index;
+            if !with_end_separator {
+                end_index += 1;
+            }
+
             break;
         }
     }
 
-    location := Node.Location.{
-        l0=final_line,
-        c0=start_index,
-        l1=final_line,
-        c1=end_index
-    };
-
-    Node;
-
-    return to_string(*content[start_index], end_index-start_index), location;
+    return to_string(*content[start_index], end_index-start_index);
 }
 
 #scope_file
