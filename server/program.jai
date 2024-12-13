@@ -384,14 +384,14 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
 
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "") -> []*Declaration {
     decls: [..]*Declaration;
-
+    
     if from_block {
 
         parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION);
 
         // Procedure or Struct params
         if parent_type {
-
+            
             if parent_type.kind == {
 
                 case .PROCEDURE;
@@ -448,7 +448,7 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
     }
 
     for linked_file: file.linked_files {
-
+        
         if name.count > 0 {
             for decl: table_find_multiple(*linked_file.file.declarations, name) {
                 if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
@@ -697,13 +697,17 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
 
     while true {
         if !current_node break;
-
+        
         if current_node.kind == .IDENTIFIER {
             ident_decls := get_identifier_decl(file, xx current_node);
             // log("ident_decls = % for %", ident_decls, (cast(*Identifier) current_node).name);
             if ident_decls.count == 0 return null;
             current_node = ident_decls[0];
             continue;
+        }
+
+        if current_node.kind == .STRUCT {
+            return current_node;
         }
 
         if current_node.kind == .DECLARATION {
