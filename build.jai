@@ -69,6 +69,7 @@
         vscode_path: string;
 
         if OS == .WINDOWS {
+            copy_file("bin/jails.exe", "vscode_extension/out/jails-win32-x64.exe");
             username, ok := get_username();
             if !ok {
                 log_error("Cannot resolve Windows username. Cannot launch vscode.");

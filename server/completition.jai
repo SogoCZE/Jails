@@ -18,7 +18,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
-
+    
     // We don't wanna to give completions inside strings and comments...
     if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
 
@@ -36,25 +36,36 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     decls: []*Declaration;
     defer array_free(decls);
 
+    log("Here's the cursor block:\n");
+    log_node(cursor_block);
+
+
     // Binary OP
     if cursor_node && cursor_node.kind == .BINARY_OPERATION {
-        decls = get_dot_path_members(file, xx cursor_node);
-        if decls.count > 0 {
-            send_completions_decls(request, decls);
-            return;
+        binary_op := cast(*Binary_Operation)cursor_node;
+
+        if binary_op.operation == {
+            case .DOT;
+                decls = complete_dot(cursor_node);
+                
+                if decls.count > 0 {
+                    send_completions_decls(request, decls);
+                } else {
+                    log("Could not complete '.'\n");
+
+                    //log("Here's the cursor block:\n");
+                    //log_node(cursor_block);
+
+                    log("And here's the cursor node\n");
+                    log_node(cursor_node);
+                }
+                
+                // If we fail to complete a . we return nothing
+                return;
+            case;
+                return;
         }
     }
-
-    if cursor_node && cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
-        decls = get_dot_path_members(file, xx cursor_node.parent);
-        if decls.count > 0 {
-            send_completions_decls(request, decls);
-            return;
-        }
-    }
-
-
-    if cursor_block log("Block: %", cursor_block.*);
 
     // General
     decls = get_declarations(file, cursor_block, *cursor_location);
@@ -207,4 +218,54 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
     }
 
     lsp_respond(request.id, completions);
+}
+
+log_node :: (node: *Node, indent: s32 = 0) {
+    
+    if !node {
+        return;
+    }
+
+    sb : String_Builder;
+
+    for 0..indent-1 {
+        append(*sb, "____");
+    }
+
+    if node.kind == {
+        case .IDENTIFIER;
+            ident := cast(*Identifier)node;
+            log("%IDENT: %\n", builder_to_string(*sb), ident.name);
+        case .BINARY_OPERATION;
+            binary_op := cast(*Binary_Operation)node;
+            log("%BINARY OP: %\n", builder_to_string(*sb), binary_op.operation);
+            log_node(binary_op.left, indent + 1);
+            log_node(binary_op.right, indent + 1);
+        case .BLOCK;
+            block := cast(*Block)node;
+            log("%BLOCK\n", builder_to_string(*sb));
+            
+            for m: block.members {
+                log_node(m, indent + 1);
+            }
+        case .DECLARATION;
+            decl := cast(*Declaration)node;
+            log("%DECL %\n", builder_to_string(*sb), decl.name, decl.type_inst);
+            
+            log_node(decl.type_inst, indent + 1);
+            log("%EXPR\n", builder_to_string(*sb));
+            log_node(decl.expression, indent + 1);
+        case .ARRAY_TYPE;
+            array_type := cast(*Array_Type)node;
+
+            log("%ARRAY_TYPE\n", builder_to_string(*sb));
+            log_node(array_type.element_type, indent + 1);
+        case .ARRAY_SUBSCRIPT;
+            array_sub := cast(*Array_Subscript)node;
+
+            log("%ARRAY_SUB\n", builder_to_string(*sb));
+            log_node(array_sub.expression, indent + 1);
+        case;
+            log("%Unhandled: %\n", builder_to_string(*sb), node.kind);
+    }
 }

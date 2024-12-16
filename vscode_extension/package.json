@@ -3,7 +3,7 @@
   "displayName": "Jails",
   "description": "Experimental language server for Jai programming language",
   "icon": "images/icon.png",
-  "version": "0.0.10",
+  "version": "0.2.0",
   "publisher": "ApparentlyStudio",
   "author": "Patrik Smělý (SogoCZE)",
   "main": "./out/extension.js",
