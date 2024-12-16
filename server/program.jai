@@ -403,7 +403,7 @@ get_function_declarations :: (file: *Program_File, node: *Node) -> []*Declaratio
             case .PROCEDURE;
                 proc := cast(*Procedure)node;
 
-                for d: proc.arguments {                    
+                for d: proc.arguments {
                     if d.kind == .DECLARATION { // Should be always the case?
                         array_add(*decls, xx d);
                     }
@@ -1129,6 +1129,19 @@ print_node :: (node: *Node) {
                 //print_node(array_sub.expression);
             }
 
+        case .STRUCT;
+            str := cast(*Struct)node;
+
+            log("STRUCT block: %\n", str.block);
+
+            for m: str.block.members {
+                if m.kind == .DECLARATION {
+                    decl := cast(*Declaration)m;
+                    log("\t%: %\n", it_index, decl.name);
+                }
+                
+            }
+
         case;
             log("% *\n", node.kind);
     }
@@ -1238,6 +1251,7 @@ get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
             case .STRUCT;
                 str := cast(*Struct)node;
                 log("%: YAY! got struct %\n", str.kind, str.block);
+                print_node(str);
                 return node;
             case .ARRAY_TYPE;
                 array_type := cast(*Array_Type)node;
@@ -1270,7 +1284,7 @@ get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
                 }
             case .CAST;
                 c := cast(*Cast)node;
-
+                
                 node = c.cast_expression;
 
             case .PROCEDURE_CALL;
@@ -1356,6 +1370,8 @@ get_array_type :: (node: *Node, current_struct: *Struct, solve_array: bool) -> *
                 node = proc_call.procedure;
             case .STRUCT;
                 return node;
+            case .UNARY_OPERATION;
+                node = unwrap_pointer(xx node);
             case;
                 log("%: --- (get_array_type)\n", node.kind);
                 break;
@@ -1458,8 +1474,17 @@ get_path_type :: (in_path: []*Node) -> *Node {
 
                         current_return_type = decl_type;
 
+                        if decls.count > 1 {
+                            print_node(d);
+                        }
+
                         if decl_type && decl_type.kind == .STRUCT {
                             current_struct = xx decl_type;
+
+                            if current_struct.block && current_struct.block.members.count {
+                                // We are trying only to accept struct with members
+                                break;
+                            }
                         } else {
                             current_struct = null;
                         }
@@ -1557,11 +1582,14 @@ get_dot_complete_decls :: (binary_op: *Binary_Operation) -> []*Declaration {
             str := cast(*Struct)path_type;
 
             if str.block {
+                log("Struct has % members\n", str.block.members.count);
                 for m: str.block.members {
                     if m.kind == .DECLARATION {
                         array_add(*decls, xx m);
                     }
                 }
+            } else {
+                log("Hey this struct has no block!\n");
             }
         case .ARRAY_TYPE;
             return .[*array_count_declaration, *array_data_declaration];
