@@ -382,11 +382,59 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
     return linked_files;
 }
 
+get_function_declarations :: (file: *Program_File, node: *Node) -> []*Declaration {
+    decls : [..]*Declaration;
+
+    while node {
+
+        if node.kind == {
+            case .DECLARATION;
+                array_add(*decls, xx node);
+                node = node.parent;
+            case .BLOCK;
+                block := cast(*Block)node;
+
+                for b: block.members {
+                    if b.kind == .DECLARATION {
+                        array_add(*decls, xx b);
+                    }
+                }
+                node = node.parent;
+            case .PROCEDURE;
+                break;
+            case .CASE;
+                c := cast(*Case)node;
+
+                for m: c.members {
+                    if m.kind == .DECLARATION {
+                        array_add(*decls, xx m);
+                    }
+                }
+                node = node.parent;
+            case;
+                log("%: ---\n", node.kind);
+                node = node.parent;
+        }
+    }
+    
+    for linked_file: file.linked_files {
+        for decl: linked_file.file.declarations {
+            if is_global(decl, file, linked_file.file, linked_file.from_import) {
+                array_add(*decls, decl);
+            }
+        }
+    }
+
+    return decls;
+        
+}
+
+
+
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "") -> []*Declaration {
     decls: [..]*Declaration;
     
     if from_block {
-
         parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION);
 
         // Procedure or Struct params
@@ -427,9 +475,10 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
             }
 
         }
-
     }
 
+    
+    
     should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *Block, from_loc: *Node.Location, decl: *Declaration) -> bool {
         decl_block := get_node_nearest_block(decl);
         global := is_global(decl, file, linked_file.file, linked_file.from_import);
@@ -1298,8 +1347,10 @@ get_array_type :: (node: *Node, current_struct: *Struct, solve_array: bool) -> *
                 proc_call := cast(*Procedure_Call)node;
 
                 node = proc_call.procedure;
+            case .STRUCT;
+                return node;
             case;
-                log("%: ---\n", node.kind);
+                log("%: --- (get_array_type)\n", node.kind);
                 break;
         }
     }

@@ -67,7 +67,16 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     log("General non dot cursor node\n");
     log_node(cursor_node);
 
-    decls = get_declarations(file, cursor_block, *cursor_location);
+    decls = get_function_declarations(file, cursor_node);
+
+    log("Filtering % decls\n", decls.count);
+
+    if decls.count < 10 {
+        for d: decls {
+            log("%: %\n", it_index, d.name);
+        }
+        
+    }
 
     // Filter declarations
     if cursor_node && cursor_node.kind == .IDENTIFIER {
@@ -85,6 +94,12 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     }
 
     log("Sending % declarations to complete non dot\n", decls.count);
+
+    if decls.count < 30 {
+        for d: decls {
+            log("%: %\n", it_index, d.name);
+        }
+    }
 
     send_completions_decls(request, decls);
 }
