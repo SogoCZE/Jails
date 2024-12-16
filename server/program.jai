@@ -10,6 +10,8 @@ Program_File :: struct {
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
     resolved_identifiers: Table(*Node, []*Declaration);
+    declaration_hierarchy: Table(*Declaration, [..]*Declaration);
+    serialized_workspace_symbols: Table(string, string);
     linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
 
     ast_pool: Pool;
@@ -24,6 +26,8 @@ Linked_File :: struct {
 init_file :: (using file: Program_File) {
     init(*declarations);
     init(*resolved_identifiers);
+    init(*declaration_hierarchy);
+    init(*serialized_workspace_symbols);
 }
 
 deinit_file :: (using file: Program_File) {
@@ -33,10 +37,14 @@ deinit_file :: (using file: Program_File) {
     array_free(imports);
     release(*file.ast_pool);
     release(*file.analysis_pool);
+    deinit(*declaration_hierarchy);
+    deinit(*serialized_workspace_symbols);
 }
 
 reset_file :: (using file: Program_File) {
     table_reset(*declarations);
+	table_reset(*declaration_hierarchy);
+    table_reset(*serialized_workspace_symbols);
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
@@ -179,6 +187,8 @@ analyze_files :: () {
     for file: server.files_to_be_analyzed {
         table_reset(*file.resolved_identifiers);
         resolve_identifiers(file,, pool_alloc(*file.analysis_pool));
+        build_declaration_hierarchy(file);
+        generate_and_serialize_workspace_symbols_for_file(file);
         // log("Analyzed: %", file.path);
     }
 
@@ -318,6 +328,24 @@ resolve_identifiers :: (file: *Program_File) {
             table_add(*file.resolved_identifiers, ident, decls);
         }
 
+    }
+}
+
+build_declaration_hierarchy :: (file: *Program_File) {
+    //ZoneScoped();
+    for file.declarations{
+        parent_declaration: *Declaration;
+
+        if it.parent
+            parent_declaration = cast(*Declaration) get_node_nearest_parent(it.parent, kind => kind == .DECLARATION);
+
+        children := find_or_add(*file.declaration_hierarchy, parent_declaration);
+
+        array_add(children, it);
+    }
+
+    for file.declaration_hierarchy {
+        quick_sort(it, (a, b) => ifx a.location.l0 != b.location.l0 then a.location.l0 - b.location.l0 else a.location.c0 - b.location.c0);
     }
 }
 
@@ -1606,3 +1634,5 @@ complete_dot :: (node: *Node) -> []*Declaration {
     return .[];
 
 }
+
+#import "Sort";

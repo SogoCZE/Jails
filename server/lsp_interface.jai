@@ -110,6 +110,21 @@ LSP_Request_Message_Document_Symbol :: struct {
     }
 }
 
+LSP_Request_Message_Workspace_Symbol :: struct {
+    using request: LSP_Request_Message;
+    params: struct{
+        query: string;
+    }
+}
+
+
+LSP_Workspace_Symbol :: struct{
+    name: string;
+    kind: s64;
+    //tags: Tag
+    location: LSP_Location;
+}
+
 LSP_Did_Open_Text_Document :: struct {
     using request: LSP_Request_Message;
     params: struct {
@@ -402,36 +417,6 @@ LSP_Partial_Result_Params :: struct {
 // 📌
 
 LSP_Document_Symbol :: struct {
-
-    Kind :: enum s64 {
-        FILE :: 1;
-	    MODULE :: 2;
-	    NAMESPACE :: 3;
-	    PACKAGE :: 4;
-	    CLASS :: 5;
-	    METHOD :: 6;
-	    PROPERTY :: 7;
-	    FIELD :: 8;
-	    CONSTRUCTOR :: 9;
-	    ENUM :: 10;
-	    INTERFACE :: 11;
-	    FUNCTION :: 12;
-	    VARIABLE :: 13;
-	    CONSTANT :: 14;
-	    STRING :: 15;
-	    NUMBER :: 16;
-	    BOOLEAN :: 17;
-	    ARRAY :: 18;
-	    OBJECT :: 19;
-	    KEY :: 20;
-	    NULL :: 21;
-	    ENUMMEMBER :: 22;
-	    STRUCT :: 23;
-	    EVENT :: 24;
-	    OPERATOR :: 25;
-	    TYPEPARAMETER :: 26;
-    }
-
     name: string;
     kind: s64;
     range: LSP_Range;
@@ -489,8 +474,9 @@ LSP_Request_Message_Initialize :: struct {
 
 LSP_Result_Initialize :: struct {
     capabilities: struct {
-        // semanticTokensProvider := true;
-        // documentSymbolProvider := true;
+        //semanticTokensProvider := true;
+        documentSymbolProvider := true;
+        workspaceSymbolProvider := true;
 
         definitionProvider := true;
         // hoverProvider := true;
@@ -763,6 +749,23 @@ lsp_respond :: (id: u32, data: $T) {
         response.id=id,
         result=data,
     });
+}
+
+lsp_respond_with_already_json_serialized_result_data :: (id: u32, data: string){
+    Reply_With_Placeholder :: struct {
+        using response: LSP_Response_Message;
+        result := "T";
+    }
+
+    body_with_placeholder := json_write_string(Reply_With_Placeholder.{id = id});
+    defer free(body_with_placeholder);
+
+    found_separator, prefix, postfix := split_from_right(body_with_placeholder, "\"T\"");
+
+    assert(found_separator);
+    final_body := tprint("%0%0%0", prefix, data, postfix);
+
+    print("Content-Length: %\r\n\r\n%", final_body.count, final_body);
 }
 
 lsp_respond_with_error :: (id: u32, code: LSP_Error_Codes, message: string, data: $T) {

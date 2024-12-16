@@ -323,6 +323,25 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             edit_memory_file(file_path, body.params.contentChanges);
             parse_file(file_path, true);
             analyze_files();
+        case "textDocument/documentSymbol";
+            //ZoneScoped("textDocument/documentSymbol");
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol);
+            if !success {
+                log_error("Unable to parse textDocument/documentSymbol message");
+                return;
+            }
+
+            handle_document_symbol(body);
+
+        case "workspace/symbol";
+            //ZoneScoped("workspace/symbol");
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Workspace_Symbol);
+            if !success {
+                log_error("Unable to parse workspace/symbol message");
+                return;
+            }
+
+            handle_workspace_symbol(body);
 
         case "textDocument/didClose";
             success, body := json_parse_string(raw_request, LSP_Did_Close_Text_Document,, temp);
@@ -439,6 +458,7 @@ main :: () {
 #load "goto.jai";
 #load "signature_help.jai";
 #load "hover.jai";
+#load "symbols.jai";
 
 #if OS == .WINDOWS {
     #import "Windows";
