@@ -401,6 +401,13 @@ get_function_declarations :: (file: *Program_File, node: *Node) -> []*Declaratio
                 }
                 node = node.parent;
             case .PROCEDURE;
+                proc := cast(*Procedure)node;
+
+                for d: proc.arguments {                    
+                    if d.kind == .DECLARATION { // Should be always the case?
+                        array_add(*decls, xx d);
+                    }
+                }
                 break;
             case .CASE;
                 c := cast(*Case)node;

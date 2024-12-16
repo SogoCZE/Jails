@@ -95,7 +95,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
     log("Sending % declarations to complete non dot\n", decls.count);
 
-    if decls.count < 30 {
+    if decls.count < 20 {
         for d: decls {
             log("%: %\n", it_index, d.name);
         }
