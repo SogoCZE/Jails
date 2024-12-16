@@ -36,10 +36,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     decls: []*Declaration;
     defer array_free(decls);
 
-    log("Here's the cursor block:\n");
-    log_node(cursor_block);
-
-
     // Binary OP
     if cursor_node && cursor_node.kind == .BINARY_OPERATION {
         binary_op := cast(*Binary_Operation)cursor_node;
@@ -68,10 +64,44 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     }
 
     // General
+    log("General non dot cursor node\n");
+    log_node(cursor_node);
+
     decls = get_declarations(file, cursor_block, *cursor_location);
+
+    // Filter declarations
+    if cursor_node && cursor_node.kind == .IDENTIFIER {
+        ident := cast(*Identifier)cursor_node;
+        count:=0;
+
+        for d: decls {
+            if begins_with(d.name, ident.name) {
+                decls[count]=d;
+                count+=1;
+            }
+        }
+
+        decls.count=count;
+    }
+
+    log("Sending % declarations to complete non dot\n", decls.count);
 
     send_completions_decls(request, decls);
 }
+
+filter_in_place_by_name :: (src : *[]$T, name: string) {
+    count:=0;
+
+    for src.* {
+        if it.name == name {
+            (src.*)[count]=it;
+            count+=1;
+        }
+    }
+
+    src.count=count;
+}
+
 
 handle_completitions_load :: (request: LSP_Request_Message_Completion, file: *Program_File, directive_load: *Directive_Load) {
     completions: [..]LSP_Completion_Item;

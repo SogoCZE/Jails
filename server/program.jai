@@ -1144,31 +1144,20 @@ binary_op_to_path :: (binary_op: *Binary_Operation) -> []*Node {
     return inv_path;
 }
 
-get_decl_type :: (decl: *Declaration, solve_array: bool) -> *Node {
-    log("\n\nget_decl_type '%'\n", decl.name);
-    
-    node : *Node;
-    
-    if decl.type_inst {
-        log("Using type_inst\n");
-        node = decl.type_inst;
-    }
-
-    if decl.expression {
-        log("Using expression\n");
-        node = decl.expression;
-    }
+get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
+    log("\nget_node_type2 '%'\n", node.kind);
 
     while node {
         if node.kind == {
             case .IDENTIFIER;
                 ident := cast(*Identifier)node;
+                
                 log("%: %\n", node.kind, ident.name);
 
                 decls := get_identifier_decl_in_files(null, ident);
 
                 log("Got % decls\n", decls.count);
-
+                
                 if decls.count > 0 {
                     node = decls[0];
                     continue;
@@ -1223,6 +1212,15 @@ get_decl_type :: (decl: *Declaration, solve_array: bool) -> *Node {
                 } else {
                     break;
                 }
+            case .CAST;
+                c := cast(*Cast)node;
+
+                node = c.cast_expression;
+
+            case .PROCEDURE_CALL;
+                proc_call := cast(*Procedure_Call)node;
+
+                node = proc_call.procedure;
                  
             case;
                 log("%: ---\n", node.kind);
@@ -1243,7 +1241,7 @@ get_struct_member_type :: (str: *Struct, member_name: string) -> *Node {
 
                 if decl.name == member_name {
                     log("GOT IT returning\n");
-                    return get_decl_type(decl, false);
+                    return get_node_type2(decl, false);
                 }
             }
         }
@@ -1253,8 +1251,8 @@ get_struct_member_type :: (str: *Struct, member_name: string) -> *Node {
     return null;
 }
 
-get_array_type :: (node: *Node, current_struct: *Struct, is_subscript: bool) -> *Node {
-    log("\nget_array_type current_struct: % is_subscript: %\n", current_struct, is_subscript);
+get_array_type :: (node: *Node, current_struct: *Struct, solve_array: bool) -> *Node {
+    log("\nget_array_type current_struct: % solve_array: %\n", current_struct, solve_array);
     log("node is:\n");
     print_node(node);
     
@@ -1274,7 +1272,7 @@ get_array_type :: (node: *Node, current_struct: *Struct, is_subscript: bool) -> 
 
                     log("Got % decls\n", decls.count);
                     if decls.count > 0 {
-                        return get_decl_type(decls[0], is_subscript);
+                        return get_node_type2(decls[0], solve_array);
                     } else {
                         return null;
                     }
@@ -1398,7 +1396,7 @@ get_path_type :: (in_path: []*Node) -> *Node {
                     log("found % decls\n", decls.count);
                     for d: decls {
                         log("%: %\n", it_index, d.name);
-                        decl_type := get_decl_type(d, false);
+                        decl_type := get_node_type2(d, false);
 
                         current_return_type = decl_type;
 
@@ -1423,6 +1421,7 @@ get_path_type :: (in_path: []*Node) -> *Node {
                 path.count -= 1;
             case .ARRAY_SUBSCRIPT;
                 array_sub := cast(*Array_Subscript)current_path;
+                
                 sub_type := get_array_type(xx current_path, current_struct, true);
 
                 if !sub_type {
@@ -1453,8 +1452,21 @@ get_path_type :: (in_path: []*Node) -> *Node {
             case .LITERAL;
                 lit := cast(*Literal)current_path;
                 path.count -= 1;
+            case .PROCEDURE_CALL;
+                proc_call := cast(*Procedure_Call)current_path;
+
+                proc_type := get_node_type2(proc_call.procedure, false);
+
+                if proc_type && proc_type.kind == .STRUCT {
+                    current_struct = xx proc_type;
+                } else {
+                    current_struct = null;
+                    current_return_type = proc_type;
+                }
+                path.count -= 1;
             case;
                 log("%: ---\n", current_path.kind);
+                path.count -= 1;
 
 
         }
