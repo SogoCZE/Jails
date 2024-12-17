@@ -152,7 +152,7 @@ parse_file :: (path: string, force := false) {
     }
 }
 
-analyze_files :: () {
+analyze_files :: (update_workspace_symbols: bool = false) {
     for file: server.files_to_be_analyzed {
         release(*file.analysis_pool);
     }
@@ -187,8 +187,11 @@ analyze_files :: () {
     for file: server.files_to_be_analyzed {
         table_reset(*file.resolved_identifiers);
         resolve_identifiers(file,, pool_alloc(*file.analysis_pool));
-        build_declaration_hierarchy(file);
-        generate_and_serialize_workspace_symbols_for_file(file);
+
+        if update_workspace_symbols {
+            build_declaration_hierarchy(file);
+            generate_and_serialize_workspace_symbols_for_file(file);
+        }
         // log("Analyzed: %", file.path);
     }
 
@@ -1669,6 +1672,12 @@ get_dot_complete_decls :: (binary_op: *Binary_Operation) -> [..]*Declaration, *S
             }
 
             return_struct = str;
+        case .ENUM;
+            if path_type.parent && path_type.parent.kind == .DECLARATION {
+                array_add(*decls, xx path_type.parent);
+            }
+            return decls, null;
+
         case .ARRAY_TYPE;
             array_add(*decls, *array_count_declaration, *array_data_declaration);
             return decls, null;
@@ -1715,6 +1724,7 @@ complete_assign_equal :: (binary_op: *Binary_Operation) -> []*Declaration {
 
 
 #scope_file
+
 
 add_fake_methods :: (file: *Program_File, receiver: *Struct, decls: *[..]*Declaration) {
     

@@ -18,6 +18,8 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
+
+    log("cursor_node: %\n", cursor_node.kind);
     
     // We don't wanna to give completions inside strings and comments...
     if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
@@ -36,6 +38,8 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     decls: []*Declaration;
     defer array_free(decls);
 
+    add_enum_member_dot := true;
+
     // Unary OP
     if cursor_node && cursor_node.kind == .UNARY_OPERATION {
         uop := cast(*Unary_Operation)cursor_node;
@@ -45,6 +49,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
             if bop.operation == .ASSING || bop.operation == .IS_EQUAL || bop.operation == .IS_NOT_EQUAL {
                 cursor_node = bop;
+                add_enum_member_dot = false;
             }
         }
     }
@@ -70,13 +75,14 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
                 }
                 
                 // If we fail to complete a . we return nothing
+                send_completions_decls(request, decls);
                 return;
             case .IS_EQUAL; #through;
             case .ASSING;
                 decls = complete_assign_equal(binary_op);
                 
                 if decls.count > 0 {
-                    send_completions_decls(request, decls);
+                    send_completions_decls(request, decls, add_enum_member_dot);
                 } else {
                     log("Could not complete '='\n");
 
@@ -88,8 +94,10 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
                 }
                 
                 // If we fail to complete a . we return nothing
+                send_completions_decls(request, decls);
                 return;
             case;
+                log("Don't know what to do with Binary_Operation %\n", binary_op.operation);
                 return;
         }
     }
@@ -242,7 +250,7 @@ get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> [
     return members;
 }
 
-send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration) {
+send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration, add_enum_member_dot: bool = false) {
     completions: [..]LSP_Completion_Item;
     defer array_free(completions);
 
@@ -284,7 +292,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         ast_print(*procedure_header_builder, preview_node); // @Memory @TODO: we need to free this afterwards!!
         procedure_header_preview := builder_to_string(*procedure_header_builder);
 
-        if preview_node.kind == .ENUM {
+        if decls.count == 1 && preview_node.kind == .ENUM {
             _enum := cast(*Enum)preview_node;
 
             if _enum.block {
@@ -295,7 +303,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
                         array_add(*completions, .{
                             label=ident.name,
                             kind=xx kind,
-                            insertText= tprint(".%", ident.name),
+                            insertText= ifx add_enum_member_dot then tprint(".%", ident.name) else ident.name,
                             insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
                             labelDetails = .{ description=procedure_header_preview }
                         });
