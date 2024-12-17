@@ -902,7 +902,7 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
 }
 
 unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
-    if unary_op.operation != .POINTER return unary_op;
+    if unary_op.operation != .POINTER return null;
 
     // nested pointers
     if unary_op.expression.kind == .UNARY_OPERATION {
@@ -1186,13 +1186,31 @@ print_node :: (node: *Node) {
 
             log("STRUCT block: %\n", str.block);
 
-            for m: str.block.members {
-                if m.kind == .DECLARATION {
-                    decl := cast(*Declaration)m;
-                    log("\t%: %\n", it_index, decl.name);
+            if str.block {
+                for m: str.block.members {
+                    if m.kind == .DECLARATION {
+                        decl := cast(*Declaration)m;
+                        log("\t%: %\n", it_index, decl.name);
+                    }
                 }
-                
             }
+
+        case .ENUM;
+            _enum := cast(*Enum)node;
+
+            log("ENUM block: %\n", _enum.block);
+
+            if _enum.block {
+                for m: _enum.block.members {
+                    if m.kind == .IDENTIFIER {
+                        ident := cast(*Identifier)m;
+                        log("\t%: %\n", it_index, ident.name);
+                    } else {
+                        log("member is %\n", m.kind);
+                    }
+                }
+            }
+        
 
         case;
             log("% *\n", node.kind);
@@ -1300,6 +1318,11 @@ get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
                 }
                 log("Declaration has no type nor body, bailing\n");
                 break;
+            case .ENUM;
+                log("Yay we got an ENUM\n");
+                print_node(node);
+
+                return node;
             case .STRUCT;
                 str := cast(*Struct)node;
                 log("%: YAY! got struct %\n", str.kind, str.block);
@@ -1512,6 +1535,9 @@ get_path_type :: (in_path: []*Node) -> *Node {
                         case .ARRAY_TYPE;
                             current_struct = null;
                             current_return_type = member_type;
+                        case .ENUM;
+                            current_struct = null;
+                            current_return_type = member_type;
                         case;
                             log("Got % and bhwwaa?", member_type.kind);
                     }
@@ -1666,6 +1692,26 @@ complete_dot :: (file: *Program_File, node: *Node) -> []*Declaration {
 
 }
 
+complete_assign_equal :: (binary_op: *Binary_Operation) -> []*Declaration {
+    path := get_dot_complete_path(binary_op);
+    left_type := get_path_type(path);
+
+    log("Left of equal we have:\n");
+    print_node(left_type);
+    
+    decls : [..]*Declaration;
+
+    if left_type && left_type.kind == .ENUM {
+        _enum := cast(*Enum)left_type;
+        
+        if left_type.parent && left_type.parent.kind == .DECLARATION {
+            array_add(*decls, xx left_type.parent);
+        }
+    }
+
+    return decls;
+}
+
 
 
 #scope_file
@@ -1681,8 +1727,8 @@ add_fake_methods :: (file: *Program_File, receiver: *Struct, decls: *[..]*Declar
         log("Checking % global_decls\n", global_decls.count);
 
         for gd: global_decls {
-            if gd.expression && gd.expression.kind == .PROCEDURE {
-                arg0_decl := get_procedure_arg0_type(xx gd.expression);
+            if gd.expression &&  gd.expression.kind == .PROCEDURE {
+                arg0_decl := get_procedure_receiver_type(xx gd.expression);
 
                 if arg0_decl {
                     log("Procedure % arg0: %\n", gd.name, arg0_decl.name);
@@ -1698,7 +1744,7 @@ add_fake_methods :: (file: *Program_File, receiver: *Struct, decls: *[..]*Declar
     log("add_fake_methods DONE\n");
 }
 
-get_procedure_arg0_type :: (proc: *Procedure) -> *Identifier {
+get_procedure_receiver_type :: (proc: *Procedure) -> *Identifier {
     if proc.arguments.count > 0 {
         node : *Node;
         node = proc.arguments[0];
