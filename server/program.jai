@@ -413,6 +413,8 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
 get_function_declarations :: (file: *Program_File, node: *Node) -> []*Declaration {
     decls : [..]*Declaration;
 
+    for_index_vars_added := false;
+
     while node {
 
         if node.kind == {
@@ -444,6 +446,15 @@ get_function_declarations :: (file: *Program_File, node: *Node) -> []*Declaratio
                     if m.kind == .DECLARATION {
                         array_add(*decls, xx m);
                     }
+                }
+                node = node.parent;
+            case .FOR;
+                if !for_index_vars_added {
+                    // Add "it" and "it_index"
+                    array_add(*decls, *for_loop_it_declaration);
+                    array_add(*decls, *for_loop_it_index_declaration);
+                    for_index_vars_added = true;
+
                 }
                 node = node.parent;
             case;
@@ -1127,6 +1138,10 @@ void_star_node := Identifier.{
     name = "*void",
 };
 
+unknown_identifier_node := Identifier.{
+    name = "---",
+};
+
 array_count_declaration := Declaration.{
     name = "count",
     type_inst = xx *s64_node
@@ -1137,6 +1152,15 @@ array_data_declaration := Declaration.{
     type_inst = xx *void_star_node
 };
 
+for_loop_it_declaration := Declaration.{
+    name = "it",
+    type_inst = xx *unknown_identifier_node,
+};
+
+for_loop_it_index_declaration := Declaration.{
+    name = "it_index",
+    type_inst = xx *s64_node,
+};
 
 
 print_node :: (node: *Node) {
@@ -1582,9 +1606,6 @@ get_path_type :: (in_path: []*Node) -> *Node {
 
         }
     }
-
-    
-    
 
     if current_struct {
         return current_struct;
