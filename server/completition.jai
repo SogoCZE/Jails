@@ -19,8 +19,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
 
-    log("cursor_node: %\n", cursor_node.kind);
-    
     // We don't wanna to give completions inside strings and comments...
     if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
 
@@ -297,17 +295,27 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
 
             if _enum.block {
                 for m: _enum.block.members {
-                    if m.kind == .IDENTIFIER {
-                        ident := cast(*Identifier)m;
+                    if m.kind ==  {
+                        case .IDENTIFIER;
+                            ident := cast(*Identifier)m;
 
-                        array_add(*completions, .{
-                            label=ident.name,
-                            kind=xx kind,
-                            insertText= ifx add_enum_member_dot then tprint(".%", ident.name) else ident.name,
-                            insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
-                            labelDetails = .{ description=procedure_header_preview }
-                        });
+                            array_add(*completions, .{
+                                label=ident.name,
+                                kind=xx kind,
+                                insertText= ifx add_enum_member_dot then tprint(".%", ident.name) else ident.name,
+                                insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
+                                labelDetails = .{ description=procedure_header_preview }
+                            });
+                        case .DECLARATION;
+                            dd := cast(*Declaration)m;
 
+                            array_add(*completions, .{
+                                label=dd.name,
+                                kind=xx kind,
+                                insertText= ifx add_enum_member_dot then tprint(".%", dd.name) else dd.name,
+                                insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
+                                labelDetails = .{ description=procedure_header_preview }
+                            });
                     }
                 }
             }
