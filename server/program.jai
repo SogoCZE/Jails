@@ -410,7 +410,7 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
     return linked_files;
 }
 
-get_function_declarations :: (file: *Program_File, node: *Node) -> []*Declaration {
+get_global_declarations :: (file: *Program_File, node: *Node) -> []*Declaration {
     decls : [..]*Declaration;
 
     for_index_vars_added := false;
@@ -1613,15 +1613,16 @@ get_path_type :: (in_path: []*Node) -> *Node {
     return current_return_type;
 }
 
-get_dot_complete_decls :: (binary_op: *Binary_Operation) -> []*Declaration {
+get_dot_complete_decls :: (binary_op: *Binary_Operation) -> [..]*Declaration, *Struct {
     path := get_dot_complete_path(binary_op);
 
     path_type := get_path_type(path);
     decls : [..]*Declaration;
+    return_struct : *Struct;
 
     if !path_type {
         log("got null\n");
-        return .[];
+        return decls, null;
     }
 
     log("get_dot_complete_decls got %\n", path_type.kind);
@@ -1629,7 +1630,7 @@ get_dot_complete_decls :: (binary_op: *Binary_Operation) -> []*Declaration {
     if path_type.kind == {
         case .STRUCT;
             str := cast(*Struct)path_type;
-
+            
             if str.block {
                 log("Struct has % members\n", str.block.members.count);
                 for m: str.block.members {
@@ -1640,20 +1641,111 @@ get_dot_complete_decls :: (binary_op: *Binary_Operation) -> []*Declaration {
             } else {
                 log("Hey this struct has no block!\n");
             }
+
+            return_struct = str;
         case .ARRAY_TYPE;
-            return .[*array_count_declaration, *array_data_declaration];
+            array_add(*decls, *array_count_declaration, *array_data_declaration);
+            return decls, null;
         
     }
 
-    return decls;
+    return decls, return_struct;
 }
 
-complete_dot :: (node: *Node) -> []*Declaration {
+complete_dot :: (file: *Program_File, node: *Node) -> []*Declaration {
     if node.kind == .BINARY_OPERATION {
-        return get_dot_complete_decls(xx node);
+        decls, struct_receiver := get_dot_complete_decls(xx node);
+
+        if struct_receiver {
+            add_fake_methods(file, struct_receiver, *decls);
+        }
+
+        return decls;
     }
     return .[];
 
+}
+
+
+
+#scope_file
+
+add_fake_methods :: (file: *Program_File, receiver: *Struct, decls: *[..]*Declaration) {
+    
+    receiver_decl := get_struct_declaration(receiver);
+    log("\nadd_fake_methods for %\n", receiver_decl.name);
+
+    if receiver_decl {
+        global_decls := get_global_declarations(file, null);
+
+        log("Checking % global_decls\n", global_decls.count);
+
+        for gd: global_decls {
+            if gd.expression && gd.expression.kind == .PROCEDURE {
+                arg0_decl := get_procedure_arg0_type(xx gd.expression);
+
+                if arg0_decl {
+                    log("Procedure % arg0: %\n", gd.name, arg0_decl.name);
+                    if arg0_decl.name == receiver_decl.name {
+                        log("ADDING!\n");
+                        array_add(decls, gd);
+                    }
+                }
+            }
+        }
+    }
+
+    log("add_fake_methods DONE\n");
+}
+
+get_procedure_arg0_type :: (proc: *Procedure) -> *Identifier {
+    if proc.arguments.count > 0 {
+        node : *Node;
+        node = proc.arguments[0];
+
+        while node {
+            if node.kind == {
+                case .IDENTIFIER;
+                    return xx node;
+                case .DECLARATION;
+                    decl := cast(*Declaration)node;
+
+                    node = decl.type_inst;
+                case .UNARY_OPERATION;
+                    uop := cast(*Unary_Operation)node;
+
+                    if uop.operation == .POINTER {
+                        node = unwrap_pointer(xx node);
+                    } else {
+                        break;
+                    }
+                    
+                case;
+                    log("%: --- (get_procedure_arg0_type)\n", node.kind);
+                    break;
+            }
+        }
+    }
+    
+    return null;
+}
+
+get_struct_declaration :: (str: *Struct) -> *Declaration {
+    log("\nget_struct_declaration\n");
+    node : *Node;
+    node = str.parent;
+
+    while node {
+        if node.kind == {
+            case .DECLARATION;
+                return xx node;
+            case;
+                log("%: --- (get_struct_declaration)\n", node.kind);
+                node = node.parent;
+        }
+    }
+
+    return null;
 }
 
 #import "Sort";

@@ -42,7 +42,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
         if binary_op.operation == {
             case .DOT;
-                decls = complete_dot(cursor_node);
+                decls = complete_dot(file, cursor_node);
                 
                 if decls.count > 0 {
                     send_completions_decls(request, decls);
@@ -67,7 +67,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     log("General non dot cursor node\n");
     log_node(cursor_node);
 
-    decls = get_function_declarations(file, cursor_node);
+    decls = get_global_declarations(file, cursor_node);
 
     log("Filtering % decls\n", decls.count);
 
