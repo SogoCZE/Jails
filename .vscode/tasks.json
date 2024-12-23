@@ -6,10 +6,10 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "jai ${workspaceFolder}/build.jai - -arm -vscode",
+            "command": "jai ${workspaceFolder}/build.jai - -vscode",
             "presentation": {
                 "echo": true,
-                "reveal": "never",
+                "reveal": "always",
                 "focus": false,
                 "panel": "shared",
                 "showReuseMessage": true,
@@ -74,7 +74,7 @@
             ],
             "group": {
                 "kind": "build",
-                "isDefault": false,
+                "isDefault": true,
             }
         },
     ]

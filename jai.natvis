@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	
+	<!--
+	Useful references:
+	
+	Expressions in the debugger - Format Specifiers in C++
+	https://msdn.microsoft.com/en-us/library/75w45ekt.aspx?f=255&MSPPError=-2147217396
+
+	Create custom views of native objects in the Visual Studio debugger 
+	https://docs.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects
+
+	-->
+	
+	<Type Name="array_view&lt;*&gt;">
+		<DisplayString>{{ count={count} }}</DisplayString>
+		<Expand>
+			<ArrayItems>
+				<Size>count</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="relative_array_view&lt;*, *&gt;">
+		<DisplayString>{{ count={count} }}</DisplayString>
+		<Expand>
+			<ArrayItems>
+				<Size>count</Size>
+				<ValuePointer>($T2*)((char*)&amp;data + ((data ^ (0x1ll &lt;&lt; (sizeof(data)*8-1))) &lt;&lt; (64 - sizeof(data)*8) &gt;&gt; (64 - sizeof(data)*8)))</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="array_resizable&lt;*&gt;">
+		<DisplayString>{{ count={count} }}</DisplayString>
+		<Expand>
+			<ArrayItems>
+				<Size>count</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="string">
+		<DisplayString Condition="count == 0">(null)</DisplayString>
+		<DisplayString>{data,[count]s8}</DisplayString>
+		<StringView>data,[count]s8</StringView>
+	</Type>
+
+	<Type Name="relative_string&lt;*&gt;">
+		<DisplayString Condition="count == 0">(null)</DisplayString>
+		<DisplayString>{(char*)&amp;data + ((data ^ (0x1ll &lt;&lt; (sizeof(data)*8-1))) &lt;&lt; (64 - sizeof(data)*8) &gt;&gt; (64 - sizeof(data)*8)),[count]s8}</DisplayString>
+		<StringView>(char*)&amp;data + ((data ^ (0x1ll &lt;&lt; (sizeof(data)*8-1))) &lt;&lt; (64 - sizeof(data)*8) &gt;&gt; (64 - sizeof(data)*8)),[count]s8</StringView>
+	</Type>
+
+	<Type Name="Type_Info" ExcludeView="nonpoly">
+		<DisplayString>{{ type={type} }}</DisplayString>
+		<Expand>
+			<!-- INTEGER -->				<ExpandedItem Condition="type==0">*(Type_Info_Integer*)this,view(nonpoly)</ExpandedItem>
+			<!-- FLOAT -->					<ExpandedItem Condition="type==1">*(Type_Info_Float*)this,view(nonpoly)</ExpandedItem>
+			<!-- BOOL -->					<ExpandedItem Condition="type==2">*this,view(nonpoly)</ExpandedItem>
+			<!-- STRING -->					<ExpandedItem Condition="type==3">*(Type_Info_String*)this,view(nonpoly)</ExpandedItem>
+			<!-- POINTER -->				<ExpandedItem Condition="type==4">*(Type_Info_Pointer*)this,view(nonpoly)</ExpandedItem>
+			<!-- PROCEDURE -->				<ExpandedItem Condition="type==5">*(Type_Info_Procedure*)this,view(nonpoly)</ExpandedItem>
+			<!-- VOID -->					<ExpandedItem Condition="type==6">*this,view(nonpoly)</ExpandedItem>
+			<!-- STRUCT -->					<ExpandedItem Condition="type==7">*(Type_Info_Struct*)this,view(nonpoly)</ExpandedItem>
+			<!-- ARRAY -->					<ExpandedItem Condition="type==8">*(Type_Info_Array*)this,view(nonpoly)</ExpandedItem>
+			<!-- OVERLOAD_SET -->			<ExpandedItem Condition="type==9">*this,view(nonpoly)</ExpandedItem>
+			<!-- ANY -->					<ExpandedItem Condition="type==10">*this,view(nonpoly)</ExpandedItem>
+			<!-- ENUM -->					<ExpandedItem Condition="type==11">*(Type_Info_Enum*)this,view(nonpoly)</ExpandedItem>
+			<!-- POLYMORPHIC_VARIABLE -->	<ExpandedItem Condition="type==12">*this,view(nonpoly)</ExpandedItem>
+			<!-- TYPE -->					<ExpandedItem Condition="type==13">*this,view(nonpoly)</ExpandedItem>
+			<!-- CODE -->					<ExpandedItem Condition="type==14">*this,view(nonpoly)</ExpandedItem>
+			<!-- UNARY_DEREFERENCE -->		<ExpandedItem Condition="type==15">*this,view(nonpoly)</ExpandedItem>
+			<!-- UNARY_LITERAL -->			<ExpandedItem Condition="type==16">*this,view(nonpoly)</ExpandedItem>
+			<!-- unused -->					<ExpandedItem Condition="type==17">*this,view(nonpoly)</ExpandedItem>
+			<!-- VARIANT -->				<ExpandedItem Condition="type==18">*(Type_Info_Variant*)this,view(nonpoly)</ExpandedItem>
+			<!-- unused -->					<ExpandedItem Condition="type&gt;=19">*this,view(nonpoly)</ExpandedItem>
+		</Expand>
+	</Type>
+
+	<!-- The s8b format specifier removes the quotes around the string. -->
+	<Type Name="Type_Info_Struct">
+		<DisplayString Condition="name.count == 0">anonymous struct</DisplayString>
+		<DisplayString>{name.data,[name.count]s8b} : struct</DisplayString>
+	</Type>
+
+	<Type Name="Type_Info_Enum">
+		<DisplayString Condition="name.count == 0">anonymous enum</DisplayString>
+		<DisplayString>{name.data,[name.count]s8b} : enum</DisplayString>
+	</Type>
+
+	<!-- The g format uses the shortest floating point representation. -->
+	<Type Name="Vector2">
+		<DisplayString>{x,g} {y,g}</DisplayString>
+		<Expand>
+			<ExpandedItem>&amp;component[0],[2]na</ExpandedItem>
+		</Expand>
+	</Type>
+	<Type Name="Vector3">
+		<DisplayString>{{{x,g} {y,g} {z,g}}}</DisplayString>
+		<Expand>
+			<ExpandedItem>&amp;component[0],[3]na</ExpandedItem>
+		</Expand>
+	</Type>
+	<Type Name="Vector4">
+		<DisplayString>{{{x,g} {y,g} {z,g} {w,g}}}</DisplayString>
+		<Expand>
+			<ExpandedItem>&amp;component[0],[4]na</ExpandedItem>
+		</Expand>
+	</Type>
+	<Type Name="Quaternion">
+		<DisplayString>{{{x,g} {y,g} {z,g} {w,g}}}</DisplayString>
+		<Expand>
+			<ExpandedItem>&amp;component[0],[4]na</ExpandedItem>
+		</Expand>
+	</Type>
+	<Type Name="Matrix2">
+		<DisplayString>{{{v[0],g}}} {{{v[1],g}}}</DisplayString>
+		<Expand>
+			<CustomListItems>
+				<Variable Name="i" InitialValue="0"/>
+				<Variable Name="rows" InitialValue="2"/>
+				<Variable Name="cols" InitialValue="2"/>
+				<Loop Condition="i  &lt; rows">
+					<Item Name="{i}">&amp;floats[i * cols],[cols]na</Item>
+					<Exec>++i</Exec>
+				</Loop>
+			</CustomListItems>
+		</Expand>
+	</Type>
+	<Type Name="Matrix3">
+		<DisplayString>{{{v[0],g}}} {{{v[1],g}}} {{{v[2],g}}}</DisplayString>
+		<Expand>
+			<CustomListItems>
+				<Variable Name="i" InitialValue="0"/>
+				<Variable Name="rows" InitialValue="3"/>
+				<Variable Name="cols" InitialValue="3"/>
+				<Loop Condition="i  &lt; rows">
+					<Item Name="{i}">&amp;floats[i * cols],[cols]na</Item>
+					<Exec>++i</Exec>
+				</Loop>
+			</CustomListItems>
+		</Expand>
+	</Type>
+	<Type Name="Matrix4">
+		<DisplayString>{{{v[0],g}}} {{{v[1],g}}} {{{v[2],g}}} {{{v[3],g}}}</DisplayString>
+		<Expand>
+			<CustomListItems>
+				<Variable Name="i" InitialValue="0"/>
+				<Variable Name="rows" InitialValue="4"/>
+				<Variable Name="cols" InitialValue="4"/>
+				<Loop Condition="i  &lt; rows">
+					<Item Name="{i}">&amp;floats[i * cols],[cols]na</Item>
+					<Exec>++i</Exec>
+				</Loop>
+			</CustomListItems>
+		</Expand>
+	</Type>
+	<Type Name="Matrix4x3">
+		<DisplayString>{{{v[0],g}}} {{{v[1],g}}} {{{v[2],g}}}</DisplayString>
+		<Expand>
+			<CustomListItems>
+				<Variable Name="i" InitialValue="0"/>
+				<Variable Name="rows" InitialValue="3"/>
+				<Variable Name="cols" InitialValue="4"/>
+				<Loop Condition="i  &lt; rows">
+					<Item Name="{i}">&amp;floats[i * cols],[cols]na</Item>
+					<Exec>++i</Exec>
+				</Loop>
+			</CustomListItems>
+		</Expand>
+	</Type>
+
+</AutoVisualizer>

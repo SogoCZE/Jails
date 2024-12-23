@@ -265,7 +265,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
             }
 
-            analyze_files();
+            analyze_files(update_workspace_symbols = true);
 
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
@@ -291,7 +291,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := normalize_path(body.params.textDocument.uri,, temp);
 
             parse_file(file_path, true);
-            analyze_files();
+            analyze_files(update_workspace_symbols = true);
 
         case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document,, temp);
@@ -307,7 +307,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             create_memory_file(file_path, content);
 
             parse_file(file_path);
-            analyze_files();
+            analyze_files(update_workspace_symbols = true);
 
             log("File_path: %", file_path);
 
@@ -322,7 +322,26 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := normalize_path(body.params.textDocument.uri,, temp);
             edit_memory_file(file_path, body.params.contentChanges);
             parse_file(file_path, true);
-            analyze_files();
+            analyze_files(update_workspace_symbols = false);
+        case "textDocument/documentSymbol";
+            //ZoneScoped("textDocument/documentSymbol");
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol);
+            if !success {
+                log_error("Unable to parse textDocument/documentSymbol message");
+                return;
+            }
+
+            handle_document_symbol(body);
+
+        case "workspace/symbol";
+            //ZoneScoped("workspace/symbol");
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Workspace_Symbol);
+            if !success {
+                log_error("Unable to parse workspace/symbol message");
+                return;
+            }
+
+            handle_workspace_symbol(body);
 
         case "textDocument/didClose";
             success, body := json_parse_string(raw_request, LSP_Did_Close_Text_Document,, temp);
@@ -439,6 +458,7 @@ main :: () {
 #load "goto.jai";
 #load "signature_help.jai";
 #load "hover.jai";
+#load "symbols.jai";
 
 #if OS == .WINDOWS {
     #import "Windows";

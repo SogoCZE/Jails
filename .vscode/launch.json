@@ -13,6 +13,13 @@
             "initCommands": [
                 "command script import ${workspaceFolder}/.vscode/jaitype.py"
             ]
+        },
+        {
+            "type": "cppvsdbg",
+            "request": "attach",
+            "name": "Debug VS",
+            "processId": "${command:pickProcess}",
+            "visualizerFile": "${workspaceFolder}/jai.natvis",
         }
     ]
 }

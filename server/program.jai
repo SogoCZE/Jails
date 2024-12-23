@@ -10,6 +10,8 @@ Program_File :: struct {
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
     resolved_identifiers: Table(*Node, []*Declaration);
+    declaration_hierarchy: Table(*Declaration, [..]*Declaration);
+    serialized_workspace_symbols: Table(string, string);
     linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
 
     ast_pool: Pool;
@@ -24,6 +26,8 @@ Linked_File :: struct {
 init_file :: (using file: Program_File) {
     init(*declarations);
     init(*resolved_identifiers);
+    init(*declaration_hierarchy);
+    init(*serialized_workspace_symbols);
 }
 
 deinit_file :: (using file: Program_File) {
@@ -33,10 +37,14 @@ deinit_file :: (using file: Program_File) {
     array_free(imports);
     release(*file.ast_pool);
     release(*file.analysis_pool);
+    deinit(*declaration_hierarchy);
+    deinit(*serialized_workspace_symbols);
 }
 
 reset_file :: (using file: Program_File) {
     table_reset(*declarations);
+	table_reset(*declaration_hierarchy);
+    table_reset(*serialized_workspace_symbols);
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
@@ -144,7 +152,7 @@ parse_file :: (path: string, force := false) {
     }
 }
 
-analyze_files :: () {
+analyze_files :: (update_workspace_symbols: bool = false) {
     for file: server.files_to_be_analyzed {
         release(*file.analysis_pool);
     }
@@ -179,6 +187,11 @@ analyze_files :: () {
     for file: server.files_to_be_analyzed {
         table_reset(*file.resolved_identifiers);
         resolve_identifiers(file,, pool_alloc(*file.analysis_pool));
+
+        if update_workspace_symbols {
+            build_declaration_hierarchy(file);
+            generate_and_serialize_workspace_symbols_for_file(file);
+        }
         // log("Analyzed: %", file.path);
     }
 
@@ -321,6 +334,24 @@ resolve_identifiers :: (file: *Program_File) {
     }
 }
 
+build_declaration_hierarchy :: (file: *Program_File) {
+    //ZoneScoped();
+    for file.declarations{
+        parent_declaration: *Declaration;
+
+        if it.parent
+            parent_declaration = cast(*Declaration) get_node_nearest_parent(it.parent, kind => kind == .DECLARATION);
+
+        children := find_or_add(*file.declaration_hierarchy, parent_declaration);
+
+        array_add(children, it);
+    }
+
+    for file.declaration_hierarchy {
+        quick_sort(it, (a, b) => ifx a.location.l0 != b.location.l0 then a.location.l0 - b.location.l0 else a.location.c0 - b.location.c0);
+    }
+}
+
 get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
     nearest_node: *Node;
 
@@ -382,11 +413,77 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
     return linked_files;
 }
 
+get_global_declarations :: (file: *Program_File, node: *Node) -> []*Declaration {
+    decls : [..]*Declaration;
+
+    for_index_vars_added := false;
+
+    while node {
+
+        if node.kind == {
+            case .DECLARATION;
+                array_add(*decls, xx node);
+                node = node.parent;
+            case .BLOCK;
+                block := cast(*Block)node;
+
+                for b: block.members {
+                    if b.kind == .DECLARATION {
+                        array_add(*decls, xx b);
+                    }
+                }
+                node = node.parent;
+            case .PROCEDURE;
+                proc := cast(*Procedure)node;
+
+                for d: proc.arguments {
+                    if d.kind == .DECLARATION { // Should be always the case?
+                        array_add(*decls, xx d);
+                    }
+                }
+                break;
+            case .CASE;
+                c := cast(*Case)node;
+
+                for m: c.members {
+                    if m.kind == .DECLARATION {
+                        array_add(*decls, xx m);
+                    }
+                }
+                node = node.parent;
+            case .FOR;
+                if !for_index_vars_added {
+                    // Add "it" and "it_index"
+                    array_add(*decls, *for_loop_it_declaration);
+                    array_add(*decls, *for_loop_it_index_declaration);
+                    for_index_vars_added = true;
+
+                }
+                node = node.parent;
+            case;
+                log("%: ---\n", node.kind);
+                node = node.parent;
+        }
+    }
+    
+    for linked_file: file.linked_files {
+        for decl: linked_file.file.declarations {
+            if is_global(decl, file, linked_file.file, linked_file.from_import) {
+                array_add(*decls, decl);
+            }
+        }
+    }
+
+    return decls;
+        
+}
+
+
+
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "") -> []*Declaration {
     decls: [..]*Declaration;
     
     if from_block {
-
         parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION);
 
         // Procedure or Struct params
@@ -427,9 +524,10 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
             }
 
         }
-
     }
 
+    
+    
     should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *Block, from_loc: *Node.Location, decl: *Declaration) -> bool {
         decl_block := get_node_nearest_block(decl);
         global := is_global(decl, file, linked_file.file, linked_file.from_import);
@@ -681,10 +779,21 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     return lsp_location;
 }
 
-get_identifier_decl :: (__file: *Program_File, ident: *Identifier) -> []*Declaration {
+get_identifier_decl_in_files :: (__file: *Program_File, ident: *Identifier) -> []*Declaration {
     for file: server.files {
         decls, ok := table_find(*file.resolved_identifiers, ident);
         if !ok continue;
+        return decls;
+    }
+
+    return .[];
+}
+
+
+get_identifier_decl :: (__file: *Program_File, ident: *Identifier) -> []*Declaration {
+    decls := get_identifier_decl_in_files(__file, ident);
+
+    if decls.count {
         return decls;
     }
 
@@ -697,12 +806,18 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
 
     while true {
         if !current_node break;
-        
+        log("get_node_type %\n", current_node.kind);
         if current_node.kind == .IDENTIFIER {
             ident_decls := get_identifier_decl(file, xx current_node);
-            // log("ident_decls = % for %", ident_decls, (cast(*Identifier) current_node).name);
+            log("ident_decls = % for %", ident_decls.count, (cast(*Identifier) current_node).name);
             if ident_decls.count == 0 return null;
             current_node = ident_decls[0];
+            continue;
+        }
+
+        if current_node.kind == .ARRAY_TYPE {
+            array_type := cast(*Array_Type)current_node;
+            current_node = array_type.element_type;
             continue;
         }
 
@@ -712,10 +827,12 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
 
         if current_node.kind == .DECLARATION {
             decl := cast(*Declaration) current_node;
+            log("Decl: %\n", decl.name);
 
             if decl.expression {
 
                 if decl.expression.kind == .STRUCT || decl.expression.kind == .ENUM || decl.expression.kind == .UNION {
+                    log("Returning\n");
                     return decl.expression;
                 }
 
@@ -723,6 +840,15 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
                     proc := cast(*Procedure) decl.expression;
                     if proc.returns.count > 0 {
                         current_node = proc.returns[0];
+                        continue;
+                    }
+                }
+
+                if decl.expression.kind == .ARRAY_SUBSCRIPT {
+                    array_sub := cast(*Array_Subscript)decl.expression;
+
+                    if array_sub.expression {
+                        current_node = array_sub.expression;
                         continue;
                     }
                 }
@@ -759,6 +885,9 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
         }
 
         if current_node.kind == .UNARY_OPERATION {
+            unary_op := cast(*Unary_Operation)current_node;
+
+            log("Unary: %\n", unary_op.operation);
             current_node = unwrap_pointer(xx current_node);
             continue;
         }
@@ -776,7 +905,7 @@ get_node_type :: (file: *Program_File, root: *Node) -> *Node {
 }
 
 unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
-    if unary_op.operation != .POINTER return unary_op;
+    if unary_op.operation != .POINTER return null;
 
     // nested pointers
     if unary_op.expression.kind == .UNARY_OPERATION {
@@ -810,7 +939,7 @@ get_root_of_dot_path :: (op: *Binary_Operation) -> *Binary_Operation {
         if parent.operation != .DOT break;
         current = parent;
     }
-
+    
     return current;
 }
 
@@ -824,13 +953,15 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
     return null;
 }
 
-get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Identifier = null) -> *Declaration {
+get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Node = null) -> *Declaration {
     decl: *Declaration;
     current_op := op;
 
     if !current_op.left || current_op.left.kind != .IDENTIFIER return null;
 
-    current_type := get_node_type(file, current_op.left); // STRUCT, ENUM, UNION ...
+    current_type : *Node;
+    current_type = get_node_type(file, current_op.left); // STRUCT, ENUM, UNION ...
+    
     if !current_type return null;
 
     if current_op.left == target {
@@ -854,16 +985,23 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Ide
 
             case .BINARY_OPERATION;
                 current_op = cast(*Binary_Operation) current_op.right;
-                ident = cast(*Identifier) current_op.left;
+                if current_op.left.kind == {
+                    case .IDENTIFIER; 
+                        ident = cast(*Identifier) current_op.left;
+                    case .ARRAY_SUBSCRIPT;
+                        array_sub := cast(*Array_Subscript)current_op.left;
+
+                        //current_type = get_node_type(file, array_sub.expression); // STRUCT, ENUM, UNION ...
+                }
 
             case; break;
 
         }
 
-        if ident == target {
+        if ident == xx target {
             end = true;
         }
-
+       
         member := get_member_in(current_type, ident);
         if !member break;
         decl = member;
@@ -994,3 +1132,676 @@ run_diagnostics :: () {
 
     server.previously_errored_file = file;
 }
+
+s64_node := Identifier.{
+    name = "s64",
+};
+
+void_star_node := Identifier.{
+    name = "*void",
+};
+
+unknown_identifier_node := Identifier.{
+    name = "---",
+};
+
+array_count_declaration := Declaration.{
+    name = "count",
+    type_inst = xx *s64_node
+};
+
+array_data_declaration := Declaration.{
+    name = "data",
+    type_inst = xx *void_star_node
+};
+
+for_loop_it_declaration := Declaration.{
+    name = "it",
+    type_inst = xx *unknown_identifier_node,
+};
+
+for_loop_it_index_declaration := Declaration.{
+    name = "it_index",
+    type_inst = xx *s64_node,
+};
+
+
+print_node :: (node: *Node) {
+    if !node {
+        log("NULL_NODE\n");
+        return;
+    }
+    if node.kind == {
+        case .IDENTIFIER;
+            ident := cast(*Identifier)node;
+
+            log("%: %\n", node.kind, ident.name);
+        case .ARRAY_SUBSCRIPT;
+            array_sub := cast(*Array_Subscript)node;
+
+            if array_sub.expression {
+                log("%: EXPR:\n", node.kind);
+                //print_node(array_sub.expression);
+            }
+
+        case .STRUCT;
+            str := cast(*Struct)node;
+
+            log("STRUCT block: %\n", str.block);
+
+            if str.block {
+                for m: str.block.members {
+                    if m.kind == .DECLARATION {
+                        decl := cast(*Declaration)m;
+                        log("\t%: %\n", it_index, decl.name);
+                    }
+                }
+            }
+
+        case .ENUM;
+            _enum := cast(*Enum)node;
+
+            log("ENUM block: %\n", _enum.block);
+
+            if _enum.block {
+                for m: _enum.block.members {
+                    if m.kind == .IDENTIFIER {
+                        ident := cast(*Identifier)m;
+                        log("\t%: %\n", it_index, ident.name);
+                    } else {
+                        log("member is %\n", m.kind);
+                    }
+                }
+            }
+        
+
+        case;
+            log("% *\n", node.kind);
+    }
+}
+
+get_dot_complete_path :: (dot_op: *Binary_Operation) -> []*Node {
+    log("\nget_dot_complete_path op: %\n", dot_op.operation);
+    current_node : *Node = dot_op.parent;
+
+    dot_path : [..]*Node;
+
+    array_add(*dot_path, dot_op.left);
+
+    while current_node {
+        if current_node.kind == {
+            case .BINARY_OPERATION;
+                bop := cast(*Binary_Operation)current_node;
+
+                log("BinaryOp %\n", bop.operation);
+
+                if bop.operation == .DOT {
+                    array_add(*dot_path, bop.left);
+                    current_node = current_node.parent;
+                    continue;
+                }
+                break;
+            case .IDENTIFIER;
+                ident := cast(*Identifier)current_node;
+
+                log("Adding Ident: %\n", ident.name);
+                array_add(*dot_path, current_node);
+                current_node = current_node.parent;
+                continue;
+            case;
+                log("unhandled %\n", current_node.kind);
+                break;
+        }
+    }
+
+    log("dot_path (%)\n", dot_path.count);
+    for d: dot_path {
+        print_node(d);
+    }
+
+    return dot_path;
+}
+
+binary_op_to_path :: (binary_op: *Binary_Operation) -> []*Node {
+    // Build path descending into possible series of dots
+    path : [..]*Node;
+
+    cbop := binary_op;
+
+    array_add(*path, binary_op.left);
+    while cbop.right && cbop.right.kind == .BINARY_OPERATION {
+        cbop = xx cbop.right;
+        array_add(*path, cbop.left);
+    }
+    array_add(*path, cbop.right);
+    
+    // Invert path.. TODO can we be smarter here?
+    inv_path : [..]*Node;
+    array_resize(*inv_path, path.count);
+
+    for *p: inv_path {
+        <<p = path[path.count - 1 - it_index];
+    }
+
+    return inv_path;
+}
+
+get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
+    log("\nget_node_type2 '%'\n", node.kind);
+
+    while node {
+        if node.kind == {
+            case .IDENTIFIER;
+                ident := cast(*Identifier)node;
+                
+                log("%: %\n", node.kind, ident.name);
+
+                decls := get_identifier_decl_in_files(null, ident);
+
+                log("Got % decls\n", decls.count);
+                
+                if decls.count > 0 {
+                    node = decls[0];
+                    continue;
+                }
+                break;
+            case .DECLARATION;
+                decl := cast(*Declaration)node;
+
+                log("%: % type: % expr: %\n", decl.kind, decl.name, decl.type_inst, decl.expression);
+                if decl.type_inst {
+
+                    node = decl.type_inst;
+                    continue;
+                }
+
+                if decl.expression {
+                    node = decl.expression;
+                    continue;
+                }
+                log("Declaration has no type nor body, bailing\n");
+                break;
+            case .ENUM;
+                log("Yay we got an ENUM\n");
+                print_node(node);
+
+                return node;
+            case .STRUCT;
+                str := cast(*Struct)node;
+                log("%: YAY! got struct %\n", str.kind, str.block);
+                print_node(str);
+                return node;
+            case .ARRAY_TYPE;
+                array_type := cast(*Array_Type)node;
+                log("%\n", array_type.kind);
+
+                if solve_array {
+                    node = array_type.element_type;
+                } else {
+                    return node;
+                }
+            case .UNARY_OPERATION;
+                node = unwrap_pointer(xx node);
+            case .BINARY_OPERATION;
+                bop := cast(*Binary_Operation)node;
+                log("%: %\n", bop.kind, bop.operation);
+
+                path := binary_op_to_path(bop);                
+                log("Calling with path %\n", path.count);
+                for p: path {
+                    print_node(p);
+                }
+                node = get_path_type(path);
+            case .PROCEDURE;
+                proc := cast(*Procedure)node;
+                
+                if proc.returns.count > 0 {
+                    node = proc.returns[0].expression;
+                } else {
+                    break;
+                }
+            case .CAST;
+                c := cast(*Cast)node;
+                
+                node = c.cast_expression;
+
+            case .PROCEDURE_CALL;
+                proc_call := cast(*Procedure_Call)node;
+
+                node = proc_call.procedure;
+                 
+            case;
+                log("%: ---\n", node.kind);
+                break;
+        }
+    }
+
+    return null;
+}
+
+get_struct_member_type :: (str: *Struct, member_name: string) -> *Node {
+    log("\n get_struct_member_type '%' from struct\n", member_name);
+    if str.block {
+        for m: str.block.members {
+            if m.kind == .DECLARATION {
+                decl := cast(*Declaration)m;
+                log("checking %\n", decl.name);
+
+                if decl.name == member_name {
+                    log("GOT IT returning\n");
+                    return get_node_type2(decl, false);
+                }
+            }
+        }
+    }
+    
+
+    return null;
+}
+
+get_array_type :: (node: *Node, current_struct: *Struct, solve_array: bool) -> *Node {
+    log("\nget_array_type current_struct: % solve_array: %\n", current_struct, solve_array);
+    log("node is:\n");
+    print_node(node);
+    
+    while node {
+        if node.kind == {
+            case .IDENTIFIER;
+                ident := cast(*Identifier)node;
+                log("%: %\n", ident.kind, ident.name);
+
+                if current_struct {
+                    member_type := get_struct_member_type(current_struct, ident.name);
+
+                    return member_type;
+                } else {
+                    log("No current_struct, looking in file\n");
+                    decls := get_identifier_decl_in_files(null, ident);
+
+                    log("Got % decls\n", decls.count);
+                    if decls.count > 0 {
+                        return get_node_type2(decls[0], solve_array);
+                    } else {
+                        return null;
+                    }
+                }
+
+                break;
+            case .ARRAY_SUBSCRIPT;
+                array_sub := cast(*Array_Subscript)node;
+
+                return get_array_type(array_sub.expression, current_struct, true);
+
+            case .BINARY_OPERATION;
+                bop := cast(*Binary_Operation)node;
+
+                path := binary_op_to_path(bop);
+
+                node = get_path_type(path);
+            case .ARRAY_TYPE;
+                array_type := cast(*Array_Type)node;
+
+                node = array_type.element_type;
+            case .PROCEDURE_CALL;
+                proc_call := cast(*Procedure_Call)node;
+
+                node = proc_call.procedure;
+            case .STRUCT;
+                return node;
+            case .UNARY_OPERATION;
+                node = unwrap_pointer(xx node);
+            case;
+                log("%: --- (get_array_type)\n", node.kind);
+                break;
+        }
+    }
+
+    return null;
+}
+
+get_identifier_as_for_iterator :: (ident: *Identifier) -> *Node {
+    log("\n\nget_identifier_as_for_iterator %\n", ident.name);
+    
+    current_node : *Node = ident.parent;
+
+    while current_node {
+        if current_node.kind == {
+            case .FOR;
+                for_node := cast(*For)current_node;
+
+                
+                log("Here's a for loop iterator is:\n");
+                print_node(for_node.iterator);
+                log("value is:\n");
+                print_node(for_node.value);
+
+                solve_iterator := ident.name == "it";
+
+                if !solve_iterator && for_node.value && for_node.value.kind == .IDENTIFIER {
+                    for_ident := cast(*Identifier)for_node.value;
+
+                    solve_iterator = for_ident.name == ident.name;
+                }
+
+                if solve_iterator {
+                    log("Got it, it's an iterator in this loop\n");
+                    array_type := get_array_type(for_node.iterator, null, true);
+
+                    if array_type {
+                        log("got an array_type of %\n", array_type.kind);
+                    }
+
+                    return array_type;
+                }
+                        
+                current_node = current_node.parent;
+            case .PROCEDURE;
+                // Bail
+                break;
+            case;
+                log("%: ---\n", current_node.kind);
+                current_node = current_node.parent;
+        }
+    }
+
+    return null;
+}
+
+get_path_type :: (in_path: []*Node) -> *Node {
+    path := in_path;
+    log("get_path_type\n");
+
+    current_struct : *Struct;
+    current_return_type : *Node;
+
+    while path.count > 0 {
+        log("PATH ELEMS: %\n", path.count);
+        current_path := path[path.count - 1];
+        
+        if current_path.kind == {
+            case .IDENTIFIER;
+                ident := cast(*Identifier)current_path;
+
+                log("%: '%'\n", current_path.kind, ident.name);
+
+                if current_struct {
+                    member_type := get_struct_member_type(current_struct, ident.name);
+
+                    if !member_type {
+                        log("not a member in current_struct, bailing\n");
+                        return null;
+                    }
+
+                    if member_type.kind == {
+                        case .STRUCT;
+                            current_struct = xx member_type;
+                        case .ARRAY_TYPE;
+                            current_struct = null;
+                            current_return_type = member_type;
+                        case .ENUM;
+                            current_struct = null;
+                            current_return_type = member_type;
+                        case;
+                            log("Got % and bhwwaa?", member_type.kind);
+                    }
+
+                } else {
+                    decls := get_identifier_decl_in_files(null, ident);
+
+                    log("found % decls\n", decls.count);
+                    for d: decls {
+                        log("%: %\n", it_index, d.name);
+                        decl_type := get_node_type2(d, false);
+
+                        current_return_type = decl_type;
+
+                        if decls.count > 1 {
+                            print_node(d);
+                        }
+
+                        if decl_type && decl_type.kind == .STRUCT {
+                            current_struct = xx decl_type;
+
+                            if current_struct.block && current_struct.block.members.count {
+                                // We are trying only to accept struct with members
+                                break;
+                            }
+                        } else {
+                            current_struct = null;
+                        }
+                    }
+
+                    if decls.count == 0 {
+                        // Maybe it's a for loop iterator?
+                        it_type := get_identifier_as_for_iterator(ident);
+
+                        if it_type && it_type.kind == .STRUCT {
+                            current_struct = xx it_type;
+                        }
+                    }
+                }
+                
+
+                path.count -= 1;
+            case .ARRAY_SUBSCRIPT;
+                array_sub := cast(*Array_Subscript)current_path;
+                
+                sub_type := get_array_type(xx current_path, current_struct, true);
+
+                if !sub_type {
+                    log("Cannot find type for array subscript, bailing\n");
+                    return null;
+                }
+
+                if sub_type.kind == {
+                    case .STRUCT;
+                        current_struct = xx sub_type;
+                    case .ARRAY_TYPE;
+                        array_type := cast(*Array_Type)sub_type;
+
+                        log("got an array of %\n", array_type.element_type.kind);
+
+                        at := get_array_type(array_type.element_type, null, false);
+                        if at && at.kind == .STRUCT {
+                            current_struct = xx at;
+                        } else {
+                            current_struct = null;
+                            current_return_type = null;
+                        }
+                    case;
+                        log("Got % what we do with it?\n", sub_type.kind);
+                }
+
+                path.count -= 1;
+            case .LITERAL;
+                lit := cast(*Literal)current_path;
+                path.count -= 1;
+            case .PROCEDURE_CALL;
+                proc_call := cast(*Procedure_Call)current_path;
+
+                proc_type := get_node_type2(proc_call.procedure, false);
+
+                if proc_type && proc_type.kind == .STRUCT {
+                    current_struct = xx proc_type;
+                } else {
+                    current_struct = null;
+                    current_return_type = proc_type;
+                }
+                path.count -= 1;
+            case;
+                log("%: ---\n", current_path.kind);
+                path.count -= 1;
+
+
+        }
+    }
+
+    if current_struct {
+        return current_struct;
+    }
+    return current_return_type;
+}
+
+get_dot_complete_decls :: (binary_op: *Binary_Operation) -> [..]*Declaration, *Struct {
+    path := get_dot_complete_path(binary_op);
+
+    path_type := get_path_type(path);
+    decls : [..]*Declaration;
+    return_struct : *Struct;
+
+    if !path_type {
+        log("got null\n");
+        return decls, null;
+    }
+
+    log("get_dot_complete_decls got %\n", path_type.kind);
+
+    if path_type.kind == {
+        case .STRUCT;
+            str := cast(*Struct)path_type;
+            
+            if str.block {
+                log("Struct has % members\n", str.block.members.count);
+                for m: str.block.members {
+                    if m.kind == .DECLARATION {
+                        array_add(*decls, xx m);
+                    }
+                }
+            } else {
+                log("Hey this struct has no block!\n");
+            }
+
+            return_struct = str;
+        case .ENUM;
+            if path_type.parent && path_type.parent.kind == .DECLARATION {
+                array_add(*decls, xx path_type.parent);
+            }
+            return decls, null;
+
+        case .ARRAY_TYPE;
+            array_add(*decls, *array_count_declaration, *array_data_declaration);
+            return decls, null;
+        
+    }
+
+    return decls, return_struct;
+}
+
+complete_dot :: (file: *Program_File, node: *Node) -> []*Declaration {
+    if node.kind == .BINARY_OPERATION {
+        decls, struct_receiver := get_dot_complete_decls(xx node);
+
+        if struct_receiver {
+            add_fake_methods(file, struct_receiver, *decls);
+        }
+
+        return decls;
+    }
+    return .[];
+
+}
+
+complete_assign_equal :: (binary_op: *Binary_Operation) -> []*Declaration {
+    path := get_dot_complete_path(binary_op);
+    left_type := get_path_type(path);
+
+    log("Left of equal we have:\n");
+    print_node(left_type);
+    
+    decls : [..]*Declaration;
+
+    if left_type && left_type.kind == .ENUM {
+        _enum := cast(*Enum)left_type;
+        
+        if left_type.parent && left_type.parent.kind == .DECLARATION {
+            array_add(*decls, xx left_type.parent);
+        }
+    }
+
+    return decls;
+}
+
+
+
+#scope_file
+
+
+add_fake_methods :: (file: *Program_File, receiver: *Struct, decls: *[..]*Declaration) {
+    
+    receiver_decl := get_struct_declaration(receiver);
+    log("\nadd_fake_methods for %\n", receiver_decl.name);
+
+    if receiver_decl {
+        global_decls := get_global_declarations(file, null);
+
+        log("Checking % global_decls\n", global_decls.count);
+
+        for gd: global_decls {
+            if gd.expression &&  gd.expression.kind == .PROCEDURE {
+                arg0_decl := get_procedure_receiver_type(xx gd.expression);
+
+                if arg0_decl {
+                    log("Procedure % arg0: %\n", gd.name, arg0_decl.name);
+                    if arg0_decl.name == receiver_decl.name {
+                        log("ADDING!\n");
+                        array_add(decls, gd);
+                    }
+                }
+            }
+        }
+    }
+
+    log("add_fake_methods DONE\n");
+}
+
+get_procedure_receiver_type :: (proc: *Procedure) -> *Identifier {
+    if proc.arguments.count > 0 {
+        node : *Node;
+        node = proc.arguments[0];
+
+        while node {
+            if node.kind == {
+                case .IDENTIFIER;
+                    return xx node;
+                case .DECLARATION;
+                    decl := cast(*Declaration)node;
+
+                    node = decl.type_inst;
+                case .UNARY_OPERATION;
+                    uop := cast(*Unary_Operation)node;
+
+                    if uop.operation == .POINTER {
+                        node = unwrap_pointer(xx node);
+                    } else {
+                        break;
+                    }
+                    
+                case;
+                    log("%: --- (get_procedure_arg0_type)\n", node.kind);
+                    break;
+            }
+        }
+    }
+    
+    return null;
+}
+
+get_struct_declaration :: (str: *Struct) -> *Declaration {
+    log("\nget_struct_declaration\n");
+    node : *Node;
+    node = str.parent;
+
+    while node {
+        if node.kind == {
+            case .DECLARATION;
+                return xx node;
+            case;
+                log("%: --- (get_struct_declaration)\n", node.kind);
+                node = node.parent;
+        }
+    }
+
+    return null;
+}
+
+#import "Sort";
