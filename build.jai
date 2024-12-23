@@ -83,6 +83,7 @@
         }
 
         if OS == .MACOS {
+            copy_file("bin/jails", "vscode_extension/out/jails-darwin-arm64");
             vscode_path = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code";
         }
 
