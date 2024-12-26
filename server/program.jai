@@ -10,8 +10,6 @@ Program_File :: struct {
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
     resolved_identifiers: Table(*Node, []*Declaration);
-    declaration_hierarchy: Table(*Declaration, [..]*Declaration);
-    serialized_workspace_symbols: Table(string, string);
     linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
 
     ast_pool: Pool;
@@ -26,8 +24,6 @@ Linked_File :: struct {
 init_file :: (using file: Program_File) {
     init(*declarations);
     init(*resolved_identifiers);
-    init(*declaration_hierarchy);
-    init(*serialized_workspace_symbols);
 }
 
 deinit_file :: (using file: Program_File) {
@@ -37,14 +33,10 @@ deinit_file :: (using file: Program_File) {
     array_free(imports);
     release(*file.ast_pool);
     release(*file.analysis_pool);
-    deinit(*declaration_hierarchy);
-    deinit(*serialized_workspace_symbols);
 }
 
 reset_file :: (using file: Program_File) {
     table_reset(*declarations);
-	table_reset(*declaration_hierarchy);
-    table_reset(*serialized_workspace_symbols);
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
@@ -189,8 +181,7 @@ analyze_files :: (update_workspace_symbols: bool = false) {
         resolve_identifiers(file,, pool_alloc(*file.analysis_pool));
 
         if update_workspace_symbols {
-            build_declaration_hierarchy(file);
-            generate_and_serialize_workspace_symbols_for_file(file);
+            // generate_and_serialize_workspace_symbols_for_file(file);
         }
         // log("Analyzed: %", file.path);
     }
@@ -334,24 +325,6 @@ resolve_identifiers :: (file: *Program_File) {
     }
 }
 
-build_declaration_hierarchy :: (file: *Program_File) {
-    //ZoneScoped();
-    for file.declarations{
-        parent_declaration: *Declaration;
-
-        if it.parent
-            parent_declaration = cast(*Declaration) get_node_nearest_parent(it.parent, kind => kind == .DECLARATION);
-
-        children := find_or_add(*file.declaration_hierarchy, parent_declaration);
-
-        array_add(children, it);
-    }
-
-    for file.declaration_hierarchy {
-        quick_sort(it, (a, b) => ifx a.location.l0 != b.location.l0 then a.location.l0 - b.location.l0 else a.location.c0 - b.location.c0);
-    }
-}
-
 get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
     nearest_node: *Node;
 
@@ -465,7 +438,7 @@ get_global_declarations :: (file: *Program_File, node: *Node) -> []*Declaration 
                 node = node.parent;
         }
     }
-    
+
     for linked_file: file.linked_files {
         for decl: linked_file.file.declarations {
             if is_global(decl, file, linked_file.file, linked_file.from_import) {
@@ -475,20 +448,20 @@ get_global_declarations :: (file: *Program_File, node: *Node) -> []*Declaration 
     }
 
     return decls;
-        
+
 }
 
 
 
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "") -> []*Declaration {
     decls: [..]*Declaration;
-    
+
     if from_block {
         parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION);
 
         // Procedure or Struct params
         if parent_type {
-            
+
             if parent_type.kind == {
 
                 case .PROCEDURE;
@@ -526,8 +499,8 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
         }
     }
 
-    
-    
+
+
     should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *Block, from_loc: *Node.Location, decl: *Declaration) -> bool {
         decl_block := get_node_nearest_block(decl);
         global := is_global(decl, file, linked_file.file, linked_file.from_import);
@@ -546,7 +519,7 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
     }
 
     for linked_file: file.linked_files {
-        
+
         if name.count > 0 {
             for decl: table_find_multiple(*linked_file.file.declarations, name) {
                 if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
@@ -801,108 +774,108 @@ get_identifier_decl :: (__file: *Program_File, ident: *Identifier) -> []*Declara
 }
 
 // @TODO: Maybe refactor this to be more useful?
-get_node_type :: (file: *Program_File, root: *Node) -> *Node {
-    current_node: *Node = root;
+// get_node_type :: (file: *Program_File, root: *Node) -> *Node {
+//     current_node: *Node = root;
 
-    while true {
-        if !current_node break;
-        log("get_node_type %\n", current_node.kind);
-        if current_node.kind == .IDENTIFIER {
-            ident_decls := get_identifier_decl(file, xx current_node);
-            log("ident_decls = % for %", ident_decls.count, (cast(*Identifier) current_node).name);
-            if ident_decls.count == 0 return null;
-            current_node = ident_decls[0];
-            continue;
-        }
+//     while true {
+//         if !current_node break;
+//         log("get_node_type %\n", current_node.kind);
+//         if current_node.kind == .IDENTIFIER {
+//             ident_decls := get_identifier_decl(file, xx current_node);
+//             log("ident_decls = % for %", ident_decls.count, (cast(*Identifier) current_node).name);
+//             if ident_decls.count == 0 return null;
+//             current_node = ident_decls[0];
+//             continue;
+//         }
 
-        if current_node.kind == .ARRAY_TYPE {
-            array_type := cast(*Array_Type)current_node;
-            current_node = array_type.element_type;
-            continue;
-        }
+//         if current_node.kind == .ARRAY_TYPE {
+//             array_type := cast(*Array_Type)current_node;
+//             current_node = array_type.element_type;
+//             continue;
+//         }
 
-        if current_node.kind == .STRUCT {
-            return current_node;
-        }
+//         if current_node.kind == .STRUCT {
+//             return current_node;
+//         }
 
-        if current_node.kind == .DECLARATION {
-            decl := cast(*Declaration) current_node;
-            log("Decl: %\n", decl.name);
+//         if current_node.kind == .DECLARATION {
+//             decl := cast(*Declaration) current_node;
+//             log("Decl: %\n", decl.name);
 
-            if decl.expression {
+//             if decl.expression {
 
-                if decl.expression.kind == .STRUCT || decl.expression.kind == .ENUM || decl.expression.kind == .UNION {
-                    log("Returning\n");
-                    return decl.expression;
-                }
+//                 if decl.expression.kind == .STRUCT || decl.expression.kind == .ENUM || decl.expression.kind == .UNION {
+//                     log("Returning\n");
+//                     return decl.expression;
+//                 }
 
-                if decl.expression.kind == .PROCEDURE {
-                    proc := cast(*Procedure) decl.expression;
-                    if proc.returns.count > 0 {
-                        current_node = proc.returns[0];
-                        continue;
-                    }
-                }
+//                 if decl.expression.kind == .PROCEDURE {
+//                     proc := cast(*Procedure) decl.expression;
+//                     if proc.returns.count > 0 {
+//                         current_node = proc.returns[0];
+//                         continue;
+//                     }
+//                 }
 
-                if decl.expression.kind == .ARRAY_SUBSCRIPT {
-                    array_sub := cast(*Array_Subscript)decl.expression;
+//                 if decl.expression.kind == .ARRAY_SUBSCRIPT {
+//                     array_sub := cast(*Array_Subscript)decl.expression;
 
-                    if array_sub.expression {
-                        current_node = array_sub.expression;
-                        continue;
-                    }
-                }
+//                     if array_sub.expression {
+//                         current_node = array_sub.expression;
+//                         continue;
+//                     }
+//                 }
 
-            }
+//             }
 
-            if decl.type_inst  {
-                current_node = decl.type_inst;
-                continue;
-            }
+//             if decl.type_inst  {
+//                 current_node = decl.type_inst;
+//                 continue;
+//             }
 
-            if decl.expression {
-                current_node = decl.expression;
-                continue;
-            }
+//             if decl.expression {
+//                 current_node = decl.expression;
+//                 continue;
+//             }
 
-        }
+//         }
 
-        if current_node.kind == .RETURN_VALUE {
-            return_value := cast(*Return_Value) current_node;
-            current_node = return_value.expression;
-            continue;
-        }
+//         if current_node.kind == .RETURN_VALUE {
+//             return_value := cast(*Return_Value) current_node;
+//             current_node = return_value.expression;
+//             continue;
+//         }
 
-        if current_node.kind == .BINARY_OPERATION {
-            current_node = get_dot_path_result(file, xx current_node);
-            continue;
-        }
+//         if current_node.kind == .BINARY_OPERATION {
+//             current_node = get_dot_path_result(file, xx current_node);
+//             continue;
+//         }
 
-        if current_node.kind == .PROCEDURE_CALL {
-            proc_call := cast(*Procedure_Call) current_node;
-            current_node = proc_call.procedure;
-            continue;
-        }
+//         if current_node.kind == .PROCEDURE_CALL {
+//             proc_call := cast(*Procedure_Call) current_node;
+//             current_node = proc_call.procedure;
+//             continue;
+//         }
 
-        if current_node.kind == .UNARY_OPERATION {
-            unary_op := cast(*Unary_Operation)current_node;
+//         if current_node.kind == .UNARY_OPERATION {
+//             unary_op := cast(*Unary_Operation)current_node;
 
-            log("Unary: %\n", unary_op.operation);
-            current_node = unwrap_pointer(xx current_node);
-            continue;
-        }
+//             log("Unary: %\n", unary_op.operation);
+//             current_node = unwrap_pointer(xx current_node);
+//             continue;
+//         }
 
-        if current_node.kind == .CAST {
-            _cast := cast(*Cast) current_node;
-            current_node = _cast.cast_expression;
-            continue;
-        }
+//         if current_node.kind == .CAST {
+//             _cast := cast(*Cast) current_node;
+//             current_node = _cast.cast_expression;
+//             continue;
+//         }
 
-        break;
-    }
+//         break;
+//     }
 
-    return null;
-}
+//     return null;
+// }
 
 unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
     if unary_op.operation != .POINTER return null;
@@ -939,7 +912,7 @@ get_root_of_dot_path :: (op: *Binary_Operation) -> *Binary_Operation {
         if parent.operation != .DOT break;
         current = parent;
     }
-    
+
     return current;
 }
 
@@ -960,8 +933,8 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Nod
     if !current_op.left || current_op.left.kind != .IDENTIFIER return null;
 
     current_type : *Node;
-    current_type = get_node_type(file, current_op.left); // STRUCT, ENUM, UNION ...
-    
+    current_type = get_node_type2(current_op.left, false); // STRUCT, ENUM, UNION ...
+
     if !current_type return null;
 
     if current_op.left == target {
@@ -986,7 +959,7 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Nod
             case .BINARY_OPERATION;
                 current_op = cast(*Binary_Operation) current_op.right;
                 if current_op.left.kind == {
-                    case .IDENTIFIER; 
+                    case .IDENTIFIER;
                         ident = cast(*Identifier) current_op.left;
                     case .ARRAY_SUBSCRIPT;
                         array_sub := cast(*Array_Subscript)current_op.left;
@@ -1001,14 +974,14 @@ get_dot_path_result :: (file: *Program_File, op: *Binary_Operation, target: *Nod
         if ident == xx target {
             end = true;
         }
-       
+
         member := get_member_in(current_type, ident);
         if !member break;
         decl = member;
 
         if end break;
 
-        current_type = get_node_type(file, decl);
+        current_type = get_node_type2(decl, false);
     }
 
     return decl;
@@ -1213,7 +1186,7 @@ print_node :: (node: *Node) {
                     }
                 }
             }
-        
+
 
         case;
             log("% *\n", node.kind);
@@ -1274,7 +1247,7 @@ binary_op_to_path :: (binary_op: *Binary_Operation) -> []*Node {
         array_add(*path, cbop.left);
     }
     array_add(*path, cbop.right);
-    
+
     // Invert path.. TODO can we be smarter here?
     inv_path : [..]*Node;
     array_resize(*inv_path, path.count);
@@ -1292,21 +1265,21 @@ get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
     while node {
         if node.kind == {
             case .IDENTIFIER;
-                ident := cast(*Identifier)node;
-                
+                ident := cast(*Identifier) node;
+
                 log("%: %\n", node.kind, ident.name);
 
                 decls := get_identifier_decl_in_files(null, ident);
 
                 log("Got % decls\n", decls.count);
-                
+
                 if decls.count > 0 {
                     node = decls[0];
                     continue;
                 }
                 break;
             case .DECLARATION;
-                decl := cast(*Declaration)node;
+                decl := cast(*Declaration) node;
 
                 log("%: % type: % expr: %\n", decl.kind, decl.name, decl.type_inst, decl.expression);
                 if decl.type_inst {
@@ -1332,7 +1305,7 @@ get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
                 print_node(str);
                 return node;
             case .ARRAY_TYPE;
-                array_type := cast(*Array_Type)node;
+                array_type := cast(*Array_Type) node;
                 log("%\n", array_type.kind);
 
                 if solve_array {
@@ -1341,35 +1314,43 @@ get_node_type2 :: (node: *Node, solve_array: bool) -> *Node {
                     return node;
                 }
             case .UNARY_OPERATION;
-                node = unwrap_pointer(xx node);
+                node = unwrap_pointer(cast(*Unary_Operation) node);
             case .BINARY_OPERATION;
-                bop := cast(*Binary_Operation)node;
+                bop := cast(*Binary_Operation) node;
                 log("%: %\n", bop.kind, bop.operation);
 
-                path := binary_op_to_path(bop);                
+                path := binary_op_to_path(bop);
                 log("Calling with path %\n", path.count);
                 for p: path {
                     print_node(p);
                 }
                 node = get_path_type(path);
             case .PROCEDURE;
-                proc := cast(*Procedure)node;
-                
+                proc := cast(*Procedure) node;
+
                 if proc.returns.count > 0 {
                     node = proc.returns[0].expression;
                 } else {
                     break;
                 }
             case .CAST;
-                c := cast(*Cast)node;
-                
+                c := cast(*Cast) node;
+
                 node = c.cast_expression;
+
+            case .USING;
+                log("____USING!!! -----------------");
+                _using := cast(*Using) node;
+                if !_using.expression || _using.expression.kind != .DECLARATION {
+                    break;
+                }
+
 
             case .PROCEDURE_CALL;
                 proc_call := cast(*Procedure_Call)node;
 
                 node = proc_call.procedure;
-                 
+
             case;
                 log("%: ---\n", node.kind);
                 break;
@@ -1383,6 +1364,10 @@ get_struct_member_type :: (str: *Struct, member_name: string) -> *Node {
     log("\n get_struct_member_type '%' from struct\n", member_name);
     if str.block {
         for m: str.block.members {
+            if m.kind == .USING {
+                log("______________USING______________");
+            }
+
             if m.kind == .DECLARATION {
                 decl := cast(*Declaration)m;
                 log("checking %\n", decl.name);
@@ -1394,7 +1379,7 @@ get_struct_member_type :: (str: *Struct, member_name: string) -> *Node {
             }
         }
     }
-    
+
 
     return null;
 }
@@ -1403,7 +1388,7 @@ get_array_type :: (node: *Node, current_struct: *Struct, solve_array: bool) -> *
     log("\nget_array_type current_struct: % solve_array: %\n", current_struct, solve_array);
     log("node is:\n");
     print_node(node);
-    
+
     while node {
         if node.kind == {
             case .IDENTIFIER;
@@ -1461,7 +1446,7 @@ get_array_type :: (node: *Node, current_struct: *Struct, solve_array: bool) -> *
 
 get_identifier_as_for_iterator :: (ident: *Identifier) -> *Node {
     log("\n\nget_identifier_as_for_iterator %\n", ident.name);
-    
+
     current_node : *Node = ident.parent;
 
     while current_node {
@@ -1469,7 +1454,7 @@ get_identifier_as_for_iterator :: (ident: *Identifier) -> *Node {
             case .FOR;
                 for_node := cast(*For)current_node;
 
-                
+
                 log("Here's a for loop iterator is:\n");
                 print_node(for_node.iterator);
                 log("value is:\n");
@@ -1493,7 +1478,7 @@ get_identifier_as_for_iterator :: (ident: *Identifier) -> *Node {
 
                     return array_type;
                 }
-                        
+
                 current_node = current_node.parent;
             case .PROCEDURE;
                 // Bail
@@ -1517,7 +1502,7 @@ get_path_type :: (in_path: []*Node) -> *Node {
     while path.count > 0 {
         log("PATH ELEMS: %\n", path.count);
         current_path := path[path.count - 1];
-        
+
         if current_path.kind == {
             case .IDENTIFIER;
                 ident := cast(*Identifier)current_path;
@@ -1580,12 +1565,12 @@ get_path_type :: (in_path: []*Node) -> *Node {
                         }
                     }
                 }
-                
+
 
                 path.count -= 1;
             case .ARRAY_SUBSCRIPT;
                 array_sub := cast(*Array_Subscript)current_path;
-                
+
                 sub_type := get_array_type(xx current_path, current_struct, true);
 
                 if !sub_type {
@@ -1659,7 +1644,7 @@ get_dot_complete_decls :: (binary_op: *Binary_Operation) -> [..]*Declaration, *S
     if path_type.kind == {
         case .STRUCT;
             str := cast(*Struct)path_type;
-            
+
             if str.block {
                 log("Struct has % members\n", str.block.members.count);
                 for m: str.block.members {
@@ -1681,7 +1666,7 @@ get_dot_complete_decls :: (binary_op: *Binary_Operation) -> [..]*Declaration, *S
         case .ARRAY_TYPE;
             array_add(*decls, *array_count_declaration, *array_data_declaration);
             return decls, null;
-        
+
     }
 
     return decls, return_struct;
@@ -1707,12 +1692,12 @@ complete_assign_equal :: (binary_op: *Binary_Operation) -> []*Declaration {
 
     log("Left of equal we have:\n");
     print_node(left_type);
-    
+
     decls : [..]*Declaration;
 
     if left_type && left_type.kind == .ENUM {
         _enum := cast(*Enum)left_type;
-        
+
         if left_type.parent && left_type.parent.kind == .DECLARATION {
             array_add(*decls, xx left_type.parent);
         }
@@ -1727,7 +1712,7 @@ complete_assign_equal :: (binary_op: *Binary_Operation) -> []*Declaration {
 
 
 add_fake_methods :: (file: *Program_File, receiver: *Struct, decls: *[..]*Declaration) {
-    
+
     receiver_decl := get_struct_declaration(receiver);
     log("\nadd_fake_methods for %\n", receiver_decl.name);
 
@@ -1775,14 +1760,14 @@ get_procedure_receiver_type :: (proc: *Procedure) -> *Identifier {
                     } else {
                         break;
                     }
-                    
+
                 case;
                     log("%: --- (get_procedure_arg0_type)\n", node.kind);
                     break;
             }
         }
     }
-    
+
     return null;
 }
 

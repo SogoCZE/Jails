@@ -418,6 +418,7 @@ LSP_Partial_Result_Params :: struct {
 
 LSP_Document_Symbol :: struct {
     name: string;
+    detail: string;
     kind: s64;
     range: LSP_Range;
     selectionRange: LSP_Range;
@@ -446,11 +447,11 @@ LSP_Symbol_Kind :: enum s64 {
     OBJECT :: 19;
     KEY :: 20;
     NULL :: 21;
-    ENUMMEMBER :: 22;
+    ENUM_MEMBER :: 22;
     STRUCT :: 23;
     EVENT :: 24;
     OPERATOR :: 25;
-    TYPEPARAMETER :: 26;
+    TYPE_PARAMETER :: 26;
 }
 
 Workspace_Folder :: struct {
@@ -751,22 +752,22 @@ lsp_respond :: (id: u32, data: $T) {
     });
 }
 
-lsp_respond_with_already_json_serialized_result_data :: (id: u32, data: string){
-    Reply_With_Placeholder :: struct {
-        using response: LSP_Response_Message;
-        result := "T";
-    }
+// lsp_respond_with_already_json_serialized_result_data :: (id: u32, data: string){
+//     Reply_With_Placeholder :: struct {
+//         using response: LSP_Response_Message;
+//         result := "T";
+//     }
 
-    body_with_placeholder := json_write_string(Reply_With_Placeholder.{id = id});
-    defer free(body_with_placeholder);
+//     body_with_placeholder := json_write_string(Reply_With_Placeholder.{id = id});
+//     defer free(body_with_placeholder);
 
-    found_separator, prefix, postfix := split_from_right(body_with_placeholder, "\"T\"");
+//     found_separator, prefix, postfix := split_from_right(body_with_placeholder, "\"T\"");
 
-    assert(found_separator);
-    final_body := tprint("%0%0%0", prefix, data, postfix);
+//     assert(found_separator);
+//     final_body := tprint("%0%0%0", prefix, data, postfix);
 
-    print("Content-Length: %\r\n\r\n%", final_body.count, final_body);
-}
+//     print("Content-Length: %\r\n\r\n%", final_body.count, final_body);
+// }
 
 lsp_respond_with_error :: (id: u32, code: LSP_Error_Codes, message: string, data: $T) {
     reply: struct {

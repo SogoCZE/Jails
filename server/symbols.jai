@@ -1,42 +1,69 @@
-expression_to_symbol_kind :: (expression: *Node) -> LSP_Symbol_Kind{
-    if expression{
-        if expression.kind == {
-            case .STRUCT; return .STRUCT;
-            case .ENUM; return .ENUM;
-            case .PROCEDURE; return .FUNCTION;
-            case .OPERATOR_OVERLOAD; return .OPERATOR;
-            case .QUICK_LAMBDA; return .FUNCTION;
-            case .POLYMORPHIC_CONSTANT; return .TYPEPARAMETER;
-            case .DIRECTIVE_IMPORT; return .MODULE;
-            case .DIRECTIVE_BAKE_ARGUMENTS; return .FUNCTION;
-            case .DIRECTIVE_LIBRARY; return .PACKAGE;
-            case .UNION; return .STRUCT;
+// @TODO: We are currently do not use any caching for workspace or document (file) symbols which seems ok for now.
+// But we should test it on large project to see if any caching is needed -> in theory we are only traversing AST
+// And making symbols - which should be fast??? We are not resolving any identifiers (types etc).
+// Potencial bottleneck can be a lot of small allocations - we can solve this with Pool allocator though.
 
-            // with all of the following, I don't really know how to get enough information about them to confidently determine what they are. A type directive could declare a function type, or a struct type for example. A cast could literally yield anything. I'm sure you could look at the AST here in more detail, but I don't know my way well enough around this codebase to do that. So, as a kind-of-hacky-thing, I just return VARIABLE for all of them. The most important thing is that they show imo, not that the kind matches exactly (I think the kind is mostly for display anyway, not really that functional.)
+// @TODO: We only include project files, is this ok?
+// TypeScript Language Server does this (filtering node_modules etc)
+// Go Server does include "compiler" packages
+// We should make more reseach on this topic and ask people around what they think
+// and how they use this feature...
+handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
+    push_allocator(temp);
+    search_query := to_lower_copy(request.params.query);
 
-            case .DIRECTIVE_TYPE; #through;
-            case .CAST; #through;
-            case .PROCEDURE_CALL; #through;
-            case .IDENTIFIER; #through;
-            case .BINARY_OPERATION; #through;
-            case .LITERAL;
-                return .VARIABLE;
-            case;
-                //log("Unhandled expression kind % at %:%:%.", expression.kind, expression.location.file, expression.location.l0 + 1, expression.location.c0 + 1);
-                return 0;
+    // @TODO: Do we want to return here if we got no search query?
+    if !search_query {
+        lsp_respond(request.id, null);
+        return;
+    }
 
-            //There are other shortcomings here: I would like to return things like FIELD for struct-members, CONSTANT for constants, also use FILE vs just MODULE or PACKAGE, but for all of these I am not confident what the AST would look like. So I opted to not pretend I can return the maximum detail here and kept it simple instead.
+    flattern_document_symbol_to_workspace_symbols :: (search_query: string, document_symbol: LSP_Document_Symbol, file_path: string, to: *[..]LSP_Workspace_Symbol, name_prefix := "") {
+        workspace_symbol: LSP_Workspace_Symbol;
+        workspace_symbol.name = join(name_prefix, document_symbol.name);
+        workspace_symbol.kind = document_symbol.kind;
+        workspace_symbol.location = .{path_to_lsp_path(file_path), document_symbol.range};
+
+        for child_symbol: document_symbol.children {
+            flattern_document_symbol_to_workspace_symbols(search_query, child_symbol, file_path, to, join(workspace_symbol.name, "."));
+        }
+
+        // Naive search that should be enough?
+        if contains(to_lower_copy(workspace_symbol.name), search_query) {
+            array_add(to, workspace_symbol);
         }
     }
-    else{
-        return .VARIABLE;
+
+    workspace_symbols: [..]LSP_Workspace_Symbol;
+    for file: server.files {
+        // Skip non workspace files
+        if !begins_with(file.path, server.project_root) {
+            continue;
+        }
+
+        // Skip files from local modules (we only want workspace project files)
+        for local_module_folder: server.local_modules {
+            full_local_module_folder_path := tprint("%/%", server.project_root, local_module_folder);
+
+            if begins_with(file.path, full_local_module_folder_path) {
+                continue file;
+            }
+        }
+
+        symbols: [..]LSP_Document_Symbol;
+        load_symbols_from_file(file, *symbols);
+
+        for document_symbol: symbols {
+            flattern_document_symbol_to_workspace_symbols(search_query, document_symbol, file.path, *workspace_symbols);
+        }
     }
+
+    lsp_respond(request.id, workspace_symbols);
 }
 
-DOCUMENT_SYMBOLS_FOLLOW_CHILDREN :: false;
-
 handle_document_symbol :: (request: LSP_Request_Message_Document_Symbol) {
-    //ZoneScoped();
+    push_allocator(temp);
+
     file_path := normalize_path(request.params.textDocument.uri);
 
     file := get_file(file_path);
@@ -46,177 +73,170 @@ handle_document_symbol :: (request: LSP_Request_Message_Document_Symbol) {
         return;
     }
 
-    create_lsp_document_from_declaration :: (file: *Program_File, using declaration: *Declaration) -> LSP_Document_Symbol{
-        //ZoneScoped();
-        child_declarations, has_children := table_find(*file.declaration_hierarchy, declaration);
-        child_lsp_document_symbols: [..]LSP_Document_Symbol;
+    symbols: [..]LSP_Document_Symbol;
+    load_symbols_from_file(file, *symbols);
 
-        #if DOCUMENT_SYMBOLS_FOLLOW_CHILDREN {
-            //SC: Documents symbols should only include top level declarations
-            if has_children{
-                for child_declarations{
-                    symbol := create_lsp_document_from_declaration(file, it);
-                    array_add(*child_lsp_document_symbols, symbol);
-                }
-            }
-        }
-
-        result: LSP_Document_Symbol;
-
-        result.name = name;
-        result.kind = xx expression_to_symbol_kind(expression);
-        result.range = .{.{xx location.l0, xx location.c0}, .{xx location.l1, xx location.c1}};
-        result.selectionRange = result.range;
-        result.children = child_lsp_document_symbols;
-
-        return result;
-    }
-
-    if file.declaration_hierarchy.count > 0{
-        lsp_symbols: [..]LSP_Document_Symbol;
-
-        for table_find_pointer(*file.declaration_hierarchy, null).*{
-            symbol := create_lsp_document_from_declaration(file, it);
-            array_add(*lsp_symbols, symbol);
-        }
-
-        lsp_respond(request.id, lsp_symbols);
-    }
+    lsp_respond(request.id, symbols);
 }
 
-#if OS == {
-    // TODO make this configurable from jails.json
-    case .WINDOWS;
-        BLACKLIST_FILENAMES := string.[
-            "unix.jai",
-            "_linux.jai",
-            "jv_imgui/windows.jai"
-        ];
-
-        BLACKLIST_FILTERS := string.[
-            "Vulkan13",
-            "VMA",
-            "spirv_reflect"
-        ];
-    case;
-        BLACKLIST_FILENAMES := string.[];
-        BLACKLIST_FILTERS := string.[];
-        
-}
-
-WORKSPACE_SYMBOLS_SKIP_VARS :: false;
-
-generate_and_serialize_workspace_symbols_for_file :: (file: *Program_File){
-    log("Generating workspace symbols for file: %\n", file.path);
-    if !begins_with(file.path, server.project_root) {
-        path_overwrite_separators(server.project_root, #char "/");
-        log("File skipped. Not part of the workspace '%'\n", server.project_root);
-        return;
-    }
-
-    for bf: BLACKLIST_FILENAMES {
-        if ends_with(file.path, bf) {
-            log("File skipped because blacklisted on this platform. Ends with: %\n", bf);
-            return;
-        }
-    }
-
-    for bf: BLACKLIST_FILTERS {
-        if contains(file.path, bf) {
-            log("File skipped because blacklisted by filter %\n", bf);
-            return;
-        }
-    }
-
-    for file.serialized_workspace_symbols {
-        free(it);
-    }
-
-    table_reset(*file.serialized_workspace_symbols);
-
-    log_parent := false;
-    if ends_with(file.path, "jvk.jai") {
-        log_parent = true;
-    }
-
-    for declaration: file.declarations{
-        symbol: LSP_Workspace_Symbol;
-        symbol.name = declaration.name;
-        symbol.location = node_location_to_lsp_location(declaration.location);
-        symbol.kind = xx expression_to_symbol_kind(declaration.expression);
-
-        #if WORKSPACE_SYMBOLS_SKIP_VARS {
-            //turns out, if we include all variable declarations (including all parameters and local variables of all functions), then I get like 80,000 symbols in the workspace of my game, and then vscode takes half a second just to process the result. We send it very quickly, because we cache the serialized json, but vscode can't keep up. So I skip it here.
-            if symbol.kind == .VARIABLE
-                continue;
-        }
-
-        if declaration.parent && declaration.parent.kind != .DIRECTIVE_SCOPE {
+load_symbols_from_file :: (file: *Program_File, load_to: *[..]LSP_Document_Symbol) {
+    for node: file.nodes {
+        // We only need global declarations not nested ones.
+        if node.parent != null {
             continue;
         }
 
-        serialized_symbol := json_write_string(symbol);
+        // scope directives (#scope_export, #scope_module, #scope_file)
+        if node.kind == .DIRECTIVE_SCOPE {
+            scope_directive := cast(*Directive_Scope) node;
+            for member: scope_directive.members {
+                symbol, ok := lsp_document_symbol_from_node(member, .VARIABLE);
+                if !ok {
+                    continue;
+                }
 
-        table_add(*file.serialized_workspace_symbols, declaration.name, serialized_symbol);
+                array_add(load_to, symbol);
+            }
+
+            continue;
+        }
+
+        symbol, ok := lsp_document_symbol_from_node(node, .VARIABLE);
+        if !ok {
+            continue;
+        }
+
+        array_add(load_to, symbol);
     }
 }
 
-MAX_NUMBER_OF_WORKSPACE_SYMBOLS_TO_RETURN_TO_PREVENT_VSCODE_FROM_BEING_SUPER_SLOW :: 1000;
-
-handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
-    //ZoneScoped();
-    query_parts := split(request.params.query, cast(u8) #char " ");
-
-    for query_parts
-        if it.count == 0
-            remove it;
-
-    builder: String_Builder;
-    append(*builder, "[");
-
-    symbol_count := 0;
-
-    if query_parts.count > 0 {
-        log("Looking for symbols with '%'\n", query_parts[0]);
+node_kind_to_symbol_kind :: (expression: *Node, default: LSP_Symbol_Kind) -> LSP_Symbol_Kind {
+    if !expression {
+        return default;
     }
 
-    for file: server.files{
-        for serialized_symbol, symbol_name: file.serialized_workspace_symbols {
-            if symbol_count == MAX_NUMBER_OF_WORKSPACE_SYMBOLS_TO_RETURN_TO_PREVENT_VSCODE_FROM_BEING_SUPER_SLOW {
-                log("Reached % symbols max\n", MAX_NUMBER_OF_WORKSPACE_SYMBOLS_TO_RETURN_TO_PREVENT_VSCODE_FROM_BEING_SUPER_SLOW);
-                break file;
-            }
+    if expression.kind == {
+        case .STRUCT; return .STRUCT;
+        case .UNION; return .STRUCT;
+        case .ENUM; return .ENUM;
+        case .PROCEDURE; return .FUNCTION;
+        case .DIRECTIVE_IMPORT; return .MODULE;
+        case .DIRECTIVE_LIBRARY; return .PACKAGE;
+        case; return default;
+    }
+}
 
-            
+// @TODO: using!
+lsp_document_symbol_from_node :: (node: *Node, default_symbol_kind: LSP_Symbol_Kind) -> LSP_Document_Symbol, bool {
+    symbol: LSP_Document_Symbol;
 
-            //the recommendation from visual studio code is that when searching for tokens, the LSP should be very lenient as to what it filters, so that vscode can then be flexible about ordering and interpreting your search terms. They explicitely say you shouldn't check if the query is a substring, because then you can't have stuff like having the query "abc" match "arrayBoundsCheck", which is apparently something that people want to do. I personally hate that for the query "read vessel", vscode doesn't treat "read" and "vessel" as two different search terms, and so won't show you "readVessel", and also that for "readvessel", "readVessel" would match, but not "vesselRead". Basically, I ideally want to type multiple search terms, and if they are in the name, I want that to match (like in sublime text). Vscode doesn't do that. Whatever.
-            // What I decided to do here is the following: I'm interpreting each space-separated element of the query as its own search term. (vscode doesn't even seem to transmit stuff after the space to the LSP, so if that is a rule and not a bug (which I couldn't find out) this part isn't even relevant). For each search term, we follow the recommandation and consider it matched, if the characters of the search term appear in the symbol name in order, case insensitive.
-
-            remaining_name_to_search := symbol_name;
-
-            for part: query_parts {
-                
-                for 0..request.params.query.count - 1 {
-                    search_character_as_string := slice(request.params.query, it, 1);
-                    index := index_of_string_nocase(remaining_name_to_search, search_character_as_string);
-
-                    if index == -1
-                        continue serialized_symbol;
-                    else
-                        remaining_name_to_search = slice(remaining_name_to_search, index + 1, remaining_name_to_search.count - index - 1);
-                }
-            }
-
-            if symbol_count > 0
-                append(*builder, ",");
-
-            append(*builder, serialized_symbol);
-            symbol_count += 1;
+    children_to_symbols :: (node: *Node) -> []LSP_Document_Symbol {
+        children: [..]LSP_Document_Symbol;
+        if !node {
+            return children;
         }
+
+        block := get_block_of(node);
+        if block {
+            for member: block.members {
+                child_symbol, ok := lsp_document_symbol_from_node(member, .FIELD);
+                if !ok {
+                    continue;
+                }
+
+                // Override for enum members
+                if node.kind == .ENUM {
+                    child_symbol.kind = cast(s64) LSP_Symbol_Kind.ENUM_MEMBER;
+                }
+
+                array_add(*children, child_symbol);
+            }
+        }
+
+        return children;
     }
 
-    append(*builder, "]");
-    json_serialized_symbol_list := builder_to_string(*builder);
-    lsp_respond_with_already_json_serialized_result_data(request.id, json_serialized_symbol_list);
-    free(json_serialized_symbol_list);
+    ok := false;
+    if node.kind == {
+        case .DECLARATION;
+            decl := cast(*Declaration) node;
+            symbol.name = decl.name;
+            symbol.kind = cast(s64) node_kind_to_symbol_kind(decl.expression, ifx decl.const then .CONSTANT else default_symbol_kind);
+
+            if decl.type_inst {
+                builder: String_Builder;
+                ast_print(*builder, decl.type_inst);
+                symbol.detail = builder_to_string(*builder);
+            }
+
+            if decl.expression && (decl.expression.kind == .PROCEDURE || decl.expression.kind == .LITERAL) {
+                builder: String_Builder;
+                ast_print(*builder, decl.expression);
+                symbol.detail = builder_to_string(*builder);
+            }
+
+            if decl.expression && decl.expression.kind == .ENUM {
+                _enum := cast(*Enum) decl.expression;
+                builder: String_Builder;
+                ast_print(*builder, _enum.type);
+                symbol.detail = builder_to_string(*builder);
+            }
+
+            symbol.children = children_to_symbols(decl.expression);
+            ok = true;
+
+        case .IDENTIFIER;
+            ident := cast(*Identifier) node;
+            symbol.name = ident.name;
+            symbol.kind = cast(s64) LSP_Symbol_Kind.VARIABLE;
+            ok = true;
+
+        case .USING;
+            _using := cast(*Using) node;
+            if !_using.expression || _using.expression.kind != .DECLARATION {
+                return .{}, false;
+            }
+
+            using_decl := cast(*Declaration) _using.expression;
+
+            used_type := get_node_type2(using_decl, false);
+            if !used_type {
+                return .{}, false;
+            }
+
+            if used_type.parent && used_type.parent != using_decl {
+                symbol, ok = lsp_document_symbol_from_node(used_type.parent, .FIELD);
+            } else {
+                symbol, ok = lsp_document_symbol_from_node(used_type, .FIELD);
+            }
+
+            symbol.detail = symbol.name;
+            symbol.name = using_decl.name;
+
+        case .ENUM; #through;
+        case .UNION; #through;
+        case .STRUCT;
+            _union := cast(*Union) node;
+
+            if node.kind == {
+                case .UNION;
+                    symbol.name = "union";
+                    symbol.kind = cast(s64) LSP_Symbol_Kind.STRUCT;
+                case .STRUCT;
+                    symbol.name = "struct";
+                    symbol.kind = cast(s64) LSP_Symbol_Kind.STRUCT;
+                case .ENUM;
+                    symbol.name = "enum";
+                    symbol.kind = cast(s64) LSP_Symbol_Kind.ENUM;
+            }
+
+            symbol.children = children_to_symbols(node);
+            ok = true;
+    }
+
+    lsp_location := node_location_to_lsp_location(node.location);
+    symbol.range = lsp_location.range;
+    symbol.selectionRange = lsp_location.range;
+
+    return symbol, ok;
 }

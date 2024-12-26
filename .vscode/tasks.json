@@ -9,7 +9,7 @@
             "command": "jai ${workspaceFolder}/build.jai - -vscode",
             "presentation": {
                 "echo": true,
-                "reveal": "always",
+                "reveal": "silent",
                 "focus": false,
                 "panel": "shared",
                 "showReuseMessage": true,

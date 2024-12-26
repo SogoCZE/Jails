@@ -312,7 +312,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("File_path: %", file_path);
 
         case "textDocument/didChange";
-
             success, body := json_parse_string(raw_request, LSP_Did_Change_Text_Document,, temp);
             if !success {
                 log_error("Unable to parse textDocument/didChange message");
@@ -323,8 +322,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             edit_memory_file(file_path, body.params.contentChanges);
             parse_file(file_path, true);
             analyze_files(update_workspace_symbols = false);
+
         case "textDocument/documentSymbol";
-            //ZoneScoped("textDocument/documentSymbol");
             success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol);
             if !success {
                 log_error("Unable to parse textDocument/documentSymbol message");
@@ -334,7 +333,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             handle_document_symbol(body);
 
         case "workspace/symbol";
-            //ZoneScoped("workspace/symbol");
             success, body := json_parse_string(raw_request, LSP_Request_Message_Workspace_Symbol);
             if !success {
                 log_error("Unable to parse workspace/symbol message");
@@ -372,13 +370,13 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             handle_signature_help(body);
 
         case "textDocument/hover";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
-            if !success {
-                log_error("Unable to parse textDocument/completion message");
-                return;
-            }
+            // success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
+            // if !success {
+            //     log_error("Unable to parse textDocument/completion message");
+            //     return;
+            // }
 
-            handle_hover(body);
+            // handle_hover(body);
     }
 }
 
@@ -459,6 +457,7 @@ main :: () {
 #load "signature_help.jai";
 #load "hover.jai";
 #load "symbols.jai";
+#load "utils.jai";
 
 #if OS == .WINDOWS {
     #import "Windows";

@@ -59,7 +59,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         if binary_op.operation == {
             case .DOT;
                 decls = complete_dot(file, cursor_node);
-                
+
                 if decls.count > 0 {
                     send_completions_decls(request, decls);
                 } else {
@@ -71,14 +71,14 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
                     log("And here's the cursor node\n");
                     log_node(cursor_node);
                 }
-                
+
                 // If we fail to complete a . we return nothing
                 send_completions_decls(request, decls);
                 return;
             case .IS_EQUAL; #through;
             case .ASSING;
                 decls = complete_assign_equal(binary_op);
-                
+
                 if decls.count > 0 {
                     send_completions_decls(request, decls, add_enum_member_dot);
                 } else {
@@ -90,7 +90,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
                     log("And here's the cursor node\n");
                     log_node(cursor_node);
                 }
-                
+
                 // If we fail to complete a . we return nothing
                 send_completions_decls(request, decls);
                 return;
@@ -112,12 +112,12 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         for d: decls {
             log("%: %\n", it_index, d.name);
         }
-        
+
     }
 
     // Filter declarations
     if cursor_node && cursor_node.kind == .IDENTIFIER {
-        ident := cast(*Identifier)cursor_node;
+        ident := cast(*Identifier) cursor_node;
         count:=0;
 
         for d: decls {
@@ -140,20 +140,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
     send_completions_decls(request, decls);
 }
-
-filter_in_place_by_name :: (src : *[]$T, name: string) {
-    count:=0;
-
-    for src.* {
-        if it.name == name {
-            (src.*)[count]=it;
-            count+=1;
-        }
-    }
-
-    src.count=count;
-}
-
 
 handle_completitions_load :: (request: LSP_Request_Message_Completion, file: *Program_File, directive_load: *Directive_Load) {
     completions: [..]LSP_Completion_Item;
@@ -224,29 +210,29 @@ handle_completitions_import :: (request: LSP_Request_Message_Completion, directi
 }
 
 // @TODO: maybe move this to program?
-get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> []*Declaration {
-    members: [..]*Declaration;
+// get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> []*Declaration {
+//     members: [..]*Declaration;
 
-    if binary_op.operation != .DOT return members;
+//     if binary_op.operation != .DOT return members;
 
-    if !binary_op.left return members;
+//     if !binary_op.left return members;
 
-    decl := goto_dot_path_member(file, binary_op, xx binary_op.left);
-    if !decl return members;
+//     decl := goto_dot_path_member(file, binary_op, xx binary_op.left);
+//     if !decl return members;
 
-    decl_type := get_node_type(file, decl);
-    if !decl_type return members;
+//     decl_type := get_node_type(file, decl);
+//     if !decl_type return members;
 
-    block := get_block_of(decl_type);
-    if !block return members;
+//     block := get_block_of(decl_type);
+//     if !block return members;
 
-    for member: block.members {
-        if member.kind != .DECLARATION continue;
-        array_add(*members, xx member);
-    }
+//     for member: block.members {
+//         if member.kind != .DECLARATION continue;
+//         array_add(*members, xx member);
+//     }
 
-    return members;
-}
+//     return members;
+// }
 
 send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration, add_enum_member_dot: bool = false) {
     completions: [..]LSP_Completion_Item;
@@ -268,7 +254,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         if preview_node.kind == {
             case .PROCEDURE;
                 kind = .Function;
-                insert_text = sprint("%($0)", decl.name);
+                insert_text = tprint("%($0)", decl.name);
 
             case .STRUCT;
                 kind = .Struct;
@@ -328,58 +314,9 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
                 labelDetails = .{ description=procedure_header_preview }
             });
         }
-        
+
     }
 
     lsp_respond(request.id, completions);
 }
 
-log_node :: (node: *Node, indent: s32 = 0) {
-    
-    if !node {
-        return;
-    }
-
-    sb : String_Builder;
-
-    for 0..indent-1 {
-        append(*sb, "____");
-    }
-
-    if node.kind == {
-        case .IDENTIFIER;
-            ident := cast(*Identifier)node;
-            log("%IDENT: %\n", builder_to_string(*sb), ident.name);
-        case .BINARY_OPERATION;
-            binary_op := cast(*Binary_Operation)node;
-            log("%BINARY OP: %\n", builder_to_string(*sb), binary_op.operation);
-            log_node(binary_op.left, indent + 1);
-            log_node(binary_op.right, indent + 1);
-        case .BLOCK;
-            block := cast(*Block)node;
-            log("%BLOCK\n", builder_to_string(*sb));
-            
-            for m: block.members {
-                log_node(m, indent + 1);
-            }
-        case .DECLARATION;
-            decl := cast(*Declaration)node;
-            log("%DECL %\n", builder_to_string(*sb), decl.name, decl.type_inst);
-            
-            log_node(decl.type_inst, indent + 1);
-            log("%EXPR\n", builder_to_string(*sb));
-            log_node(decl.expression, indent + 1);
-        case .ARRAY_TYPE;
-            array_type := cast(*Array_Type)node;
-
-            log("%ARRAY_TYPE\n", builder_to_string(*sb));
-            log_node(array_type.element_type, indent + 1);
-        case .ARRAY_SUBSCRIPT;
-            array_sub := cast(*Array_Subscript)node;
-
-            log("%ARRAY_SUB\n", builder_to_string(*sb));
-            log_node(array_sub.expression, indent + 1);
-        case;
-            log("%Unhandled: %\n", builder_to_string(*sb), node.kind);
-    }
-}
