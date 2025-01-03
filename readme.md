@@ -44,7 +44,7 @@ Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketpla
 4. Run `cd vscode_extension` to enter the subdirectory `vscode_extension`.
 5. Run `npm install` to install npm dependencies.
 6. Run `npm run compile` to generate an extension bundle.
-7. Run `npm run pack:unix` or `npm run pack:windows` to pack the bundle into a file called something like `jails-x.x.x.vsix`.
+7. Run `npm run pack:<platform>` (mac, linux, windows) to pack the bundle into a file called something like `jails-x.x.x.vsix`.
 8. Run `code --install-extension jails-x.x.x.vsix` to install the extension in VS Code.
 
 ### Config file
