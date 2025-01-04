@@ -78,7 +78,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
             binary_op = xx binary_op.parent;
         }
 
-        result := goto_dot_path_member(file, binary_op, ident);
+        result := goto_dot_path_member(binary_op, ident);
         if result {
             lsp_respond(request.id, node_location_to_lsp_location(result.location));
             return;
@@ -86,7 +86,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
 
-    decls := get_identifier_decl(file, ident);
+    decls := get_identifier_decl(ident);
     if decls.count == 0 {
         lsp_respond(request.id, null);
         return;
@@ -100,14 +100,17 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     lsp_respond(request.id, locations);
 }
 
+
+
+
 // @TODO: maybe move this to program?
-goto_dot_path_member :: (file: *Program_File, binary_op: *Binary_Operation, ident: *Identifier) -> *Declaration {
+goto_dot_path_member :: (binary_op: *Binary_Operation, ident: *Identifier) -> *Declaration {
     if binary_op.operation != .DOT return null;
 
     root_op := get_root_of_dot_path(binary_op);
     if !root_op return null;
 
-    result := get_dot_path_result(file, root_op, ident);
+    result := get_dot_path_result(root_op, ident);
     if !result return null;
 
     return result;

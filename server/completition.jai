@@ -32,111 +32,36 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         return;
     }
 
-
     decls: []*Declaration;
     defer array_free(decls);
 
-    add_enum_member_dot := true;
-
-    // Unary OP
-    if cursor_node && cursor_node.kind == .UNARY_OPERATION {
-        uop := cast(*Unary_Operation)cursor_node;
-
-        if uop.operation == .DOT && uop.parent && uop.parent.kind == .BINARY_OPERATION {
-            bop := cast(*Binary_Operation)uop.parent;
-
-            if bop.operation == .ASSING || bop.operation == .IS_EQUAL || bop.operation == .IS_NOT_EQUAL {
-                cursor_node = bop;
-                add_enum_member_dot = false;
-            }
-        }
+    if handle_dot_completitions(request, cursor_node) {
+        return;
     }
 
     // Binary OP
-    if cursor_node && cursor_node.kind == .BINARY_OPERATION {
-        binary_op := cast(*Binary_Operation)cursor_node;
+    // if cursor_node && cursor_node.kind == .BINARY_OPERATION {
+    //     op := cast(*Binary_Operation) cursor_node;
 
-        if binary_op.operation == {
-            case .DOT;
-                decls = complete_dot(file, cursor_node);
+    //     decls = get_dot_path_members(cast(*Binary_Operation) cursor_node);
+    //     if decls.count > 0 {
+    //         send_completions_decls(request, decls);
+    //         return;
+    //     }
+    // }
 
-                if decls.count > 0 {
-                    send_completions_decls(request, decls);
-                } else {
-                    log("Could not complete '.'\n");
+    // if cursor_node && cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
+    //     decls = get_dot_path_members(cast(*Binary_Operation) cursor_node.parent);
+    //     if decls.count > 0 {
+    //         send_completions_decls(request, decls);
+    //         return;
+    //     }
+    // }
 
-                    //log("Here's the cursor block:\n");
-                    //log_node(cursor_block);
-
-                    log("And here's the cursor node\n");
-                    log_node(cursor_node);
-                }
-
-                // If we fail to complete a . we return nothing
-                send_completions_decls(request, decls);
-                return;
-            case .IS_EQUAL; #through;
-            case .ASSING;
-                decls = complete_assign_equal(binary_op);
-
-                if decls.count > 0 {
-                    send_completions_decls(request, decls, add_enum_member_dot);
-                } else {
-                    log("Could not complete '='\n");
-
-                    //log("Here's the cursor block:\n");
-                    //log_node(cursor_block);
-
-                    log("And here's the cursor node\n");
-                    log_node(cursor_node);
-                }
-
-                // If we fail to complete a . we return nothing
-                send_completions_decls(request, decls);
-                return;
-            case;
-                log("Don't know what to do with Binary_Operation %\n", binary_op.operation);
-                return;
-        }
-    }
+    // if cursor_block log("Block: %", cursor_block.*);
 
     // General
-    log("General non dot cursor node\n");
-    log_node(cursor_node);
-
-    decls = get_global_declarations(file, cursor_node);
-
-    log("Filtering % decls\n", decls.count);
-
-    if decls.count < 10 {
-        for d: decls {
-            log("%: %\n", it_index, d.name);
-        }
-
-    }
-
-    // Filter declarations
-    if cursor_node && cursor_node.kind == .IDENTIFIER {
-        ident := cast(*Identifier) cursor_node;
-        count:=0;
-
-        for d: decls {
-            if begins_with(d.name, ident.name) {
-                decls[count]=d;
-                count+=1;
-            }
-        }
-
-        decls.count=count;
-    }
-
-    log("Sending % declarations to complete non dot\n", decls.count);
-
-    if decls.count < 20 {
-        for d: decls {
-            log("%: %\n", it_index, d.name);
-        }
-    }
+    decls = get_declarations(file, cursor_block, *cursor_location);
 
     send_completions_decls(request, decls);
 }
@@ -209,32 +134,161 @@ handle_completitions_import :: (request: LSP_Request_Message_Completion, directi
     lsp_respond(request.id, completions);
 }
 
+handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
+    if !cursor_node {
+        return false;
+    }
+
+    op: *Binary_Operation;
+    if cursor_node.kind == .BINARY_OPERATION {
+        op = cast(*Binary_Operation, cursor_node);
+    } else if cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
+        op = cast(*Binary_Operation, cursor_node.parent);
+    } else {
+        return false;
+    }
+
+    path := get_dot_path(op, null);
+    // DEBUG
+    // log("dot path:");
+    // for path {
+    //     if it {
+    //         log("[%]: %", it_index, it.kind);
+    //     } else {
+    //         log("[%]: null", it_index);
+    //     }
+    // }
+
+    type := get_path_type(path);
+    if !type {
+        log_error("type is invalid! (null)");
+        return false;
+    }
+
+    return handle_completitions_for_node(request, type);
+}
+
+handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node: *Node) -> bool {
+    log("type kind: %", node.kind);
+
+    decls: [..]*Declaration;
+    defer array_free(decls);
+
+    // This is a macro so the declaration survive until parent scope.
+    add_decls_for_string_or_array :: (decls: *[..]*Declaration, type_inst_expression: *Node) #expand {
+        data_decl := Declaration.{
+            name = "data",
+            type_inst = *(Unary_Operation.{
+                operation=.POINTER,
+                expression=type_inst_expression
+            }),
+        };
+
+        array_add(decls, *data_decl);
+        array_add(decls, *array_count_declaration);
+    }
+
+    // @TODO: handle `using` modifiers like `except`, `only` and `filter`.
+    add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
+        block := get_block_of(node);
+        if !block {
+            log_error("block is not valid!");
+            return;
+        }
+
+        for member: block.members {
+            if !member continue;
+
+            if member.kind == {
+                case .DECLARATION;
+                    array_add(decls, cast(*Declaration, member));
+
+                case .USING;
+                    _using := cast(*Using) member;
+                    if !_using.expression || _using.expression.kind != .DECLARATION {
+                        continue;
+                    }
+
+                    using_decl := cast(*Declaration) _using.expression;
+
+                    used_type := get_node_type(using_decl);
+                    if !used_type {
+                        continue;
+                    }
+
+                    array_add(decls, cast(*Declaration) _using.expression); // Add using expression
+                    add_all_fields_of(decls, used_type); // Add all fields includes with using
+            }
+        }
+
+    }
+
+    if node.kind == {
+        case .UNION; #through;
+        case .ENUM; #through;
+        case .STRUCT;
+            add_all_fields_of(*decls, node);
+
+        case .ARRAY_TYPE;
+            array_type := cast(*Array_Type, node);
+            add_decls_for_string_or_array(*decls, array_type.element_type);
+
+        case .IDENTIFIER;
+            identifier := cast(*Identifier, node);
+
+            if identifier.name == {
+                case "string";
+                    add_decls_for_string_or_array(*decls, *(Identifier.{
+                        name = "u8",
+                    }));
+            }
+
+        case .LITERAL;
+            literal := cast(*Literal, node);
+
+            if literal.value_type == .STRING {
+                add_decls_for_string_or_array(*decls, *(Identifier.{
+                    name = "u8",
+                }));
+            }
+
+    }
+
+    if decls.count == 0 {
+        return false;
+    }
+
+    send_completions_decls(request, decls);
+
+    return true;
+}
+
 // @TODO: maybe move this to program?
-// get_dot_path_members :: (file: *Program_File, binary_op: *Binary_Operation) -> []*Declaration {
-//     members: [..]*Declaration;
+get_dot_path_members :: (binary_op: *Binary_Operation) -> []*Declaration {
+    members: [..]*Declaration;
 
-//     if binary_op.operation != .DOT return members;
+    if binary_op.operation != .DOT return members;
 
-//     if !binary_op.left return members;
+    if !binary_op.left return members;
 
-//     decl := goto_dot_path_member(file, binary_op, xx binary_op.left);
-//     if !decl return members;
+    decl := goto_dot_path_member(binary_op, xx binary_op.left);
+    if !decl return members;
 
-//     decl_type := get_node_type(file, decl);
-//     if !decl_type return members;
+    decl_type := get_node_type(decl);
+    if !decl_type return members;
 
-//     block := get_block_of(decl_type);
-//     if !block return members;
+    block := get_block_of(decl_type);
+    if !block return members;
 
-//     for member: block.members {
-//         if member.kind != .DECLARATION continue;
-//         array_add(*members, xx member);
-//     }
+    for member: block.members {
+        if member.kind != .DECLARATION continue;
+        array_add(*members, xx member);
+    }
 
-//     return members;
-// }
+    return members;
+}
 
-send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration, add_enum_member_dot: bool = false) {
+send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration) {
     completions: [..]LSP_Completion_Item;
     defer array_free(completions);
 
@@ -254,7 +308,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         if preview_node.kind == {
             case .PROCEDURE;
                 kind = .Function;
-                insert_text = tprint("%($0)", decl.name);
+                insert_text = sprint("%($0)", decl.name);
 
             case .STRUCT;
                 kind = .Struct;
@@ -276,47 +330,14 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         ast_print(*procedure_header_builder, preview_node); // @Memory @TODO: we need to free this afterwards!!
         procedure_header_preview := builder_to_string(*procedure_header_builder);
 
-        if decls.count == 1 && preview_node.kind == .ENUM {
-            _enum := cast(*Enum)preview_node;
-
-            if _enum.block {
-                for m: _enum.block.members {
-                    if m.kind ==  {
-                        case .IDENTIFIER;
-                            ident := cast(*Identifier)m;
-
-                            array_add(*completions, .{
-                                label=ident.name,
-                                kind=xx kind,
-                                insertText= ifx add_enum_member_dot then tprint(".%", ident.name) else ident.name,
-                                insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
-                                labelDetails = .{ description=procedure_header_preview }
-                            });
-                        case .DECLARATION;
-                            dd := cast(*Declaration)m;
-
-                            array_add(*completions, .{
-                                label=dd.name,
-                                kind=xx kind,
-                                insertText= ifx add_enum_member_dot then tprint(".%", dd.name) else dd.name,
-                                insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
-                                labelDetails = .{ description=procedure_header_preview }
-                            });
-                    }
-                }
-            }
-        } else {
-            array_add(*completions, .{
-                label=decl.name,
-                kind=xx kind,
-                insertText=insert_text,
-                insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
-                labelDetails = .{ description=procedure_header_preview }
-            });
-        }
-
+        array_add(*completions, .{
+            label=decl.name,
+            kind=xx kind,
+            insertText=insert_text,
+            insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
+            labelDetails = .{ description=procedure_header_preview }
+        });
     }
 
     lsp_respond(request.id, completions);
 }
-

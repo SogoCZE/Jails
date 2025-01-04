@@ -210,7 +210,7 @@ create_diagnostics_metaprogram :: () {
 }
 
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
-    log("Got %", request.method);
+    // log("Got %", request.method);
 
     if request.method == {
         case "shutdown";
@@ -265,7 +265,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
             }
 
-            analyze_files(update_workspace_symbols = true);
+            analyze_files();
 
             to_send: LSP_Result_Initialize;
             lsp_respond(body.id, to_send);
@@ -291,7 +291,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := normalize_path(body.params.textDocument.uri,, temp);
 
             parse_file(file_path, true);
-            analyze_files(update_workspace_symbols = true);
+            analyze_files();
 
         case "textDocument/didOpen";
             success, body := json_parse_string(raw_request, LSP_Did_Open_Text_Document,, temp);
@@ -307,7 +307,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             create_memory_file(file_path, content);
 
             parse_file(file_path);
-            analyze_files(update_workspace_symbols = true);
+            analyze_files();
 
             log("File_path: %", file_path);
 
@@ -321,7 +321,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             file_path := normalize_path(body.params.textDocument.uri,, temp);
             edit_memory_file(file_path, body.params.contentChanges);
             parse_file(file_path, true);
-            analyze_files(update_workspace_symbols = false);
+            analyze_files();
 
         case "textDocument/documentSymbol";
             success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol);
@@ -450,6 +450,7 @@ main :: () {
 #load "rpc.jai";
 #load "lsp_interface.jai";
 #load "program.jai";
+#load "diagnostics.jai";
 #load "memory_files.jai";
 
 #load "completition.jai";

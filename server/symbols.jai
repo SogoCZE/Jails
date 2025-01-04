@@ -199,7 +199,7 @@ lsp_document_symbol_from_node :: (node: *Node, default_symbol_kind: LSP_Symbol_K
 
             using_decl := cast(*Declaration) _using.expression;
 
-            used_type := get_node_type2(using_decl, false);
+            used_type := get_node_type(using_decl);
             if !used_type {
                 return .{}, false;
             }
