@@ -2,13 +2,15 @@
 - [x] Array, String completitions (data, count)
 - [x] Do not autocomplete when the full path was not resolved
 - [x] Array Subscript
-- [ ] Port stuff from completitions to go to definition
+- [ ] autocomplete `it`, `it_index` in loops
+- [ ] autocomplete custom loops values (`for name, name_index: names`)
 - [ ] Using
     - [ ] Structs, Enums, Unions
     - [ ] Global scope
     - [ ] Local scope
     - [ ] #as
-    - [ ] modules (using Math :: #import "Math";)
-- [ ] Prefixed modules (Math :: #import "Math";)
+    - [ ] modules (`using Math :: #import "Math";`)
+- [ ] Prefixed modules (`Math :: #import "Math";`)
+- [ ] Port stuff from completitions to go to definition
+- [ ] Autocomplete buildin procedures (`size_of`, `type_of` ...)
 - [ ] Mason registry (nvim)
-- [ ] Autocomplete buildin procedures (size_of, type_of ...)
