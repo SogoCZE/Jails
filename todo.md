@@ -1,8 +1,14 @@
 # TODO
-- [x] Array, String (data, count)
+- [x] Array, String completitions (data, count)
 - [x] Do not autocomplete when the full path was not resolved
 - [x] Array Subscript
+- [ ] Port stuff from completitions to go to definition
 - [ ] Using
-    - [ ]
-    - [ ]
+    - [ ] Structs, Enums, Unions
+    - [ ] Global scope
+    - [ ] Local scope
+    - [ ] #as
+    - [ ] modules (using Math :: #import "Math";)
+- [ ] Prefixed modules (Math :: #import "Math";)
 - [ ] Mason registry (nvim)
+- [ ] Autocomplete buildin procedures (size_of, type_of ...)
