@@ -4,7 +4,7 @@
 - [x] Array Subscript
 - [x] Deprecated procedures
 - [x] Port stuff from completitions to go to definition
-- [ ] autocomplete deref on pointer (`entity.*`)
+- [ ] Aliased/prefixed modules (`Math :: #import "Math";`)
 - [ ] autocomplete `it`, `it_index` in loops
 - [ ] autocomplete custom loops values (`for name, name_index: names`)
 - [ ] Using
@@ -14,6 +14,7 @@
     - [ ] modifiers (`except`, `only`, `map`)
     - [ ] #as
     - [ ] modules (`using Math :: #import "Math";`)
-- [ ] Prefixed modules (`Math :: #import "Math";`)
+- [ ] autocomplete deref on pointer (`entity.*`)
 - [ ] Autocomplete buildin procedures (`size_of`, `type_of` ...)
 - [ ] Mason registry (nvim)
+- [ ] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)

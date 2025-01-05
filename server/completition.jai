@@ -149,15 +149,6 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     }
 
     path := get_dot_path(op, null);
-    // DEBUG
-    // log("dot path:");
-    // for path {
-    //     if it {
-    //         log("[%]: %", it_index, it.kind);
-    //     } else {
-    //         log("[%]: null", it_index);
-    //     }
-    // }
 
     type := get_path_type(path);
     if !type {
@@ -253,6 +244,10 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
                     name = "u8",
                 }));
             }
+
+        case .DIRECTIVE_IMPORT;
+            import := cast(*Directive_Import) node;
+            log("IMPORT!!");
 
     }
 

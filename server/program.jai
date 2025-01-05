@@ -254,6 +254,11 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         module_import.root = path;
         module_import.module = _import.module;
 
+        // We don't want to include aliased imports here!
+        if _import.parent && _import.parent.kind == .DECLARATION {
+            return;
+        }
+
         array_add(*data.file.imports, module_import);
 
         parse_file(path); // @TODO: Run this in another thread?
@@ -730,6 +735,10 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         }
 
         if current_node.kind == .STRUCT {
+            return current_node;
+        }
+
+        if current_node.kind == .DIRECTIVE_IMPORT {
             return current_node;
         }
 
