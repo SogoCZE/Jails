@@ -239,11 +239,20 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
         case .LITERAL;
             literal := cast(*Literal, node);
 
-            if literal.value_type == .STRING {
-                add_decls_for_string_or_array(*decls, *(Identifier.{
-                    name = "u8",
-                }));
+            if literal.value_type == {
+                case .STRING;
+                    add_decls_for_string_or_array(*decls, *(Identifier.{
+                        name = "u8",
+                    }));
+
+                case .ARRAY;
+                    array_literal_info := literal.values.array_literal_info;
+                    if array_literal_info.element_type {
+                        add_decls_for_string_or_array(*decls, array_literal_info.element_type);
+                    }
+
             }
+
 
         case .DIRECTIVE_IMPORT;
             import := cast(*Directive_Import) node;

@@ -754,7 +754,29 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         }
 
         if current_node.kind == .LITERAL {
-            return current_node;
+            literal := cast(*Literal) current_node;
+
+            if literal.value_type == {
+                case .STRUCT;
+                    struct_literal_info := literal.values.struct_literal_info;
+                    if struct_literal_info.type {
+                        current_node = struct_literal_info.type;
+                        continue;
+                    }
+
+                case .ARRAY;
+                    array_literal_info := literal.values.array_literal_info;
+
+                    if solve_array && array_literal_info.element_type {
+                        current_node = array_literal_info.element_type;
+                        continue;
+                    } else {
+                        return current_node;
+                    }
+
+                case;
+                    return current_node;
+            }
         }
 
         if current_node.kind == .DECLARATION {
