@@ -430,6 +430,7 @@ main :: () {
 
 #import "Compiler";
 #import "Basic"()(MEMORY_DEBUGGER=MEMORY_DEBUG);
+#import "Print_Vars";
 #import "Command_Line";
 #import "File";
 #import "File_Utilities";

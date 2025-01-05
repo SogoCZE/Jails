@@ -188,7 +188,9 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
         array_add(decls, *array_count_declaration);
     }
 
-    // @TODO: handle `using` modifiers like `except`, `only` and `filter`.
+    // @TODO: handle `using` modifiers like `except`, `only` and `map`.
+    // @TODO: handle #as
+    // @TODO: Maybe move this to program as global?
     add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
         block := get_block_of(node);
         if !block {
@@ -263,31 +265,6 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
     return true;
 }
 
-// @TODO: maybe move this to program?
-get_dot_path_members :: (binary_op: *Binary_Operation) -> []*Declaration {
-    members: [..]*Declaration;
-
-    if binary_op.operation != .DOT return members;
-
-    if !binary_op.left return members;
-
-    decl := goto_dot_path_member(binary_op, xx binary_op.left);
-    if !decl return members;
-
-    decl_type := get_node_type(decl);
-    if !decl_type return members;
-
-    block := get_block_of(decl_type);
-    if !block return members;
-
-    for member: block.members {
-        if member.kind != .DECLARATION continue;
-        array_add(*members, xx member);
-    }
-
-    return members;
-}
-
 send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration) {
     completions: [..]LSP_Completion_Item;
     defer array_free(completions);
@@ -298,6 +275,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         kind: LSP_Completion_Item.Kind;
         preview_node: *Node;
         insert_text: string;
+        deprecated: bool;
 
         if decl.expression {
             preview_node = decl.expression;
@@ -308,6 +286,8 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         if preview_node.kind == {
             case .PROCEDURE;
                 kind = .Function;
+                procedure := cast(*Procedure) preview_node;
+                deprecated = procedure.deprecated_note.count > 0;
                 insert_text = sprint("%($0)", decl.name);
 
             case .STRUCT;
@@ -334,6 +314,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
             label=decl.name,
             kind=xx kind,
             insertText=insert_text,
+            deprecated=deprecated,
             insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
             labelDetails = .{ description=procedure_header_preview }
         });

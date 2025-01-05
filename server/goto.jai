@@ -28,6 +28,50 @@ handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_F
     lsp_respond(request.id, lsp_location);
 }
 
+handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
+    if !ident || !ident.parent return false;
+
+    leaf_node: *Node;
+    op: *Binary_Operation;
+
+    if ident.parent.kind == {
+        case .BINARY_OPERATION;
+            op = cast(*Binary_Operation) ident.parent;
+            leaf_node = ident;
+
+        case .ARRAY_SUBSCRIPT;
+            array_subscript := cast(*Array_Subscript) ident.parent;
+            if array_subscript.parent && array_subscript.parent.kind == .BINARY_OPERATION {
+                op = cast(*Binary_Operation) array_subscript.parent;
+                leaf_node = array_subscript;
+            }
+
+        // @TODO: anything else?
+    }
+
+    if !op return false;
+
+    path := get_dot_path(op, leaf_node);
+    if path.count == 1 {
+        return false;
+    }
+    path = array_view(path, 0, path.count-1);
+
+    type := get_path_type(path);
+    if !type {
+        return false;
+    }
+
+    decl := get_member_in(type, ident);
+    if !decl {
+        return false;
+    }
+
+    lsp_respond(request.id, node_location_to_lsp_location(decl.location));
+
+    return true;
+}
+
 handle_goto :: (request: LSP_Request_Message_Definition) {
     push_allocator(temp);
 
@@ -68,23 +112,9 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     ident := cast(*Identifier) node;
     log("Ident: %", ident.name);
 
-    if ident.parent && ident.parent.kind == .BINARY_OPERATION {
-        binary_op := cast(*Binary_Operation) ident.parent;
-
-        // @TODO: make this more robust!
-        // --------
-        // This is for cases like entity.name = "Foo";
-        if binary_op.operation != .DOT && binary_op.parent && binary_op.parent.kind == .BINARY_OPERATION {
-            binary_op = xx binary_op.parent;
-        }
-
-        result := goto_dot_path_member(binary_op, ident);
-        if result {
-            lsp_respond(request.id, node_location_to_lsp_location(result.location));
-            return;
-        }
+    if handle_goto_dot(request, ident) {
+        return;
     }
-
 
     decls := get_identifier_decl(ident);
     if decls.count == 0 {
@@ -98,20 +128,4 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     for decls locations[it_index] = node_location_to_lsp_location(it.location);
 
     lsp_respond(request.id, locations);
-}
-
-
-
-
-// @TODO: maybe move this to program?
-goto_dot_path_member :: (binary_op: *Binary_Operation, ident: *Identifier) -> *Declaration {
-    if binary_op.operation != .DOT return null;
-
-    root_op := get_root_of_dot_path(binary_op);
-    if !root_op return null;
-
-    result := get_dot_path_result(root_op, ident);
-    if !result return null;
-
-    return result;
 }

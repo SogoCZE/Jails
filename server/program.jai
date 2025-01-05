@@ -786,7 +786,8 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         }
 
         if current_node.kind == .BINARY_OPERATION {
-            current_node = get_dot_path_result(xx current_node);
+            path := get_dot_path(cast(*Binary_Operation) current_node, null);
+            current_node = get_path_type(path);
             continue;
         }
 
@@ -860,9 +861,30 @@ get_block_member_type :: (block: *Block, ident: *Identifier, solve_array := fals
 
 get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
     for member: block.members {
-        if member.kind != .DECLARATION continue;
-        decl := cast(*Declaration) member;
-        if decl.name == ident.name return xx member;
+        if member.kind == {
+            case .DECLARATION;
+                decl := cast(*Declaration) member;
+                if decl.name == ident.name return xx member;
+            case .USING;
+                _using := cast(*Using) member;
+                if !_using.expression || _using.expression.kind != .DECLARATION {
+                    continue;
+                }
+
+                using_decl := cast(*Declaration) _using.expression;
+
+                used_type := get_node_type(using_decl);
+                if used_type {
+                    decl := get_member_in(used_type, ident);
+                    if decl && decl.name == ident.name {
+                        return decl;
+                    }
+                }
+
+                if using_decl.name == ident.name {
+                    return using_decl;
+                }
+        }
     }
 
     return null;
@@ -969,57 +991,4 @@ get_path_type :: (path: []*Node) -> *Node {
     }
 
     return current_type;
-}
-
-get_dot_path_result :: (op: *Binary_Operation, target: *Identifier = null) -> *Declaration {
-    decl: *Declaration;
-    current_op := op;
-
-    if !current_op.left || current_op.left.kind != .IDENTIFIER return null;
-
-    current_type := get_node_type(current_op.left); // STRUCT, ENUM, UNION ...
-    if !current_type return null;
-
-    if current_op.left == target {
-        decls := get_identifier_decl(xx current_op.left);
-        if decls.count == 0 return null;
-        return decls[0];
-    }
-
-    while true {
-        if current_op.operation != .DOT break;
-        if !current_op.right break;
-
-        ident: *Identifier;
-        end := false;
-
-        if current_op.right.kind == {
-
-            case .IDENTIFIER;
-                ident = xx current_op.right;
-                end = true;
-
-            case .BINARY_OPERATION;
-                current_op = cast(*Binary_Operation) current_op.right;
-                ident = cast(*Identifier) current_op.left;
-
-            case; break;
-
-        }
-
-        if ident == target {
-            end = true;
-        }
-
-        member := get_member_in(current_type, ident);
-        if !member break;
-        decl = member;
-
-        if end break;
-
-        current_type = get_node_type(decl);
-        if !current_type break;
-    }
-
-    return decl;
 }
