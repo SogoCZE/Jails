@@ -896,15 +896,17 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
             case .DECLARATION;
                 decl := cast(*Declaration) member;
                 if decl.name == ident.name return xx member;
+
+            case .DIRECTIVE_AS; #through;
             case .USING;
-                _using := cast(*Using) member;
-                if !_using.expression || _using.expression.kind != .DECLARATION {
+                used_expression := get_used_expression(member);
+                if !used_expression || used_expression.kind != .DECLARATION {
                     continue;
                 }
 
-                using_decl := cast(*Declaration) _using.expression;
+                used_decl := cast(*Declaration) used_expression;
 
-                used_type := get_node_type(using_decl);
+                used_type := get_node_type(used_decl);
                 if used_type {
                     decl := get_member_in(used_type, ident);
                     if decl && decl.name == ident.name {
@@ -912,13 +914,39 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
                     }
                 }
 
-                if using_decl.name == ident.name {
-                    return using_decl;
+                if used_decl.name == ident.name {
+                    return used_decl;
                 }
         }
     }
 
     return null;
+}
+
+unwrap_as :: (node: *Node) -> *Node {
+    if !node return null;
+
+    if node.kind == .DIRECTIVE_AS {
+        directive_as := cast(*Directive_As) node;
+
+        if directive_as.expression && directive_as.expression.kind == .DIRECTIVE_AS {
+            return unwrap_as(directive_as.expression);
+        }
+
+        return directive_as.expression;
+    }
+
+    return node;
+}
+
+// get type of `using`
+get_used_expression :: (node: *Node) -> *Node {
+    unwrapped_node := unwrap_as(node);
+
+    if !unwrapped_node || unwrapped_node.kind != .USING return null;
+
+    _using := cast(*Using) unwrapped_node;
+    return unwrap_as(_using.expression);
 }
 
 // Can return null as last node!

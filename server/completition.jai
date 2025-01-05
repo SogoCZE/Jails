@@ -196,20 +196,22 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
                 case .DECLARATION;
                     array_add(decls, cast(*Declaration, member));
 
+                case .DIRECTIVE_AS; #through;
                 case .USING;
-                    _using := cast(*Using) member;
-                    if !_using.expression || _using.expression.kind != .DECLARATION {
+                    used_expression := get_used_expression(member);
+                    log_node(used_expression);
+                    if !used_expression || used_expression.kind != .DECLARATION {
                         continue;
                     }
 
-                    using_decl := cast(*Declaration) _using.expression;
+                    used_decl := cast(*Declaration) used_expression;
 
-                    used_type := get_node_type(using_decl);
+                    used_type := get_node_type(used_decl);
                     if !used_type {
                         continue;
                     }
 
-                    array_add(decls, cast(*Declaration) _using.expression); // Add using expression
+                    array_add(decls, cast(*Declaration) used_expression); // Add using expression
                     add_all_fields_of(decls, used_type); // Add all fields includes with using
             }
         }

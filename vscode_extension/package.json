@@ -1,7 +1,7 @@
 {
   "name": "jails",
-  "displayName": "Jails",
-  "description": "Experimental language server for Jai programming language",
+  "displayName": "Jai Language",
+  "description": "Experimental language support for Jai programming language (Language Server, Syntax highlighting)",
   "icon": "images/icon.png",
   "version": "0.2.0",
   "publisher": "ApparentlyStudio",

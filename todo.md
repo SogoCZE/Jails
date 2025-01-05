@@ -4,17 +4,18 @@
 - [x] Array Subscript
 - [x] Deprecated procedures
 - [x] Port stuff from completitions to go to definition
+- [ ] Fix enums completitons
 - [ ] Aliased/prefixed modules (`Math :: #import "Math";`)
 - [ ] autocomplete `it`, `it_index` in loops
 - [ ] autocomplete custom loops values (`for name, name_index: names`)
-- [ ] Using
-    - [ ] Structs, Enums, Unions
+- [ ] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
+- [-] Using
+    - [-] Structs, Enums, Unions
     - [ ] Global scope
     - [ ] Local scope
     - [ ] modifiers (`except`, `only`, `map`)
-    - [ ] #as
+    - [x] unwrap #as
     - [ ] modules (`using Math :: #import "Math";`)
 - [ ] autocomplete deref on pointer (`entity.*`)
 - [ ] Autocomplete buildin procedures (`size_of`, `type_of` ...)
 - [ ] Mason registry (nvim)
-- [ ] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
