@@ -915,13 +915,11 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
             case .DIRECTIVE_AS; #through;
             case .USING;
                 used_expression := get_used_expression(member);
-                if !used_expression || used_expression.kind != .DECLARATION {
+                if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
                     continue;
                 }
 
-                used_decl := cast(*Declaration) used_expression;
-
-                used_type := get_node_type(used_decl);
+                used_type := get_node_type(used_expression);
                 if used_type {
                     decl := get_member_in(used_type, ident);
                     if decl && decl.name == ident.name {
@@ -929,8 +927,11 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
                     }
                 }
 
-                if used_decl.name == ident.name {
-                    return used_decl;
+                if used_expression.kind == .DECLARATION {
+                    used_decl := cast(*Declaration) used_expression;
+                    if used_decl.name == ident.name {
+                        return used_decl;
+                    }
                 }
         }
     }
@@ -962,6 +963,17 @@ get_used_expression :: (node: *Node) -> *Node {
 
     _using := cast(*Using) unwrapped_node;
     return unwrap_as(_using.expression);
+}
+
+get_used_type :: (node: *Node) -> *Node {
+    used_expression := get_used_expression(node);
+    if !used_expression return null;
+
+    if used_expression.kind != .IDENTIFIER && used_expression.kind != .DECLARATION {
+        return null;
+    }
+
+    return get_node_type(used_expression);
 }
 
 // Can return null as last node!

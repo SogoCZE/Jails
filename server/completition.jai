@@ -210,18 +210,19 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
                 case .DIRECTIVE_AS; #through;
                 case .USING;
                     used_expression := get_used_expression(member);
-                    if !used_expression || used_expression.kind != .DECLARATION {
+                    if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
                         continue;
                     }
 
-                    used_decl := cast(*Declaration) used_expression;
-
-                    used_type := get_node_type(used_decl);
+                    used_type := get_node_type(used_expression);
                     if !used_type {
                         continue;
                     }
 
-                    array_add(decls, cast(*Declaration) used_expression); // Add using expression
+                    if used_expression.kind == .DECLARATION {
+                        array_add(decls, cast(*Declaration) used_expression); // Add using expression
+                    }
+
                     add_all_fields_of(decls, used_type); // Add all fields includes with using
             }
         }

@@ -193,25 +193,29 @@ lsp_document_symbol_from_node :: (node: *Node, default_symbol_kind: LSP_Symbol_K
         case .DIRECTIVE_AS; #through;
         case .USING;
             used_expression := get_used_expression(node);
-            if !used_expression || used_expression.kind != .DECLARATION {
+            if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
                 return .{}, false;
             }
 
-            used_decl := cast(*Declaration) used_expression;
+            symbol.detail = symbol.name;
 
-            used_type := get_node_type(used_decl);
+            if used_expression.kind == .DECLARATION {
+                used_decl := cast(*Declaration) used_expression;
+                symbol.name = used_decl.name;
+            }
+
+            used_type := get_node_type(used_expression);
             if !used_type {
                 return .{}, false;
             }
 
-            if used_type.parent && used_type.parent != used_decl {
+            if used_type.parent && used_type.parent != used_expression {
                 symbol, ok = lsp_document_symbol_from_node(used_type.parent, .FIELD);
             } else {
                 symbol, ok = lsp_document_symbol_from_node(used_type, .FIELD);
             }
 
-            symbol.detail = symbol.name;
-            symbol.name = used_decl.name;
+            // symbol.name = "Zadek";
 
         case .ENUM; #through;
         case .UNION; #through;
