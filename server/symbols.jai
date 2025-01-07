@@ -193,7 +193,6 @@ lsp_document_symbol_from_node :: (node: *Node, default_symbol_kind: LSP_Symbol_K
         case .DIRECTIVE_AS; #through;
         case .USING;
             used_expression := get_used_expression(node);
-            log_node(used_expression);
             if !used_expression || used_expression.kind != .DECLARATION {
                 return .{}, false;
             }

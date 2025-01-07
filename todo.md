@@ -1,10 +1,10 @@
 # TODO
-- [x] Array, String completitions (data, count)
+- [x] Array, String completions (data, count)
 - [x] Do not autocomplete when the full path was not resolved
 - [x] Array Subscript
 - [x] Deprecated procedures
-- [x] Port stuff from completitions to go to definition
-- [ ] Fix enums completitons
+- [x] Port stuff from completions to go to definition
+- [x] Fix enums completions
 - [ ] Aliased/prefixed modules (`Math :: #import "Math";`)
 - [ ] autocomplete `it`, `it_index` in loops
 - [ ] autocomplete custom loops values (`for name, name_index: names`)

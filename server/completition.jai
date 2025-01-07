@@ -193,13 +193,23 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
             if !member continue;
 
             if member.kind == {
+                case .IDENTIFIER;
+                    ident := cast(*Identifier) member;
+
+                    decl := New(Declaration); // @MEMORY: We should free this or it is temp?
+                    decl.name = ident.name;
+                    decl.expression = *empty_identifier;
+                    decl.location = ident.location;
+                    decl.const = true;
+
+                    array_add(decls, decl);
+
                 case .DECLARATION;
                     array_add(decls, cast(*Declaration, member));
 
                 case .DIRECTIVE_AS; #through;
                 case .USING;
                     used_expression := get_used_expression(member);
-                    log_node(used_expression);
                     if !used_expression || used_expression.kind != .DECLARATION {
                         continue;
                     }
@@ -215,7 +225,6 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
                     add_all_fields_of(decls, used_type); // Add all fields includes with using
             }
         }
-
     }
 
     if node.kind == {

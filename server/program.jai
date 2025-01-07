@@ -21,6 +21,10 @@ Linked_File :: struct {
     file: *Program_File;
 }
 
+empty_identifier := Identifier.{
+    name = "",
+};
+
 s64_node := Identifier.{
     name = "s64",
 };
@@ -893,6 +897,17 @@ get_block_member_type :: (block: *Block, ident: *Identifier, solve_array := fals
 get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
     for member: block.members {
         if member.kind == {
+            case .IDENTIFIER;
+                _ident := cast(*Identifier) member;
+                if _ident.name == ident.name {
+                    decl := New(Declaration); // @MEMORY: We should free this or it is temp?
+                    decl.name = _ident.name;
+                    decl.expression = *empty_identifier;
+                    decl.location = _ident.location;
+                    decl.const = true;
+
+                    return decl;
+                }
             case .DECLARATION;
                 decl := cast(*Declaration) member;
                 if decl.name == ident.name return xx member;
@@ -975,11 +990,14 @@ get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
     }
 
     // @TODO: Can we reverse without making new array? This seems dumb!
-    reversed_path := NewArray(path.count, *Node, false);
+    reversed_path: [..]*Node;
     index: int;
     for < node: path {
-        reversed_path[index] = node;
-        index += 1;
+        if node && node.kind != .IDENTIFIER && node.kind != .ARRAY_SUBSCRIPT {
+            return reversed_path;
+        }
+
+        array_add(*reversed_path, node);
     }
 
     return reversed_path;

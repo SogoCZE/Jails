@@ -1,4 +1,4 @@
-# https://github.com/rluba/lldb-jai
+# https://github.com/puremourning/lldb-jai
 
 DEBUG = 0
 USE_CMDS = 1
@@ -79,7 +79,7 @@ class ArrayChildrenProvider:
   def get_child_at_index(self, child_index):
     if child_index < len(self.native):
       return self.val.GetChildMemberWithName(self.native[child_index])
-      
+
     index = child_index - len(self.native);
     return self.data.CreateChildAtOffset( '[' + str(index) + ']',
                                           self.data_size * index,
