@@ -265,11 +265,19 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
 
             }
 
-
         case .DIRECTIVE_IMPORT;
             import := cast(*Directive_Import) node;
-            log("IMPORT!!");
 
+            module_file_path := get_module_import_path(import, node.location.file);
+            module_file := get_file(module_file_path);
+
+            if !module_file {
+                return false;
+            }
+
+            for get_declarations(module_file, only_loaded=true) {
+                array_add(*decls, it);
+            }
     }
 
     if decls.count == 0 {

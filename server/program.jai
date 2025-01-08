@@ -258,12 +258,9 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         module_import.root = path;
         module_import.module = _import.module;
 
-        // We don't want to include aliased imports here!
-        if _import.parent && _import.parent.kind == .DECLARATION {
-            return;
+        if !_import.parent || _import.parent.kind != .DECLARATION {
+            array_add(*data.file.imports, module_import);
         }
-
-        array_add(*data.file.imports, module_import);
 
         parse_file(path); // @TODO: Run this in another thread?
     }
@@ -413,7 +410,7 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
     return linked_files;
 }
 
-get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "") -> []*Declaration {
+get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "", only_loaded := false) -> []*Declaration {
     decls: [..]*Declaration;
 
     if from_block {
@@ -466,6 +463,8 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
         global := is_global(decl, file, linked_file.file, linked_file.from_import);
 
         if !global {
+            if !from_block || !decl_block return false;
+
             if decl.const {
                 if !is_child_of_block(decl_block, from_block) return false;
             } else {
@@ -479,6 +478,10 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
     }
 
     for linked_file: file.linked_files {
+
+        if only_loaded && linked_file.from_import {
+            continue;
+        }
 
         if name.count > 0 {
             for decl: table_find_multiple(*linked_file.file.declarations, name) {
@@ -728,11 +731,8 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
     while true {
         if !current_node break;
 
-        // log("[get_node_type] current_node.kind: %", current_node.kind);
-
         if current_node.kind == .IDENTIFIER {
             ident_decls := get_identifier_decl(xx current_node);
-            // log("ident_decls = % for %", ident_decls, (cast(*Identifier) current_node).name);
             if ident_decls.count == 0 return current_node;
             current_node = ident_decls[0];
             continue;
@@ -871,6 +871,24 @@ get_block_of :: (node: *Node) -> *Block {
 }
 
 get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
+    if parent.kind == .DIRECTIVE_IMPORT {
+        import := cast(*Directive_Import) parent;
+
+        module_file_path := get_module_import_path(import, parent.location.file);
+        module_file := get_file(module_file_path);
+
+        if !module_file {
+            return null;
+        }
+
+        decls := get_declarations(module_file, only_loaded=true, name=ident.name);
+        if decls.count == 0 {
+            return null;
+        }
+
+        return decls[0];
+    }
+
     block := get_block_of(parent);
     if !block return null;
     return get_block_member(block, ident);
@@ -1049,20 +1067,35 @@ get_path_type :: (path: []*Node) -> *Node {
                     continue;
                 }
 
+                if current_type.kind == .DIRECTIVE_IMPORT {
+                    decl := get_member_in(current_type, identifier);
+                    if !decl {
+                        break;
+                    }
+
+                    current_type = get_node_type(decl, solve_array);
+                    resolved_nodes += 1;
+                    continue;
+                }
+
                 if current_type.kind == .STRUCT {
                     _struct := cast(*Struct, current_type);
                     if !_struct.block {
                         break;
                     }
 
-                    type := get_block_member_type(_struct.block, cast(*Identifier, identifier), solve_array);
+                    log_node(_struct);
+                    log("_struct location: % (%)", _struct.location, identifier.name);
+
+                    type := get_block_member_type(_struct.block, identifier, solve_array);
                     if !type {
-                        log_error("Failed to get member type for %", cast(*Identifier, identifier).name);
+                        log_error("Failed to get member type for %", identifier.name);
                         break;
                     }
 
                     current_type = type;
                     resolved_nodes += 1;
+                    continue;
                 }
 
             case .LITERAL;
