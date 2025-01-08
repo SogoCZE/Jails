@@ -46,6 +46,13 @@ handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier)
                 leaf_node = array_subscript;
             }
 
+        case .PROCEDURE_CALL;
+            proc_call := cast(*Procedure_Call) ident.parent;
+            if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION {
+                op = cast(*Binary_Operation) proc_call.parent;
+                leaf_node = proc_call;
+            }
+
         // @TODO: anything else?
     }
 

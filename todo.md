@@ -6,18 +6,20 @@
 - [x] Port stuff from completions to go to definition
 - [x] Fix enums completions
 - [x] Aliased/prefixed modules (`Math :: #import "Math";`)
+- [x] Fix goto and completions for procedure calls inside aliased module (`Math.make_matrix4().`)
 - [-] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
-- [ ] autocomplete `it`, `it_index` in loops
-- [ ] autocomplete custom loops values (`for name, name_index: names`)
+- [ ] Autocomplete `it`, `it_index` in loops
+- [ ] Autocomplete custom loops values (`for name, name_index: names`)
 - [-] Using
     - [-] Structs, Enums, Unions
     - [ ] Global scope
     - [ ] Local scope
-    - [ ] modifiers (`except`, `only`, `map`)
-    - [x] unwrap #as
-    - [ ] modules (`using Math :: #import "Math";`)
-- [ ] autocomplete deref on pointer (`entity.*`)
+    - [ ] Modifiers (`except`, `only`, `map`)
+    - [x] Unwrap #as
+    - [ ] Modules (`using Math :: #import "Math";`)
+- [ ] Autocomplete deref on pointer (`entity.*`)
 - [ ] Fix broken completions for local variables across some boundaries like if-switch.
-- [ ] support for compound declaration (`x,y,z: float;`)
+- [ ] Support for compound declaration (`x,y,z: float;`)
 - [ ] Autocomplete buildin procedures (`size_of`, `type_of` ...)
 - [ ] Mason registry (nvim)
+- [ ] Implement "fake" methods completions for types that are taken as the first argument of some procedures

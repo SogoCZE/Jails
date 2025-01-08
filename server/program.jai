@@ -742,6 +742,14 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
             return current_node;
         }
 
+        if current_node.kind == .UNION {
+            return current_node;
+        }
+
+        if current_node.kind == .ENUM {
+            return current_node;
+        }
+
         if current_node.kind == .DIRECTIVE_IMPORT {
             return current_node;
         }
@@ -786,23 +794,7 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         if current_node.kind == .DECLARATION {
             decl := cast(*Declaration) current_node;
 
-            if decl.expression {
-
-                if decl.expression.kind == .STRUCT || decl.expression.kind == .ENUM || decl.expression.kind == .UNION {
-                    return decl.expression;
-                }
-
-                if decl.expression.kind == .PROCEDURE {
-                    proc := cast(*Procedure) decl.expression;
-                    if proc.returns.count > 0 {
-                        current_node = proc.returns[0];
-                        continue;
-                    }
-                }
-
-            }
-
-            if decl.type_inst  {
+            if decl.type_inst {
                 current_node = decl.type_inst;
                 continue;
             }
@@ -829,7 +821,21 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         if current_node.kind == .PROCEDURE_CALL {
             proc_call := cast(*Procedure_Call) current_node;
             current_node = proc_call.procedure;
+            log("Got there!");
             continue;
+        }
+
+        if current_node.kind == .PROCEDURE {
+            proc := cast(*Procedure) current_node;
+
+            log("Got there!");
+
+            if proc.returns.count > 0 {
+                current_node = proc.returns[0].expression;
+                continue;
+            } else {
+                continue;
+            }
         }
 
         if current_node.kind == .UNARY_OPERATION {
@@ -1023,7 +1029,7 @@ get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
     reversed_path: [..]*Node;
     index: int;
     for < node: path {
-        if node && node.kind != .IDENTIFIER && node.kind != .ARRAY_SUBSCRIPT {
+        if node && node.kind != .IDENTIFIER && node.kind != .ARRAY_SUBSCRIPT && node.kind != .PROCEDURE_CALL {
             return reversed_path;
         }
 
@@ -1041,6 +1047,7 @@ get_path_type :: (path: []*Node) -> *Node {
         if !node break;
 
         if node.kind == {
+            case .PROCEDURE_CALL; #through;
             case .ARRAY_SUBSCRIPT; #through;
             case .IDENTIFIER;
                 identifier: *Identifier;
@@ -1056,6 +1063,13 @@ get_path_type :: (path: []*Node) -> *Node {
 
                     identifier = cast(*Identifier) array_subscript.expression;
                     solve_array = true;
+                } else if node.kind == .PROCEDURE_CALL {
+                    proc_call := cast(*Procedure_Call) node;
+                    if !proc_call.procedure || proc_call.procedure.kind != .IDENTIFIER {
+                        return null;
+                    }
+
+                    identifier = cast(*Identifier) proc_call.procedure;
                 }
 
                 if !current_type {
@@ -1083,9 +1097,6 @@ get_path_type :: (path: []*Node) -> *Node {
                     if !_struct.block {
                         break;
                     }
-
-                    log_node(_struct);
-                    log("_struct location: % (%)", _struct.location, identifier.name);
 
                     type := get_block_member_type(_struct.block, identifier, solve_array);
                     if !type {
