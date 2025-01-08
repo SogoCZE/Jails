@@ -821,14 +821,11 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         if current_node.kind == .PROCEDURE_CALL {
             proc_call := cast(*Procedure_Call) current_node;
             current_node = proc_call.procedure;
-            log("Got there!");
             continue;
         }
 
         if current_node.kind == .PROCEDURE {
             proc := cast(*Procedure) current_node;
-
-            log("Got there!");
 
             if proc.returns.count > 0 {
                 current_node = proc.returns[0].expression;
