@@ -5,10 +5,10 @@
 - [x] Deprecated procedures
 - [x] Port stuff from completions to go to definition
 - [x] Fix enums completions
+- [-] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
 - [ ] Aliased/prefixed modules (`Math :: #import "Math";`)
 - [ ] autocomplete `it`, `it_index` in loops
 - [ ] autocomplete custom loops values (`for name, name_index: names`)
-- [ ] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
 - [-] Using
     - [-] Structs, Enums, Unions
     - [ ] Global scope
