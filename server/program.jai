@@ -410,6 +410,24 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
     return linked_files;
 }
 
+should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *Block, from_loc: *Node.Location, decl: *Declaration) -> bool {
+    decl_block := get_node_nearest_block(decl);
+    global := is_global(decl, file, linked_file.file, linked_file.from_import);
+
+    if !global {
+        if !from_block || !decl_block return false;
+
+        if decl.const {
+            if !is_child_of_block(decl_block, from_block, true) return false;
+        } else {
+            if !is_child_of_block(decl_block, from_block) return false;
+            if from_loc && from_loc.l0 < decl.location.l0 return false;
+        }
+    }
+
+    return true;
+}
+
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "", only_loaded := false) -> []*Declaration {
     decls: [..]*Declaration;
 
@@ -456,25 +474,6 @@ get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *
 
         }
 
-    }
-
-    should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *Block, from_loc: *Node.Location, decl: *Declaration) -> bool {
-        decl_block := get_node_nearest_block(decl);
-        global := is_global(decl, file, linked_file.file, linked_file.from_import);
-
-        if !global {
-            if !from_block || !decl_block return false;
-
-            if decl.const {
-                if !is_child_of_block(decl_block, from_block) return false;
-            } else {
-                // log("Scopes, % ?? %", decl_block, from_block);
-                if decl_block != from_block return false;
-                if from_loc && from_loc.l0 < decl.location.l0 return false;
-            }
-        }
-
-        return true;
     }
 
     for linked_file: file.linked_files {
@@ -662,17 +661,20 @@ get_node_nearest_block :: (node: *Node) -> *Block {
     return current_block;
 }
 
-is_child_of_block :: (block: *Block, node: *Node) -> bool {
+is_child_of_block :: (block: *Block, node: *Node, ignore_scoping := false) -> bool {
     if !block || !node return false;
 
     current_node := node;
-
-    // log("Last %", current_node.*);
 
     if current_node == block return true;
 
     while current_node.parent {
         current_node = current_node.parent;
+
+        if !ignore_scoping && current_node.kind != .BLOCK && current_node.kind != .IF && current_node.kind != .CASE {
+            return false;
+        }
+
         if current_node == block return true;
     }
 

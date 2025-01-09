@@ -9,6 +9,7 @@
 - [x] Fix goto and completions for procedure calls inside aliased module (`Math.make_matrix4().`)
 - [x] Fix signature help with procedures in aliased module or struct
 - [-] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
+- [-] Fix broken completions for local variables across some boundaries like if-switch.
 - [ ] Autocomplete `it`, `it_index` in loops
 - [ ] Autocomplete custom loops values (`for name, name_index: names`)
 - [-] Using
@@ -19,7 +20,6 @@
     - [x] Unwrap #as
     - [ ] Modules (`using Math :: #import "Math";`)
 - [ ] Autocomplete deref on pointer (`entity.*`)
-- [ ] Fix broken completions for local variables across some boundaries like if-switch.
 - [ ] Support for compound declaration (`x,y,z: float;`)
 - [ ] Autocomplete buildin procedures (`size_of`, `type_of` ...)
 - [ ] Mason registry (nvim)
