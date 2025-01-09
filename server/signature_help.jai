@@ -20,14 +20,43 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     }
 
     proc_call_ident := cast(*Identifier) proc_call.procedure;
-
-    decls := get_declarations(file, cursor_block, *cursor_location, proc_call_ident.name);
-    if decls.count == 0 {
+    if !proc_call_ident {
         lsp_respond(request.id, null);
         return;
     }
 
-    proc_decl := decls[0];
+    proc_decl: *Declaration;
+
+    if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION {
+        path := get_dot_path(cast(*Binary_Operation) proc_call.parent, proc_call);
+        if path.count == 1 {
+            lsp_respond(request.id, null);
+            return;
+        }
+        path = array_view(path, 0, path.count-1);
+
+        type := get_path_type(path);
+        if !type {
+            lsp_respond(request.id, null);
+            return;
+        }
+
+        proc_decl = get_member_in(type, proc_call_ident);
+    } else {
+        decls := get_declarations(file, cursor_block, *cursor_location, proc_call_ident.name);
+        if decls.count == 0 {
+            lsp_respond(request.id, null);
+            return;
+        }
+
+        proc_decl = decls[0];
+    }
+
+    if !proc_decl {
+        lsp_respond(request.id, null);
+        return;
+    }
+
     if !proc_decl.expression || proc_decl.expression.kind != .PROCEDURE {
         lsp_respond(request.id, null);
         return;

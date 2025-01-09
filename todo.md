@@ -7,6 +7,7 @@
 - [x] Fix enums completions
 - [x] Aliased/prefixed modules (`Math :: #import "Math";`)
 - [x] Fix goto and completions for procedure calls inside aliased module (`Math.make_matrix4().`)
+- [x] Fix signature help with procedures in aliased module or struct
 - [-] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
 - [ ] Autocomplete `it`, `it_index` in loops
 - [ ] Autocomplete custom loops values (`for name, name_index: names`)
