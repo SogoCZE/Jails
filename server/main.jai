@@ -134,14 +134,8 @@ find_jai_path :: (executable_name: string) -> string {
         }
     }
 
-    // @TODO: error that we cant find jai path
     if raw_path.count == 0 {
-        // log_error("Error while resolving Jai path % %.", result, err);
-
-        #if OS == .MACOS {
-            if executable_name == "jai" return "";
-            return find_jai_path("jai");
-        } else #if OS == .LINUX {
+        #if OS == .MACOS || OS == .LINUX {
             if executable_name == "jai" return "";
             return find_jai_path("jai");
         }
