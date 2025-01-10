@@ -122,13 +122,18 @@ find_jai_path :: (executable_name: string) -> string {
         raw_path = replace(raw_path, tprint("%: ", executable_name), "");
         raw_path = trim(raw_path);
 
-        // BUFFER_SIZE :: 4096;
-        // buf: [BUFFER_SIZE] u8;
+        BUFFER_SIZE :: 4096;
+        buf: [BUFFER_SIZE] u8;
 
-        // length := readlink(to_c_string(raw_path), buf.data, BUFFER_SIZE);
-        // if length > 0 {
-        //     raw_path = to_string(buf.data);
-        // }
+        length := readlink(to_c_string(raw_path), buf.data, BUFFER_SIZE);
+        if length > 0 {
+            resolved_path := to_string(buf.data);
+            if begins_with(resolved_path, "/") {
+                raw_path = resolved_path;
+            } else {
+                return "";
+            }
+        }
     }
 
     // @TODO: error that we cant find jai path
