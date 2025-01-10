@@ -13,7 +13,7 @@
 - [x] Autocomplete `it`, `it_index` in loops
 - [x] Autocomplete custom loops values (`for name, name_index: names`)
 - [-] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
-- [-] Fix broken completions for local variables across some boundaries like if-switch.
+- [-] Fix broken completions for local variables across some boundaries like if-switch
 - [-] Using
     - [-] Structs, Enums, Unions
     - [ ] Global scope
@@ -21,7 +21,8 @@
     - [ ] Modifiers (`except`, `only`, `map`)
     - [x] Unwrap #as
     - [ ] Modules (`using Math :: #import "Math";`)
-- [ ] Improve Linux and nvim support.
+- [ ] Improve Linux and nvim support
+- [ ] Implement basic procedure overload resolution
 - [ ] Autocomplete deref on pointer (`entity.*`)
 - [ ] Support for compound declaration (`x,y,z: float;`)
 - [ ] Autocomplete buildin procedures (`size_of`, `type_of` ...)

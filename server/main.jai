@@ -133,14 +133,14 @@ find_jai_path :: (executable_name: string) -> string {
 
     // @TODO: error that we cant find jai path
     if raw_path.count == 0 {
-        log_error("Error while resolving Jai path % %.", result, err);
+        // log_error("Error while resolving Jai path % %.", result, err);
 
         #if OS == .MACOS {
-            if executable_name == "jai-macos" return "";
-            return find_jai_path("jai-macos");
+            if executable_name == "jai" return "";
+            return find_jai_path("jai");
         } else #if OS == .LINUX {
-            if executable_name == "jai-linux" return "";
-            return find_jai_path("jai-linux");
+            if executable_name == "jai" return "";
+            return find_jai_path("jai");
         }
 
         return "";
@@ -414,8 +414,22 @@ main :: () {
     }
 
     if server.args.jai_path.count == 0 {
-        server.args.jai_path = find_jai_path("jai");
-        log("Jai path: %", server.args.jai_path);
+        jai_name: string;
+        #if OS == .WINDOWS {
+            jai_name = "jai";
+        } else #if OS == .MACOS {
+            jai_name = "jai-macos";
+        } else #if OS == .LINUX {
+            jai_name = "jai-linux";
+        }
+
+        server.args.jai_path = find_jai_path(jai_name);
+        if !server.args.jai_path {
+            log_error("Failed to resolve Jai path");
+            // @TODO: Send this fatal error over LSP somehow?
+        } else {
+            log("Jai path: %", server.args.jai_path);
+        }
     }
 
     log("Args are %", server.args);
