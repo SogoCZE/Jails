@@ -21,6 +21,7 @@
     - [ ] Modifiers (`except`, `only`, `map`)
     - [x] Unwrap #as
     - [ ] Modules (`using Math :: #import "Math";`)
+- [ ] Improve Linux and nvim support.
 - [ ] Autocomplete deref on pointer (`entity.*`)
 - [ ] Support for compound declaration (`x,y,z: float;`)
 - [ ] Autocomplete buildin procedures (`size_of`, `type_of` ...)

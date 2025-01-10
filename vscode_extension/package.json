@@ -17,7 +17,7 @@
   "scripts": {
     "compile": "tsc -b",
     "watch": "tsc --watch",
-    "pack:linux": "cp ../bin/jails ./out/jails-linux && vsce package",
+    "pack:linux": "cp ../bin/jails ./out/jails-linux-x64 && vsce package",
     "pack:mac": "cp ../bin/jails ./out/jails-darwin-arm64 && vsce package",
     "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win32-x64.exe && vsce package"
   },

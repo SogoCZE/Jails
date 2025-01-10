@@ -465,14 +465,31 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, n
             _for := cast(*For) parent_type;
 
             iterator_type := get_node_type(_for.iterator, false);
-            if !iterator_type || iterator_type.kind != .ARRAY_TYPE {
-                // log("iterator_type is not array type");
+            if !iterator_type {
                 return;
             }
 
-            array_type := cast(*Array_Type) iterator_type;
-            if !array_type.element_type {
-                return;
+            element_type: *Node;
+            if iterator_type.kind == {
+                case .ARRAY_TYPE;
+                    array_type := cast(*Array_Type) iterator_type;
+                    if !array_type.element_type {
+                        return;
+                    }
+
+                    element_type = array_type.element_type;
+
+                case .LITERAL;
+                    literal := cast(*Literal) iterator_type;
+                    if literal.value_type != .ARRAY {
+                        return;
+                    }
+
+                    element_type = literal.array_literal_info.element_type;
+            }
+
+            if !element_type {
+                element_type = *unknown_identifier_node;
             }
 
             it_declaration := New(Declaration);
@@ -499,10 +516,10 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, n
             if _for.by_pointer {
                 pointer_wrapper := New(Unary_Operation);
                 pointer_wrapper.operation = .POINTER;
-                pointer_wrapper.expression = array_type.element_type;
+                pointer_wrapper.expression = element_type;
                 it_declaration.type_inst = pointer_wrapper;
             } else {
-                it_declaration.type_inst = array_type.element_type;
+                it_declaration.type_inst = element_type;
             }
 
             if name.count == 0 || it_declaration.name == name array_add(decls, it_declaration);
