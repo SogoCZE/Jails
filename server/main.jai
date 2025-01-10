@@ -119,6 +119,7 @@ find_jai_path :: (executable_name: string) -> string {
             result, raw_path, err = run_command("whereis", executable_name, capture_and_return_output=true);
         }
 
+        raw_path = replace(raw_path, tprint("%: ", executable_name), "");
         raw_path = trim(raw_path);
 
         BUFFER_SIZE :: 4096;
