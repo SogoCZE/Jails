@@ -1,4 +1,6 @@
 # TODO
+
+## 0.2.0
 - [x] Array, String completions (data, count)
 - [x] Do not autocomplete when the full path was not resolved
 - [x] Array Subscript
@@ -8,10 +10,10 @@
 - [x] Aliased/prefixed modules (`Math :: #import "Math";`)
 - [x] Fix goto and completions for procedure calls inside aliased module (`Math.make_matrix4().`)
 - [x] Fix signature help with procedures in aliased module or struct
+- [x] Autocomplete `it`, `it_index` in loops
+- [x] Autocomplete custom loops values (`for name, name_index: names`)
 - [-] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
 - [-] Fix broken completions for local variables across some boundaries like if-switch.
-- [ ] Autocomplete `it`, `it_index` in loops
-- [ ] Autocomplete custom loops values (`for name, name_index: names`)
 - [-] Using
     - [-] Structs, Enums, Unions
     - [ ] Global scope

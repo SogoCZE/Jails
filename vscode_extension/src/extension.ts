@@ -25,12 +25,12 @@ export function activate(context: ExtensionContext) {
         process.exit();
     }
 
-    let serverOptions: ServerOptions = {
+    const serverOptions: ServerOptions = {
         command: devServerPath,
         args: [],
     };
 
-    let clientOptions: LanguageClientOptions = {
+    const clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: "file", language: "jai" }],
     };
 

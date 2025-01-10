@@ -42,11 +42,6 @@ array_count_declaration := Declaration.{
     type_inst = xx *s64_node
 };
 
-array_data_declaration := Declaration.{
-    name = "data",
-    type_inst = xx *void_star_node
-};
-
 init_file :: (using file: Program_File) {
     init(*declarations);
     init(*resolved_identifiers);
@@ -331,21 +326,23 @@ get_module_import_path :: (_import: *Directive_Import, current_path: string) -> 
 
 resolve_identifiers :: (file: *Program_File) {
     for node: file.nodes {
-        if node.kind == .IDENTIFIER {
-            ident := cast(*Identifier) node;
-            // log("Ident: %", ident.name);
-            block := get_node_nearest_block(ident);
-            decls := get_declarations(file, block, *ident.location, ident.name);
-            if decls.count < 1 {
-                if ident.name == "print" {
-                    log_error("Did not find any decl for '%'!", ident.name);
-                }
-                continue;
-            }
+        if node.kind != .IDENTIFIER continue; //
 
-            table_add(*file.resolved_identifiers, ident, decls);
+        ident := cast(*Identifier) node;
+
+        // log("Resolving '%' ident at %:%:%", ident.name, ident.location.file, ident.location.l0, ident.location.c0);
+
+        // log("Ident: %", ident.name);
+        block := get_node_nearest_block(ident);
+        decls := get_declarations(file, block, *ident.location, ident.name);
+        if decls.count == 0 {
+            if ident.name == "it" && contains(ident.location.file, "main.jai") {
+                // log_error("Did not find any decl for '%'! %", ident.name, ident.location.file);
+            }
+            continue;
         }
 
+        table_add(*file.resolved_identifiers, ident, decls);
     }
 }
 
@@ -428,52 +425,96 @@ should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *
     return true;
 }
 
+get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, name := "") {
+    parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION || kind == .FOR);
+    if !parent_type return;
+
+    if parent_type.kind == {
+
+        case .PROCEDURE;
+            proc := cast(*Procedure) parent_type;
+
+            for arg: proc.arguments {
+                if arg.kind != .DECLARATION continue;
+                decl := cast(*Declaration) arg;
+
+                if name.count == 0 || decl.name == name array_add(decls, decl);
+            }
+
+        case .STRUCT;
+            _struct := cast(*Struct) parent_type;
+
+            for arg: _struct.polymorphic_arguments {
+                if arg.kind != .DECLARATION continue;
+                decl := cast(*Declaration) arg;
+
+                if name.count == 0 || decl.name == name array_add(decls, decl);
+            }
+
+        case .UNION;
+            _union := cast(*Union) parent_type;
+
+            for arg: _union.polymorphic_arguments {
+                if arg.kind != .DECLARATION continue;
+                decl := cast(*Declaration) arg;
+
+                if name.count == 0 || decl.name == name array_add(decls, decl);
+            }
+
+        case .FOR;
+            _for := cast(*For) parent_type;
+
+            iterator_type := get_node_type(_for.iterator, false);
+            if !iterator_type || iterator_type.kind != .ARRAY_TYPE {
+                // log("iterator_type is not array type");
+                return;
+            }
+
+            array_type := cast(*Array_Type) iterator_type;
+            if !array_type.element_type {
+                return;
+            }
+
+            it_declaration := New(Declaration);
+            it_declaration.name = "it";
+            it_declaration.location = _for.iterator.location;
+
+            if _for.value && _for.value.kind == .IDENTIFIER {
+                value_identifier := cast(*Identifier) _for.value;
+                it_declaration.name = value_identifier.name;
+                it_declaration.location = value_identifier.location;
+            }
+
+            it_index_decl := New(Declaration);
+            it_index_decl.name = "it_index";
+            it_index_decl.location = _for.iterator.location;
+            it_index_decl.type_inst = *s64_node;
+
+            if _for.index && _for.index.kind == .IDENTIFIER {
+                index_identifier := cast(*Identifier) _for.index;
+                it_index_decl.name = index_identifier.name;
+                it_index_decl.location = index_identifier.location;
+            }
+
+            if _for.by_pointer {
+                pointer_wrapper := New(Unary_Operation);
+                pointer_wrapper.operation = .POINTER;
+                pointer_wrapper.expression = array_type.element_type;
+                it_declaration.type_inst = pointer_wrapper;
+            } else {
+                it_declaration.type_inst = array_type.element_type;
+            }
+
+            if name.count == 0 || it_declaration.name == name array_add(decls, it_declaration);
+            if name.count == 0 || it_index_decl.name == name array_add(decls, it_index_decl);
+    }
+}
+
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "", only_loaded := false) -> []*Declaration {
     decls: [..]*Declaration;
 
     if from_block {
-
-        parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION);
-
-        // Procedure or Struct params
-        if parent_type {
-
-            if parent_type.kind == {
-
-                case .PROCEDURE;
-                    proc := cast(*Procedure) parent_type;
-
-                    for arg: proc.arguments {
-                        if arg.kind != .DECLARATION continue;
-                        decl := cast(*Declaration) arg;
-
-                        if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }
-
-                case .STRUCT;
-                    _struct := cast(*Struct) parent_type;
-
-                    for arg: _struct.polymorphic_arguments {
-                        if arg.kind != .DECLARATION continue;
-                        decl := cast(*Declaration) arg;
-
-                        if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }
-
-                case .UNION;
-                    _union := cast(*Union) parent_type;
-
-                    for arg: _union.polymorphic_arguments {
-                        if arg.kind != .DECLARATION continue;
-                        decl := cast(*Declaration) arg;
-
-                        if name.count == 0 || decl.name == name array_add(*decls, decl);
-                    }
-
-            }
-
-        }
-
+        get_declarations_from_parent(*decls, from_block, name);
     }
 
     for linked_file: file.linked_files {
@@ -502,7 +543,7 @@ get_node_nearest_parent :: (node: *Node, predicate: (Node.Kind) -> bool, limit :
     i: int;
 
     while true {
-        if predicate(current.kind) return xx current;
+        if predicate(current.kind) return current;
 
         if i >= limit break;
         i += 1;
@@ -635,31 +676,44 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
 
 get_node_nearest_block :: (node: *Node) -> *Block {
     current_node := node;
-    current_block: *Block;
 
     while current_node.parent {
         current_node = current_node.parent;
-
-        if current_node.kind == .PROCEDURE || current_node.kind == .STRUCT break;
-
         if current_node.kind == .BLOCK {
-            block := cast(*Block) current_node;
-            current_block = xx block;
-
-            if !block.parent break;
-
-            if block.parent.kind == {
-                case .PROCEDURE; break;
-                case .STRUCT; break;
-                case .UNION; break;
-                case .ENUM; break;
-            }
-
+            return cast(*Block) current_node;
         }
     }
 
-    return current_block;
+    return null;
 }
+
+// get_node_nearest_block :: (node: *Node) -> *Block {
+//     current_node := node;
+//     current_block: *Block;
+
+//     while current_node.parent {
+//         current_node = current_node.parent;
+
+//         if current_node.kind == .PROCEDURE || current_node.kind == .STRUCT break;
+
+//         if current_node.kind == .BLOCK {
+//             block := cast(*Block) current_node;
+//             current_block = xx block;
+
+//             if !block.parent break;
+
+//             if block.parent.kind == {
+//                 case .PROCEDURE; break;
+//                 case .STRUCT; break;
+//                 case .UNION; break;
+//                 case .ENUM; break;
+//             }
+
+//         }
+//     }
+
+//     return current_block;
+// }
 
 is_child_of_block :: (block: *Block, node: *Node, ignore_scoping := false) -> bool {
     if !block || !node return false;
@@ -671,7 +725,7 @@ is_child_of_block :: (block: *Block, node: *Node, ignore_scoping := false) -> bo
     while current_node.parent {
         current_node = current_node.parent;
 
-        if !ignore_scoping && current_node.kind != .BLOCK && current_node.kind != .IF && current_node.kind != .CASE {
+        if !ignore_scoping && current_node.kind != .BLOCK && current_node.kind != .IF && current_node.kind != .CASE && current_node.kind != .FOR && current_node.kind != .WHILE {
             return false;
         }
 
@@ -732,6 +786,8 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
 
     while true {
         if !current_node break;
+
+        // log("Resolving type: % (%:%:%)", current_node.kind, current_node.location.file, current_node.location.l0, current_node.location.c0);
 
         if current_node.kind == .IDENTIFIER {
             ident_decls := get_identifier_decl(xx current_node);
@@ -838,8 +894,13 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         }
 
         if current_node.kind == .UNARY_OPERATION {
-            current_node = unwrap_pointer(xx current_node);
-            continue;
+            unary_op := cast(*Unary_Operation) current_node;
+            if unary_op.operation == .POINTER {
+                current_node = unwrap_pointer(xx current_node);
+                continue;
+            }
+
+            break;
         }
 
         if current_node.kind == .CAST {
@@ -1099,7 +1160,7 @@ get_path_type :: (path: []*Node) -> *Node {
 
                     type := get_block_member_type(_struct.block, identifier, solve_array);
                     if !type {
-                        log_error("Failed to get member type for %", identifier.name);
+                        // log_error("Failed to get member type for %", identifier.name);
                         break;
                     }
 
