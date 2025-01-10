@@ -130,8 +130,6 @@ find_jai_path :: (executable_name: string) -> string {
             resolved_path := to_string(buf.data);
             if begins_with(resolved_path, "/") {
                 raw_path = resolved_path;
-            } else {
-                return "";
             }
         }
     }
