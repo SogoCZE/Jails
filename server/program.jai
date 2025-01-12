@@ -1076,7 +1076,9 @@ get_used_type :: (node: *Node) -> *Node {
 get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
     path: [..]*Node;
 
-
+    if root_binary_op.operation != .DOT {
+        return path;
+    }
 
     if !from {
         // Append even null nodes so we know we have empty "." entry (monster.items[0].)
@@ -1096,6 +1098,11 @@ get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
     current_op: *Binary_Operation = root_binary_op;
     while current_op.parent && current_op.parent.kind == .BINARY_OPERATION {
         current_op = cast(*Binary_Operation, current_op.parent);
+
+        if current_op.operation != .DOT {
+            break;
+        }
+
         if current_op.left array_add(*path, current_op.left);
     }
 
