@@ -59,9 +59,10 @@ handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier)
     if !op return false;
 
     path := get_dot_path(op, leaf_node);
-    if path.count == 1 {
+    if path.count < 2 {
         return false;
     }
+
     path = array_view(path, 0, path.count-1);
 
     type := get_path_type(path);

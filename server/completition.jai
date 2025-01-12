@@ -39,6 +39,10 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         return;
     }
 
+    if handle_assignment_completitions(request, cursor_node) {
+        return;
+    }
+
     // Binary OP
     // if cursor_node && cursor_node.kind == .BINARY_OPERATION {
     //     op := cast(*Binary_Operation) cursor_node;
@@ -148,6 +152,10 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
         return false;
     }
 
+    if op.operation != .DOT {
+        return false;
+    }
+
     path := get_dot_path(op, null);
 
     type := get_path_type(path);
@@ -160,6 +168,33 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     // log_node(type);
 
     return handle_completitions_for_node(request, type);
+}
+
+handle_assignment_completitions :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
+    op: *Binary_Operation;
+    if cursor_node.kind == .BINARY_OPERATION {
+        op = cast(*Binary_Operation, cursor_node);
+    } else if cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
+        op = cast(*Binary_Operation, cursor_node.parent);
+    } else {
+        return false;
+    }
+
+    if op.operation != .ASSING && op.operation != .IS_EQUAL {
+        return false;
+    }
+
+    // @TODO: support more types!
+    if cursor_node.kind != .UNARY_OPERATION {
+        return false;
+    }
+
+    left_type := get_node_type(op.left, true);
+    if !left_type {
+        return false;
+    }
+
+    return handle_completitions_for_node(request, left_type);
 }
 
 handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node: *Node) -> bool {

@@ -1076,10 +1076,6 @@ get_used_type :: (node: *Node) -> *Node {
 get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
     path: [..]*Node;
 
-    if root_binary_op.operation != .DOT {
-        return path;
-    }
-
     if !from {
         // Append even null nodes so we know we have empty "." entry (monster.items[0].)
         array_add(*path, root_binary_op.right);
