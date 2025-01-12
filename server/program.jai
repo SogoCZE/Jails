@@ -9,7 +9,7 @@ Program_File :: struct {
     loads: [..]*Directive_Load;
     nodes: [..]*Node;
     declarations: Table(string, *Declaration);
-    resolved_identifiers: Table(*Node, []*Declaration);
+    // resolved_identifiers: Table(*Identifier, []*Declaration);
     linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
 
     ast_pool: Pool;
@@ -44,7 +44,7 @@ array_count_declaration := Declaration.{
 
 init_file :: (using file: Program_File) {
     init(*declarations);
-    init(*resolved_identifiers);
+    // init(*resolved_identifiers);
 }
 
 deinit_file :: (using file: Program_File) {
@@ -161,12 +161,18 @@ parse_file :: (path: string, force := false) {
     // We must revalidate all files that are using this file in some way.
     files_avaiable_from_this_file := get_files_that_are_avaiable_from(file,, temp);
     for file_that_load_this_file: files_avaiable_from_this_file {
+        // if array_find(server.files_to_be_analyzed, file_that_load_this_file) {
+        //     continue;
+        // }
+
         array_add_if_unique(*server.files_to_be_analyzed, file_that_load_this_file);
     }
 }
 
 analyze_files :: () {
     for file: server.files_to_be_analyzed {
+        // table_reset(*file.resolved_identifiers);
+        // array_reset(*file.unresolved_identifiers);
         release(*file.analysis_pool);
     }
 
@@ -197,11 +203,9 @@ analyze_files :: () {
         file.linked_files = linked_files;
     }
 
-    for file: server.files_to_be_analyzed {
-        table_reset(*file.resolved_identifiers);
-        resolve_identifiers(file,, pool_alloc(*file.analysis_pool));
-        // log("Analyzed: %", file.path);
-    }
+    // for file: server.files_to_be_analyzed {
+    //     resolve_identifiers(file, global_only=true,, pool_alloc(*file.analysis_pool));
+    // }
 
     array_reset(*server.files_to_be_analyzed);
 }
@@ -324,27 +328,27 @@ get_module_import_path :: (_import: *Directive_Import, current_path: string) -> 
     return path;
 }
 
-resolve_identifiers :: (file: *Program_File) {
-    for node: file.nodes {
-        if node.kind != .IDENTIFIER continue; //
+// resolve_identifiers :: (file: *Program_File) {
+//     for node: file.nodes {
+//         if node.kind != .IDENTIFIER {
+//             continue;
+//         }
 
-        ident := cast(*Identifier) node;
+//         ident := cast(*Identifier) node;
 
-        // log("Resolving '%' ident at %:%:%", ident.name, ident.location.file, ident.location.l0, ident.location.c0);
+//         // log("Resolving '%' ident at %:%:%", ident.name, ident.location.file, ident.location.l0, ident.location.c0);
 
-        // log("Ident: %", ident.name);
-        block := get_node_nearest_block(ident);
-        decls := get_declarations(file, block, *ident.location, ident.name);
-        if decls.count == 0 {
-            if ident.name == "it" && contains(ident.location.file, "main.jai") {
-                // log_error("Did not find any decl for '%'! %", ident.name, ident.location.file);
-            }
-            continue;
-        }
+//         // log("Ident: %", ident.name);
+//         block := get_node_nearest_block(ident);
+//         decls := get_declarations(file, block, *ident.location, ident.name);
+//         if decls.count == 0 {
+//             // array_add(*file.unresolved_identifiers, ident);
+//             continue;
+//         }
 
-        table_add(*file.resolved_identifiers, ident, decls);
-    }
-}
+//         table_add(*file.resolved_identifiers, ident, decls);
+//     }
+// }
 
 get_node_by_location :: (file: *Program_File, location: Node.Location, filter: Node.Kind = .UNINITIALIZATED) -> *Node {
     nearest_node: *Node;
@@ -470,6 +474,7 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, n
             }
 
             element_type: *Node;
+
             if iterator_type.kind == {
                 case .ARRAY_TYPE;
                     array_type := cast(*Array_Type) iterator_type;
@@ -704,34 +709,6 @@ get_node_nearest_block :: (node: *Node) -> *Block {
     return null;
 }
 
-// get_node_nearest_block :: (node: *Node) -> *Block {
-//     current_node := node;
-//     current_block: *Block;
-
-//     while current_node.parent {
-//         current_node = current_node.parent;
-
-//         if current_node.kind == .PROCEDURE || current_node.kind == .STRUCT break;
-
-//         if current_node.kind == .BLOCK {
-//             block := cast(*Block) current_node;
-//             current_block = xx block;
-
-//             if !block.parent break;
-
-//             if block.parent.kind == {
-//                 case .PROCEDURE; break;
-//                 case .STRUCT; break;
-//                 case .UNION; break;
-//                 case .ENUM; break;
-//             }
-
-//         }
-//     }
-
-//     return current_block;
-// }
-
 is_child_of_block :: (block: *Block, node: *Node, ignore_scoping := false) -> bool {
     if !block || !node return false;
 
@@ -789,13 +766,25 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
 }
 
 get_identifier_decl :: (ident: *Identifier) -> []*Declaration {
-    for file: server.files {
-        decls, ok := table_find(*file.resolved_identifiers, ident);
-        if !ok continue;
-        return decls;
+    // log("Resolving '%' ident at %:%:%", ident.name, ident.location.file, ident.location.l0, ident.location.c0);
+
+    file := get_file(ident.location.file);
+
+    // log("Ident: %", ident.name);
+    block := get_node_nearest_block(ident);
+    decls := get_declarations(file, block, *ident.location, ident.name);
+    if decls.count == 0 {
+        // array_add(*file.unresolved_identifiers, ident);
+        return .[];
     }
 
-    return .[];
+    // for file: server.files {
+    //     decls, ok := table_find(*file.resolved_identifiers, ident);
+    //     if !ok continue;
+    //     return decls;
+    // }
+
+    return decls;
 }
 
 get_node_type :: (root: *Node, solve_array := false) -> *Node {
@@ -807,8 +796,14 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
         // log("Resolving type: % (%:%:%)", current_node.kind, current_node.location.file, current_node.location.l0, current_node.location.c0);
 
         if current_node.kind == .IDENTIFIER {
-            ident_decls := get_identifier_decl(xx current_node);
-            if ident_decls.count == 0 return current_node;
+            ident := cast(*Identifier, current_node);
+            ident_decls := get_identifier_decl(ident);
+
+            if ident_decls.count == 0 {
+                // log("Does not find anything for '%'...", ident.name);
+                return current_node;
+            }
+
             current_node = ident_decls[0];
             continue;
         }
@@ -1080,6 +1075,8 @@ get_used_type :: (node: *Node) -> *Node {
 // Can return null as last node!
 get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
     path: [..]*Node;
+
+
 
     if !from {
         // Append even null nodes so we know we have empty "." entry (monster.items[0].)

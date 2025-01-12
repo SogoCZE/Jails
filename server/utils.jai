@@ -1,5 +1,5 @@
-log_node :: (node: *Node) {
-    log("%", to_debug_string(node));
+log_node :: (node: *Node, prefix: string = "") {
+    log("%'%'", prefix, to_debug_string(node));
 }
 
 to_string :: (node: *Node) -> string {

@@ -378,28 +378,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
     }
 }
 
-// WAIT_FOR_DEBUGGER :: true;
-
-// being_debugger :: () -> bool {
-//     junk: int;
-//     mib: [4]int;
-//     info: kinfo_proc;
-//     size: size_t;
-
-//     info.kp_proc.p_flag = 0;
-
-//     mib[0] = CTL_KERN;
-//     mib[1] = KERN_PROC;
-//     mib[2] = KERN_PROC_PID;
-//     mib[3] = getpid();
-
-//     size = size_of(type_of(info));
-//     junk = sysctl(xx mib.data, size_of(type_of(mib)) / size_of(type_of(*mib)), *info, *size, null, 0);
-//     assert(junk == 0);
-
-//     return ( (info.kp_proc.p_flag & P_TRACED) != 0 );
-// }
-
 main :: () {
     context.logger = lsp_log;
 

@@ -152,15 +152,19 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
 
     type := get_path_type(path);
     if !type {
-        log_error("type is invalid! (null)");
+        // log_error("type is invalid! (null)");
         return false;
     }
+
+    // log("type kind: %", type.kind);
+    // log_node(type);
 
     return handle_completitions_for_node(request, type);
 }
 
 handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node: *Node) -> bool {
-    log("type kind: %", node.kind);
+    // log("type kind: %", node.kind);
+    // log_node(node);
 
     decls: [..]*Declaration;
     defer array_free(decls);
@@ -185,7 +189,7 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
     add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
         block := get_block_of(node);
         if !block {
-            log_error("block is not valid!");
+            // log_error("block is not valid!");
             return;
         }
 

@@ -215,8 +215,6 @@ lsp_document_symbol_from_node :: (node: *Node, default_symbol_kind: LSP_Symbol_K
                 symbol, ok = lsp_document_symbol_from_node(used_type, .FIELD);
             }
 
-            // symbol.name = "Zadek";
-
         case .ENUM; #through;
         case .UNION; #through;
         case .STRUCT;
