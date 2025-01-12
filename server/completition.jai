@@ -189,7 +189,7 @@ handle_assignment_completitions :: (request: LSP_Request_Message_Completion, cur
         return false;
     }
 
-    left_type := get_node_type(op.left, true);
+    left_type := get_node_type(op, true);
     if !left_type {
         return false;
     }
