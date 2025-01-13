@@ -80,6 +80,35 @@ handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier)
     return true;
 }
 
+handle_goto_assignment :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
+    if !ident.parent || ident.parent.kind != .UNARY_OPERATION {
+        return false;
+    }
+
+    unary_op := cast(*Unary_Operation, ident.parent);
+    if unary_op.operation != .DOT {
+        return false;
+    }
+
+    if !unary_op.parent || unary_op.parent.kind != .BINARY_OPERATION  {
+        return false;
+    }
+
+    binary_op_type := get_node_type(unary_op.parent, true);
+    if !binary_op_type {
+        return false;
+    }
+
+    decl := get_member_in(binary_op_type, ident);
+    if !decl {
+        return false;
+    }
+
+    lsp_respond(request.id, node_location_to_lsp_location(decl.location));
+
+    return true;
+}
+
 handle_goto :: (request: LSP_Request_Message_Definition) {
     push_allocator(temp);
 
@@ -121,6 +150,10 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     log("Ident: %", ident.name);
 
     if handle_goto_dot(request, ident) {
+        return;
+    }
+
+    if handle_goto_assignment(request, ident) {
         return;
     }
 

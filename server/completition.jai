@@ -180,7 +180,7 @@ handle_assignment_completitions :: (request: LSP_Request_Message_Completion, cur
         return false;
     }
 
-    if op.operation != .ASSING && op.operation != .IS_EQUAL {
+    if op.operation != .ASSING && op.operation != .IS_EQUAL && op.operation != .IS_NOT_EQUAL {
         return false;
     }
 
