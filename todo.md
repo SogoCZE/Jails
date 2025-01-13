@@ -12,9 +12,9 @@
 - [x] Fix signature help with procedures in aliased module or struct
 - [x] Autocomplete `it`, `it_index` in loops
 - [x] Autocomplete custom loops values (`for name, name_index: names`)
+- [x] Support for infered enum values (Go To Definition and autocomplete)
 - [-] Fix the problem with incomplete binary operation joining with content on next line (is this even solvable?)
 - [-] Fix broken completions for local variables across some boundaries like if-switch
-- [ ] Autocomplete enum values
 - [-] Using
     - [-] Structs, Enums, Unions
     - [ ] Global scope
