@@ -149,13 +149,14 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     ident := cast(*Identifier) node;
     log("Ident: %", ident.name);
 
+    if handle_goto_assignment(request, ident) {
+        return;
+    }
+
     if handle_goto_dot(request, ident) {
         return;
     }
 
-    if handle_goto_assignment(request, ident) {
-        return;
-    }
 
     decls := get_identifier_decl(ident);
     if decls.count == 0 {

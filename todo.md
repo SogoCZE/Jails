@@ -1,5 +1,12 @@
 # TODO
 
+## 0.3.0
+- [ ] support for context
+- [ ] goto and autocomplete for struct literals
+- [ ] improve context based autocomplete
+- [ ] polymorphic types
+- [ ] ...
+
 ## 0.2.0
 - [x] Array, String completions (data, count)
 - [x] Do not autocomplete when the full path was not resolved
@@ -29,3 +36,4 @@
 - [ ] Mason registry (nvim)
 - [ ] Implement "fake" methods completions for types that are taken as the first argument of some procedures
 - [ ] Improve Linux and nvim support
+

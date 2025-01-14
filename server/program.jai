@@ -1087,7 +1087,8 @@ get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
         } else if root_binary_op.left == from {
             array_add(*path, root_binary_op.left);
         } else {
-            assert(false, "left nor right is from"); // is this correct? Should we assert?
+            log_error("left nor right is from"); // is this correct? Should we assert?
+            return path;
         }
     }
 
