@@ -43,27 +43,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         return;
     }
 
-    // Binary OP
-    // if cursor_node && cursor_node.kind == .BINARY_OPERATION {
-    //     op := cast(*Binary_Operation) cursor_node;
-
-    //     decls = get_dot_path_members(cast(*Binary_Operation) cursor_node);
-    //     if decls.count > 0 {
-    //         send_completions_decls(request, decls);
-    //         return;
-    //     }
-    // }
-
-    // if cursor_node && cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
-    //     decls = get_dot_path_members(cast(*Binary_Operation) cursor_node.parent);
-    //     if decls.count > 0 {
-    //         send_completions_decls(request, decls);
-    //         return;
-    //     }
-    // }
-
-    // if cursor_block log("Block: %", cursor_block.*);
-
     // General
     decls = get_declarations(file, cursor_block, *cursor_location);
 
@@ -216,55 +195,6 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
 
         array_add(decls, *data_decl);
         array_add(decls, *array_count_declaration);
-    }
-
-    // @TODO: handle `using` modifiers like `except`, `only` and `map`.
-    // @TODO: handle #as
-    // @TODO: Maybe move this to program as global?
-    add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
-        block := get_block_of(node);
-        if !block {
-            // log_error("block is not valid!");
-            return;
-        }
-
-        for member: block.members {
-            if !member continue;
-
-            if member.kind == {
-                case .IDENTIFIER;
-                    ident := cast(*Identifier) member;
-
-                    decl := New(Declaration); // @MEMORY: We should free this or it is temp?
-                    decl.name = ident.name;
-                    decl.expression = *empty_identifier;
-                    decl.location = ident.location;
-                    decl.const = true;
-
-                    array_add(decls, decl);
-
-                case .DECLARATION;
-                    array_add(decls, cast(*Declaration, member));
-
-                case .DIRECTIVE_AS; #through;
-                case .USING;
-                    used_expression := get_used_expression(member);
-                    if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
-                        continue;
-                    }
-
-                    used_type := get_node_type(used_expression);
-                    if !used_type {
-                        continue;
-                    }
-
-                    if used_expression.kind == .DECLARATION {
-                        array_add(decls, cast(*Declaration) used_expression); // Add using expression
-                    }
-
-                    add_all_fields_of(decls, used_type); // Add all fields includes with using
-            }
-        }
     }
 
     if node.kind == {

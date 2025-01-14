@@ -29,6 +29,7 @@
     - [ ] Modifiers (`except`, `only`, `map`)
     - [x] Unwrap #as
     - [ ] Modules (`using Math :: #import "Math";`)
+- [ ] Make root detection more robust - it should work quite well even without `jails.json` and it also shoudl work with multiple entry points.
 - [ ] Implement basic procedure overload resolution
 - [ ] Autocomplete deref on pointer (`entity.*`)
 - [ ] Support for compound declaration (`x,y,z: float;`)

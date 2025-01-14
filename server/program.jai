@@ -429,14 +429,58 @@ should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *
     return true;
 }
 
-get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, name := "") {
-    parent_type := get_node_nearest_parent(from_block, kind => kind == .PROCEDURE || kind == .STRUCT || kind == .UNION || kind == .FOR);
-    if !parent_type return;
+add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
+    block := get_block_of(node);
+    if !block {
+        return;
+    }
 
-    if parent_type.kind == {
+    for member: block.members {
+        if !member continue;
+
+        if member.kind == {
+            case .IDENTIFIER;
+                ident := cast(*Identifier) member;
+
+                decl := New(Declaration); // @MEMORY: We should free this or it is temp?
+                decl.name = ident.name;
+                decl.expression = *empty_identifier;
+                decl.location = ident.location;
+                decl.const = true;
+
+                array_add(decls, decl);
+
+            case .DECLARATION;
+                array_add(decls, cast(*Declaration, member));
+
+            case .DIRECTIVE_AS; #through;
+            case .USING; // @TODO: handle `using` modifiers like `except`, `only` and `map`.
+                used_expression := get_used_expression(member);
+                if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
+                    continue;
+                }
+
+                used_type := get_node_type(used_expression);
+                if !used_type {
+                    continue;
+                }
+
+                if used_expression.kind == .DECLARATION {
+                    array_add(decls, cast(*Declaration) used_expression); // Add using expression
+                }
+
+                add_all_fields_of(decls, used_type); // Add all fields includes with using
+        }
+    }
+}
+
+get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, name := "") {
+    if !node return;
+
+    if node.kind == {
 
         case .PROCEDURE;
-            proc := cast(*Procedure) parent_type;
+            proc := cast(*Procedure) node;
 
             for arg: proc.arguments {
                 if arg.kind != .DECLARATION continue;
@@ -445,8 +489,10 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, n
                 if name.count == 0 || decl.name == name array_add(decls, decl);
             }
 
+            return;
+
         case .STRUCT;
-            _struct := cast(*Struct) parent_type;
+            _struct := cast(*Struct) node;
 
             for arg: _struct.polymorphic_arguments {
                 if arg.kind != .DECLARATION continue;
@@ -455,8 +501,10 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, n
                 if name.count == 0 || decl.name == name array_add(decls, decl);
             }
 
+            return;
+
         case .UNION;
-            _union := cast(*Union) parent_type;
+            _union := cast(*Union) node;
 
             for arg: _union.polymorphic_arguments {
                 if arg.kind != .DECLARATION continue;
@@ -465,8 +513,13 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, n
                 if name.count == 0 || decl.name == name array_add(decls, decl);
             }
 
+            return;
+
+        case .BLOCK;
+            // @TODO: using
+
         case .FOR;
-            _for := cast(*For) parent_type;
+            _for := cast(*For) node;
 
             iterator_type := get_node_type(_for.iterator, false);
             if !iterator_type {
@@ -529,7 +582,10 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, from_block: *Block, n
 
             if name.count == 0 || it_declaration.name == name array_add(decls, it_declaration);
             if name.count == 0 || it_index_decl.name == name array_add(decls, it_index_decl);
+
     }
+
+    get_declarations_from_parent(decls, node.parent, name);
 }
 
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "", only_loaded := false) -> []*Declaration {
@@ -726,7 +782,7 @@ is_child_of_block :: (block: *Block, node: *Node, ignore_scoping := false) -> bo
         if current_node == block return true;
     }
 
-    return false;
+    return true;
 }
 
 contains :: (a: Node.Location, b: Node.Location) -> bool {
