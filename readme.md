@@ -1,5 +1,5 @@
 # Jails
-Jails is an experimental language server for the Jai programming language. 
+Jails is an experimental language server for the Jai programming language.
 
 ## Features
 - Basic Go-To Definition
@@ -7,25 +7,29 @@ Jails is an experimental language server for the Jai programming language.
 - Signature help for procedure calls
 - Error reporting from the compiler
 
-In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc. 
+In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc.
+
+
+## Usage
+Be aware that this language server is still pretty much unstable... Nonetheless, it can be quite useful even in this early stage of development.
+
+### Requirements
+- You need to have a **Jai compiler in your path**. The language server searches for the compiler with `whereis` on Mac, Linux and `where` on Windows. You can also specify the compiler path with a command line argument to Jails with `-jai_path /path/to/compiler/jai`.
+- You may need to create [`jails.json` config file](#config-file) to properly support your project structure. In the future I would like to Jails work for most of the Jai projects out-of-box without any config but for now it is recommended you set up one.
 
 ### When using a custom Build program
 By default, Jails does not generate any output files, however, when using a custom build program it will output whatever your build program is set to. In that case, you should disable the output on your own, by combining `JAILS_DIAGNOSTICS_BUILD` with `#exists` to detect if it is build by the LSP.
-```
+```odin
 #if #exists(JAILS_DIAGNOSTICS_BUILD) options.output_type = .NO_OUTPUT;
 ```
 
 If you happen to have more than one layer of meta programms triggering, you can do the following:
 
-```
+```odin
 default_metaprogram_command_lind := get_build_options(1).compile_time_command_line;
 found, index := array_find(default_metaprogram_command_lind, "jails_diagnostics");
 if found  child_options.output_type = .NO_OUTPUT;
 ```
-
-
-## Usage
-Be aware that this language server is still pretty much unstable... Nonetheless, it can be quite useful even in this early stage of development.
 
 ### Cloning
 This repo uses git submodules. Clone it using `git clone --recurse-submodules`.
