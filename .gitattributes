@@ -1,1 +1,1 @@
-*.jai linguist-language=Odin
+*.jai linguist-language=Odin linguist-detectable=false
