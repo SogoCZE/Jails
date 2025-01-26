@@ -19,15 +19,19 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
 
-    // We don't wanna to give completions inside strings and comments...
-    if cursor_node && (cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT) _exit();
+    if !cursor_node {
+        return;
+    }
 
-    if cursor_node && cursor_node.kind == .DIRECTIVE_IMPORT {
+    // We don't wanna to give completions inside strings and comments...
+    if cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT _exit();
+
+    if cursor_node.kind == .DIRECTIVE_IMPORT {
         handle_completitions_import(request, xx cursor_node);
         return;
     }
 
-    if cursor_node && cursor_node.kind == .DIRECTIVE_LOAD {
+    if cursor_node.kind == .DIRECTIVE_LOAD {
         handle_completitions_load(request, file, xx cursor_node);
         return;
     }
