@@ -39,7 +39,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     decls: []*Declaration;
     defer array_free(decls);
 
-    if handle_dot_completitions(request, cursor_node) {
+    if handle_dot_completitions(request, cursor_node, cursor_location) {
         return;
     }
 
@@ -121,7 +121,7 @@ handle_completitions_import :: (request: LSP_Request_Message_Completion, directi
     lsp_respond(request.id, completions);
 }
 
-handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
+handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_node: *Node, cursor_location: Node.Location) -> bool {
     if !cursor_node {
         return false;
     }
@@ -140,6 +140,18 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     }
 
     path := get_dot_path(op, null);
+    for path {
+        if !it {
+            remove it;
+            continue;
+        }
+
+        // We dont want anything that is after the cursor.
+        if it.location.l0 > cursor_location.l0 || it.location.l0 == cursor_location.l0 && it.location.c0 > cursor_location.c0 {
+            remove it;
+            continue;
+        }
+    }
 
     type := get_path_type(path);
     if !type {

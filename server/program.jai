@@ -8,6 +8,7 @@ Program_File :: struct {
     imports: [..]Module_Import;
     loads: [..]*Directive_Load;
     nodes: [..]*Node;
+    global_block: Block;
     declarations: Table(string, *Declaration);
     // resolved_identifiers: Table(*Identifier, []*Declaration);
     linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
@@ -151,6 +152,7 @@ parse_file :: (path: string, force := false) {
             parse(*parser, null);
         }
 
+        file.global_block.members = parser.user_data.global_members;
     }
 
     if content_from_disc free(content);
@@ -212,6 +214,7 @@ analyze_files :: () {
 
 Node_Visit_Data :: struct {
     file: *Program_File;
+    global_members: [..]*Node;
     allocator: Allocator;
     path_without_filename: string;
 }
@@ -270,6 +273,11 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         load_relative_path := join(data.path_without_filename, _load.file, separator="/");
         array_add(*data.file.loads, _load);
         parse_file(load_relative_path); // @TODO: Run this in another thread?
+    }
+
+    if !node.parent {
+        array_add(*data.global_members, node);
+        node.parent = *file.global_block;
     }
 }
 
@@ -411,25 +419,7 @@ get_file_links :: (file: *Program_File) -> [..]Linked_File {
     return linked_files;
 }
 
-should_add_decl :: (linked_file: Linked_File, file: *Program_File, from_block: *Block, from_loc: *Node.Location, decl: *Declaration) -> bool {
-    decl_block := get_node_nearest_block(decl);
-    global := is_global(decl, file, linked_file.file, linked_file.from_import);
-
-    if !global {
-        if !from_block || !decl_block return false;
-
-        if decl.const {
-            if !is_child_of_block(decl_block, from_block, true) return false;
-        } else {
-            if !is_child_of_block(decl_block, from_block) return false;
-            if from_loc && from_loc.l0 < decl.location.l0 return false;
-        }
-    }
-
-    return true;
-}
-
-add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
+add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string = "") {
     block := get_block_of(node);
     if !block {
         return;
@@ -448,10 +438,11 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
                 decl.location = ident.location;
                 decl.const = true;
 
-                array_add(decls, decl);
+                if !filter_name || filter_name == decl.name array_add(decls, decl);
 
             case .DECLARATION;
-                array_add(decls, cast(*Declaration, member));
+                decl := cast(*Declaration) member;
+                if !filter_name || filter_name == decl.name array_add(decls, decl);
 
             case .DIRECTIVE_AS; #through;
             case .USING; // @TODO: handle `using` modifiers like `except`, `only` and `map`.
@@ -466,15 +457,19 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node) {
                 }
 
                 if used_expression.kind == .DECLARATION {
-                    array_add(decls, cast(*Declaration) used_expression); // Add using expression
+                    decl := cast(*Declaration) used_expression;
+                    if !filter_name || filter_name == decl.name array_add(decls, decl); // Add using expression
                 }
 
-                add_all_fields_of(decls, used_type); // Add all fields includes with using
+                add_all_fields_of(decls, used_type, filter_name); // Add all fields includes with using
         }
     }
 }
 
-get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, name := "") {
+// @TODO: Refactor this! (stupid global variable)
+skip_using: *Using;
+
+get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc: *Node.Location, name := "") {
     if !node return;
 
     if node.kind == {
@@ -516,7 +511,39 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, name := 
             return;
 
         case .BLOCK;
-            // @TODO: using
+            block := cast(*Block) node;
+
+            if !from_loc return;
+
+            for block.members {
+
+                // We only accept `nodes` if they were declared before our cursor location.
+                if from_loc.l0 < it.location.l0 continue;
+
+                if it.kind == {
+                    case .USING; // @TODO: solve crash when having two using
+                        _using := cast(*Using) it;
+                        if skip_using == _using || !_using.expression || _using.expression.kind != .IDENTIFIER continue;
+
+                        ident := cast(*Identifier) _using.expression;
+
+                        copied_using := skip_using;
+                        skip_using = _using;
+
+                        used_type := get_node_type(_using.expression);
+                        if !used_type continue;
+
+                        add_all_fields_of(decls, used_type, name);
+
+                        skip_using = copied_using;
+
+                    case .DECLARATION;
+                        decl := cast(*Declaration) it;
+                        if !name || name == decl.name array_add(decls, decl);
+
+                }
+
+            }
 
         case .FOR;
             _for := cast(*For) node;
@@ -585,33 +612,74 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, name := 
 
     }
 
-    get_declarations_from_parent(decls, node.parent, name);
+    get_declarations_from_parent(decls, node.parent, from_loc, name);
 }
 
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "", only_loaded := false) -> []*Declaration {
     decls: [..]*Declaration;
 
+    // Globals in all linked files (loaded or imported)
+    if file {
+        for linked_file: file.linked_files {
+            if only_loaded && linked_file.from_import {
+                continue;
+            }
+
+            // -- Global using --
+            // We are accepting usings only from loaded files.
+            // if !linked_file.from_import {
+
+            //     // This is stupid!!
+            //     for linked_file.file.nodes {
+            //         if !is_global(it, file, linked_file.file, linked_file.from_import) {
+            //             continue;
+            //         }
+
+            //         if it.kind != .USING {
+            //             continue;
+            //         }
+
+            //         _using := cast(*Using, it);
+
+            //         if skip_using == _using {
+            //             continue;
+            //         }
+
+            //         if !_using.expression {
+            //             continue;
+            //         }
+
+            //         copied_using := skip_using;
+            //         skip_using = _using;
+
+            //         used_type := get_node_type(_using.expression);
+            //         if !used_type continue;
+
+            //         add_all_fields_of(*decls, used_type, name);
+
+            //         skip_using = copied_using;
+            //     }
+            // }
+
+            // We are searching for specific decl
+            if name.count > 0 {
+                for decl: table_find_multiple(*linked_file.file.declarations, name) {
+                    if is_global(decl, file, linked_file.file, linked_file.from_import) array_add(*decls, decl);
+                }
+            } else { // We are adding all globals decls
+                for decl: linked_file.file.declarations {
+                    if is_global(decl, file, linked_file.file, linked_file.from_import) array_add(*decls, decl);
+                }
+            }
+        }
+    }
+
+    // Scopes, Procedures ... (parents)
     if from_block {
-        get_declarations_from_parent(*decls, from_block, name);
+        get_declarations_from_parent(*decls, from_block, from_loc, name);
     }
 
-    for linked_file: file.linked_files {
-
-        if only_loaded && linked_file.from_import {
-            continue;
-        }
-
-        if name.count > 0 {
-            for decl: table_find_multiple(*linked_file.file.declarations, name) {
-                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
-            }
-        } else {
-            for decl: linked_file.file.declarations {
-                if should_add_decl(linked_file, file, from_block, from_loc, decl) array_add(*decls, decl);
-            }
-        }
-
-    }
+    // @TODO: Maybe deduplicate stuff here? (global stuff vs local shadowing etc)
 
     return decls;
 }
@@ -843,6 +911,8 @@ get_identifier_decl :: (ident: *Identifier) -> []*Declaration {
     return decls;
 }
 
+// Skip_Node_Func :: #type (node: *Node) -> bool;
+
 get_node_type :: (root: *Node, solve_array := false) -> *Node {
     current_node: *Node = root;
 
@@ -995,6 +1065,8 @@ unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
 }
 
 get_block_of :: (node: *Node) -> *Block {
+    if node.kind == .BLOCK return cast(*Block) node;
+
     if node.kind == {
         case .STRUCT; return (cast(*Struct) node).block;
         case .ENUM;   return (cast(*Enum) node).block;

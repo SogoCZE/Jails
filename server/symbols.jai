@@ -80,11 +80,7 @@ handle_document_symbol :: (request: LSP_Request_Message_Document_Symbol) {
 }
 
 load_symbols_from_file :: (file: *Program_File, load_to: *[..]LSP_Document_Symbol) {
-    for node: file.nodes {
-        // We only need global declarations not nested ones.
-        if node.parent != null {
-            continue;
-        }
+    for node: file.global_block.members {
 
         // scope directives (#scope_export, #scope_module, #scope_file)
         if node.kind == .DIRECTIVE_SCOPE {
@@ -192,6 +188,10 @@ lsp_document_symbol_from_node :: (node: *Node, default_symbol_kind: LSP_Symbol_K
 
         case .DIRECTIVE_AS; #through;
         case .USING;
+            if !node.parent {
+                return .{}, false; // @TODO: We do not support global using in symbols for now!
+            }
+
             used_expression := get_used_expression(node);
             if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
                 return .{}, false;

@@ -328,6 +328,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 return;
             }
 
+            log("workspace/documentSymbol");
+
             handle_document_symbol(body);
 
         case "workspace/symbol";
@@ -336,6 +338,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 log_error("Unable to parse workspace/symbol message");
                 return;
             }
+
+            log("workspace/symbol");
 
             handle_workspace_symbol(body);
 
