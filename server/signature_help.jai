@@ -12,6 +12,10 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
+    if !cursor_node {
+        lsp_respond(request.id, null);
+        return;
+    }
 
     proc_call := cast(*Procedure_Call) get_node_nearest_parent(cursor_node, kind => kind == .PROCEDURE_CALL);
     if !proc_call {
