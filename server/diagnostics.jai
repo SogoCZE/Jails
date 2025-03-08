@@ -37,6 +37,12 @@ run_diagnostics :: () {
         array_add(*command, "-import_dir", local_module_folder);
     }
 
+    if server.intermediate_path.count > 0 {
+        joined := join(server.project_root, server.intermediate_path, "jails", separator="/",, temp);
+        normalised := normalize_path(joined,, temp);
+        array_add(*command, "-", tprint("-JAILS_INTERM_PATH=%", normalised));
+    }
+
     array_add(*command, "---", "import_dir", server.diagnostics_metaprogram_path);
 
     reset_diagnostics();
