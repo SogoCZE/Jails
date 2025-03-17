@@ -913,7 +913,15 @@ get_identifier_decl :: (ident: *Identifier) -> []*Declaration {
 
 // Skip_Node_Func :: #type (node: *Node) -> bool;
 
-get_node_type :: (root: *Node, solve_array := false) -> *Node {
+select_first_decl :: (decls: []*Declaration) -> *Declaration {
+    if decls.count == 0 {
+        return null;
+    }
+
+    return decls[0];
+}
+
+get_node_type :: (root: *Node, solve_array := false, select_decl := select_first_decl) -> *Node {
     current_node: *Node = root;
 
     while true {
@@ -930,7 +938,8 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
                 return current_node;
             }
 
-            current_node = ident_decls[0];
+            current_node = select_decl(ident_decls);
+
             continue;
         }
 
@@ -1025,8 +1034,6 @@ get_node_type :: (root: *Node, solve_array := false) -> *Node {
 
             if proc.returns.count > 0 {
                 current_node = proc.returns[0].expression;
-                continue;
-            } else {
                 continue;
             }
         }
@@ -1200,8 +1207,21 @@ get_used_type :: (node: *Node) -> *Node {
     return get_node_type(used_expression);
 }
 
-// Can return null as last node!
-get_dot_path :: (root_binary_op: *Binary_Operation, from: *Node) -> []*Node {
+get_last_binary_op :: (first: *Binary_Operation) -> *Binary_Operation {
+    current := first;
+
+    while current.right && current.right.kind == .BINARY_OPERATION {
+        current = cast(*Binary_Operation) current.right;
+    }
+
+    return current;
+}
+
+// !!! Can return null as last node !!!
+// This procedure is designed to walk binary op from right to left.
+// Its currently using `get_last_binary_op` to get the most right (ending) binary op.
+get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
+    root_binary_op := get_last_binary_op(binary_op);
     path: [..]*Node;
 
     if !from {
@@ -1279,7 +1299,17 @@ get_path_type :: (path: []*Node) -> *Node {
                 }
 
                 if !current_type {
-                    current_type = get_node_type(identifier, solve_array);
+                    select_first_non_procedure_decl :: (decls: []*Declaration) -> *Declaration {
+                        for decl: decls {
+                            if decl.expression && decl.expression.kind == .PROCEDURE continue;
+
+                            return decl;
+                        }
+
+                        return null;
+                    }
+
+                    current_type = get_node_type(identifier, solve_array, select_first_non_procedure_decl);
                     if !current_type {
                         break;
                     }
