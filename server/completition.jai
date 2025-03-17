@@ -103,7 +103,7 @@ handle_completitions_import :: (request: LSP_Request_Message_Completion, directi
         array_add(completions, .{
             label=module_name,
             kind=xx LSP_Completion_Item.Kind.Module,
-            insertText=info.short_name,
+            insertText=module_name,
             insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET,
             labelDetails = .{ description=info.full_name }
         });
@@ -158,9 +158,6 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
         // log_error("type is invalid! (null)");
         return false;
     }
-
-    // log("type kind: %", type.kind);
-    // log_node(type);
 
     return handle_completitions_for_node(request, type);
 }
