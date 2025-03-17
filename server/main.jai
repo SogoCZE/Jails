@@ -16,6 +16,7 @@ Server :: struct {
     local_modules: [..]string;
     roots: []string;
     build_root: string;
+    intermediate_path: string;
 
     project_root: string;
     files: Table(string, *Program_File);
@@ -157,6 +158,7 @@ load_config_file :: () {
         roots: []string;
         build_root: string;
         jai_path: string;
+        intermediate_path: string;
     }
 
     config_path := join(server.project_root, "/jails.json");
@@ -176,6 +178,7 @@ load_config_file :: () {
 
     server.roots = config.roots;
     server.build_root = config.build_root;
+    server.intermediate_path = config.intermediate_path;
 
     if config.jai_path.count > 0 {
         server.args.jai_path = config.jai_path;
@@ -244,6 +247,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             log("Server.local_modules: %", server.local_modules);
             log("Server.roots: %", server.roots);
+            log("Server.intermediate_path: %", server.intermediate_path);
 
             for root: server.roots {
                 absolute_path: string;
