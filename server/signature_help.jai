@@ -33,7 +33,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
 
     if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION {
         path := get_dot_path(cast(*Binary_Operation) proc_call.parent, proc_call);
-        if path.count == 1 {
+        if path.count <= 1 {
             lsp_respond(request.id, null);
             return;
         }
