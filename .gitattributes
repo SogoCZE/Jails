@@ -1,7 +1,0 @@
-*.jai linguist-language=Odin linguist-detectable=false
-
-*.ts linguist-detectable=false
-*.js linguist-detectable=false
-*.json linguist-detectable=false
-*.md linguist-detectable=false
-*.bat linguist-detectable=false
