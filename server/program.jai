@@ -913,7 +913,7 @@ get_identifier_decl :: (ident: *Identifier) -> []*Declaration {
 
 // Skip_Node_Func :: #type (node: *Node) -> bool;
 
-select_first_decl :: (decls: []*Declaration) -> *Declaration {
+select_first_decl :: (decls: []*Declaration, level: int) -> *Declaration {
     if decls.count == 0 {
         return null;
     }
@@ -924,7 +924,9 @@ select_first_decl :: (decls: []*Declaration) -> *Declaration {
 get_node_type :: (root: *Node, solve_array := false, select_decl := select_first_decl) -> *Node {
     current_node: *Node = root;
 
+    level: int;
     while true {
+        defer level += 1;
         if !current_node break;
 
         // log("Resolving type: % (%:%:%)", current_node.kind, current_node.location.file, current_node.location.l0, current_node.location.c0);
@@ -938,7 +940,7 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
                 return current_node;
             }
 
-            current_node = select_decl(ident_decls);
+            current_node = select_decl(ident_decls, level);
 
             continue;
         }
@@ -1299,7 +1301,11 @@ get_path_type :: (path: []*Node) -> *Node {
                 }
 
                 if !current_type {
-                    select_first_non_procedure_decl :: (decls: []*Declaration) -> *Declaration {
+                    select_first_non_procedure_decl :: (decls: []*Declaration, level: int) -> *Declaration {
+                        if level > 0 {
+                            return select_first_decl(decls, level);
+                        }
+
                         for decl: decls {
                             if decl.expression && decl.expression.kind == .PROCEDURE continue;
 
