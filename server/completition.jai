@@ -294,7 +294,12 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
                 kind = .Function;
                 procedure := cast(*Procedure) preview_node;
                 deprecated = procedure.deprecated_note.count > 0;
-                insert_text = sprint("%($0)", decl.name);
+
+                if server.user_options.auto_insert_parentheses {
+                    insert_text = sprint("%($0)", decl.name);
+                } else {
+                    insert_text = decl.name;
+                }
 
             case .STRUCT;
                 kind = .Struct;

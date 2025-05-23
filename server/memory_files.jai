@@ -40,7 +40,7 @@ remove_memory_file :: (file_path: string) {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
 
-    content, ok := table_find(*server.memory_files, file_path);
+    ok, content := table_find_new(*server.memory_files, file_path);
     if !ok return;
     array_free(content);
 
@@ -54,7 +54,7 @@ find_range_in_memory_file :: (file: string, range: LSP_Range) -> string {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
 
-    content, ok := table_find(*server.memory_files, file);
+    ok, content := table_find_new(*server.memory_files, file);
     if !ok {
         return "";
     }
@@ -88,7 +88,7 @@ find_range_in_memory_file :: (file: string, range: LSP_Range) -> string {
 find_line_in_memory_file :: (file: string, position: LSP_Position) -> string {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
-    content, ok := table_find(*server.memory_files, file);
+    ok, content := table_find_new(*server.memory_files, file);
     if !ok {
         return "";
     }
@@ -129,7 +129,7 @@ get_memory_file :: (name: string) -> []u8 {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
 
-    content, ok := table_find(*server.memory_files, name);
+    ok, content := table_find_new(*server.memory_files, name);
     if !ok {
         return .[];
     }
@@ -140,7 +140,7 @@ get_memory_file :: (name: string) -> []u8 {
 find_word_in_memory_file :: (file: string, position: LSP_Position, with_start_separator := false, with_end_separator := false) -> string {
     lock(*server.memory_files_lock);
     defer unlock(*server.memory_files_lock);
-    content, ok := table_find(*server.memory_files, file);
+    ok, content := table_find_new(*server.memory_files, file);
     if !ok {
         return "";
     }

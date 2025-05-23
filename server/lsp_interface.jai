@@ -15,12 +15,12 @@ LSP_Client_Message :: struct(T: Type) {
 
 LSP_Response_Message :: struct {
     using base: LSP_Message;
-    id: u32;
+    id: JSON_Value;
 }
 
 LSP_Request_Message :: struct {
     using base: LSP_Message;
-    id: u32;
+    id: JSON_Value;
     method: string;
 }
 
@@ -54,7 +54,7 @@ LSP_Notification_Message :: struct {
 }
 
 LSP_Cancel_Params :: struct {
-    id: u32;
+    id: JSON_Value;
 }
 
 LSP_Progress_Params :: struct (Value_Type: Type) {
@@ -740,7 +740,7 @@ lsp_send :: (data: $T) {
     print("Content-Length: %\r\n\r\n%", body.count, body);
 }
 
-lsp_respond :: (id: u32, data: $T) {
+lsp_respond :: (id: JSON_Value, data: $T) {
     Full_Reply :: struct {
         using response: LSP_Response_Message;
         result: T;
@@ -769,7 +769,7 @@ lsp_respond :: (id: u32, data: $T) {
 //     print("Content-Length: %\r\n\r\n%", final_body.count, final_body);
 // }
 
-lsp_respond_with_error :: (id: u32, code: LSP_Error_Codes, message: string, data: $T) {
+lsp_respond_with_error :: (id: JSON_Value, code: LSP_Error_Codes, message: string, data: $T) {
     reply: struct {
         using response: LSP_Response_Message;
         error: LSP_Response_Error(T);

@@ -26,7 +26,7 @@ run_diagnostics :: () {
     defer array_free(command);
 
     array_add(*command, "jai");
-    array_add(*command, build_root_absolute, "-quiet", "-no_color", "-plug", "jails_diagnostics");
+    array_add(*command, build_root_absolute, "-quiet", "-no_color", "+jails_diagnostics");
 
     // Use fast x64 backend on supported CPUs.
     if CPU == .X64 {

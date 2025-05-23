@@ -6,5 +6,6 @@
         "server/main.jai",
         "build.jai"
     ],
-    "build_root": "build.jai"
+    "build_root": "build.jai",
+    "auto_insert_parentheses": true
 }
