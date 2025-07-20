@@ -1699,8 +1699,9 @@
 				},
 				{
 					"name": "meta.function.call.jai",
-					"match": "(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.)(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.))*)?\\b([a-zA-Z_](?:\\w|\\\\ *)*)\\s*(\\()(\\))",
-					"captures": {
+					"begin": "(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.)(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.))*)?\\b([a-zA-Z_](?:\\w|\\\\ *)*)\\s*(\\()",
+					"end": "(\\))",
+					"beginCaptures": {
 						"2": {
 							"name": "entity.name.namespace.jai"
 						},
@@ -1730,16 +1731,24 @@
 						},
 						"8": {
 							"name": "punctuation.section.parens.begin.jai"
-						},
-						"9": {
+						}
+					},
+					"endCaptures": {
+						"1": {
 							"name": "punctuation.section.parens.end.jai"
 						}
-					}
+					},
+					"patterns": [
+						{
+							"include": "$self"
+						}
+					]
 				},
 				{
 					"name": "meta.function.call.jai",
-					"match": "(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.)(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.))*)?\\b([a-zA-Z_](?:\\w|\\\\ *)*)\\s*(\\()(.*)(\\))",
-					"captures": {
+					"begin": "(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.)(([a-zA-Z_](?:\\w|\\\\ *)*)(\\.))*)?\\b([a-zA-Z_](?:\\w|\\\\ *)*)\\s*(\\()(.*)",
+					"end": "(\\))",
+					"beginCaptures": {
 						"2": {
 							"name": "entity.name.namespace.jai"
 						},
@@ -1777,11 +1786,18 @@
 									"include": "#parameters"
 								}
 							]
-						},
-						"10": {
+						}
+					},
+					"endCaptures": {
+						"1": {
 							"name": "punctuation.section.parens.end.jai"
 						}
-					}
+					},
+					"patterns": [
+						{
+							"include": "$self"
+						}
+					]
 				}
 			],
 			"repository": {
