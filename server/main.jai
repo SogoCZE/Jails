@@ -404,6 +404,7 @@ main :: () {
         log_error("Could not parse arguments");
         exit(1);
     }
+    log("Args are %", args);
 
     server.jai_path = args.jai_path;
     server.verbose = args.verbose;
@@ -427,8 +428,6 @@ main :: () {
             log("Jai path: %", server.jai_path);
         }
     }
-
-    log("Args are %", args);
 
     init(*server.files);
     defer deinit(*server.files);
