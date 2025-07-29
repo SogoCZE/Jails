@@ -175,9 +175,10 @@ load_config_file :: () {
 
     ok, config := json_parse_string(config_content, Config);
     if !ok {
-        log("Failed to parse config file!");
+        log("Failed to parse config file %", config_path);
         return;
     }
+    log("Loaded config file %", config_path);
 
     for config.local_modules {
         array_add_if_unique(*server.local_modules, it);
