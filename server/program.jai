@@ -308,7 +308,7 @@ get_module_import_path :: (_import: *Directive_Import, current_path: string) -> 
             if entry.count > 0 return entry;
         }
 
-        jai_modules := join(server.args.jai_path, "/modules");
+        jai_modules := join(server.jai_path, "/modules");
 
         entry := get_module_entry(join(jai_modules, module_name, separator="/"));
         if entry.count > 0 return entry;

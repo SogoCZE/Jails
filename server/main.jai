@@ -13,14 +13,16 @@ User_Options :: struct {
 }
 
 Server :: struct {
-    args: Args;
     quit := false;
 
-    // This is from the config file
+    verbose: bool;
+    profile: bool;
+
     local_modules: [..]string;
     roots: []string;
     build_root: string;
     intermediate_path: string;
+    jai_path: string;
 
     project_root: string;
     files: Table(string, *Program_File);
@@ -189,7 +191,7 @@ load_config_file :: () {
     server.user_options.auto_insert_parentheses = config.auto_insert_parentheses;
 
     if config.jai_path.count > 0 {
-        server.args.jai_path = config.jai_path;
+        server.jai_path = config.jai_path;
     }
 }
 
@@ -271,8 +273,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             // Parse Runtime Support and Preload
             {
-                parse_file(tprint("%/modules/Runtime_Support.jai", server.args.jai_path), true);
-                parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
+                parse_file(tprint("%/modules/Runtime_Support.jai", server.jai_path), true);
+                parse_file(tprint("%/modules/Preload.jai", server.jai_path), true);
             }
 
             analyze_files();
@@ -397,14 +399,17 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 main :: () {
     context.logger = lsp_log;
 
-    success: bool;
-    success, server.args = parse_arguments(Args);
+    success, args := parse_arguments(Args);
     if !success {
         log_error("Could not parse arguments");
         exit(1);
     }
 
-    if server.args.jai_path.count == 0 {
+    server.jai_path = args.jai_path;
+    server.verbose = args.verbose;
+    server.profile = args.profile;
+
+    if args.jai_path.count == 0 {
         jai_name: string;
         #if OS == .WINDOWS {
             jai_name = "jai";
@@ -414,16 +419,16 @@ main :: () {
             jai_name = "jai-linux";
         }
 
-        server.args.jai_path = find_jai_path(jai_name);
-        if !server.args.jai_path {
+        server.jai_path = find_jai_path(jai_name);
+        if !server.jai_path {
             log_error("Failed to resolve Jai path");
             // @TODO: Send this fatal error over LSP somehow?
         } else {
-            log("Jai path: %", server.args.jai_path);
+            log("Jai path: %", server.jai_path);
         }
     }
 
-    log("Args are %", server.args);
+    log("Args are %", args);
 
     init(*server.files);
     defer deinit(*server.files);
