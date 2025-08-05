@@ -394,6 +394,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
     }
 }
 
+#if OS == .WINDOWS {
+    jai_exe_name :: "jai.exe";
+} else #if OS == .MACOS {
+    jai_exe_name :: "jai-macos";
+} else #if OS == .LINUX {
+    jai_exe_name :: "jai-linux";
+}
+
 main :: () {
     context.logger = lsp_log;
 
@@ -405,16 +413,7 @@ main :: () {
     }
 
     if server.args.jai_path.count == 0 {
-        jai_name: string;
-        #if OS == .WINDOWS {
-            jai_name = "jai";
-        } else #if OS == .MACOS {
-            jai_name = "jai-macos";
-        } else #if OS == .LINUX {
-            jai_name = "jai-linux";
-        }
-
-        server.args.jai_path = find_jai_path(jai_name);
+        server.args.jai_path = find_jai_path(jai_exe_name);
         if !server.args.jai_path {
             log_error("Failed to resolve Jai path");
             // @TODO: Send this fatal error over LSP somehow?
