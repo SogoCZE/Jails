@@ -3,19 +3,17 @@
 // And making symbols - which should be fast??? We are not resolving any identifiers (types etc).
 // Potencial bottleneck can be a lot of small allocations - we can solve this with Pool allocator though.
 
-// @TODO: We only include project files, is this ok?
+// @TODO: We only include workspace files, is this ok?
 // TypeScript Language Server does this (filtering node_modules etc)
 // Go Server does include "compiler" packages
 // We should make more reseach on this topic and ask people around what they think
 // and how they use this feature...
-handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
-    push_allocator(temp);
+handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) -> []LSP_Workspace_Symbol {
     search_query := to_lower_copy(request.params.query);
 
     // @TODO: Do we want to return here if we got no search query?
     if !search_query {
-        lsp_respond(request.id, null);
-        return;
+        return .[];
     }
 
     flattern_document_symbol_to_workspace_symbols :: (search_query: string, document_symbol: LSP_Document_Symbol, file_path: string, to: *[..]LSP_Workspace_Symbol, name_prefix := "") {
@@ -37,16 +35,9 @@ handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
     workspace_symbols: [..]LSP_Workspace_Symbol;
     for file: server.files {
         // Skip non workspace files
-        if !begins_with(file.path, server.project_root) {
-            continue;
-        }
-
-        // Skip files from local modules (we only want workspace project files)
-        for local_module_folder: server.local_modules {
-            full_local_module_folder_path := tprint("%/%", server.project_root, local_module_folder);
-
-            if begins_with(file.path, full_local_module_folder_path) {
-                continue file;
+        for workspace_folder: server.workspace_folders {
+            if !begins_with(file.path, workspace_folder) {
+                continue;
             }
         }
 
@@ -58,25 +49,23 @@ handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
         }
     }
 
-    lsp_respond(request.id, workspace_symbols);
+    return workspace_symbols;
 }
 
-handle_document_symbol :: (request: LSP_Request_Message_Document_Symbol) {
-    push_allocator(temp);
+handle_document_symbol :: (request: LSP_Request_Message_Document_Symbol) -> []LSP_Document_Symbol {
 
     file_path := normalize_path(request.params.textDocument.uri);
 
     file := get_file(file_path);
     if !file {
         log_error("File does not exists or has not been parser yet! (%)", file_path);
-        lsp_respond(request.id, null);
-        return;
+        return .[];
     }
 
     symbols: [..]LSP_Document_Symbol;
     load_symbols_from_file(file, *symbols);
 
-    lsp_respond(request.id, symbols);
+    return symbols;
 }
 
 load_symbols_from_file :: (file: *Program_File, load_to: *[..]LSP_Document_Symbol) {

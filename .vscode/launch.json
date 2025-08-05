@@ -5,14 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Run Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": ["--profile=jails_dev", "--extensionDevelopmentPath=${workspaceFolder}/vscode_extension"],
+            "outFiles": ["${workspaceFolder}/vscode_extension/out/**/*.js"],
+            "preLaunchTask": "${defaultBuildTask}"
+        },
+        {
+            "name": "Attach to Native Server (LLDB)",
             "type": "lldb",
             "request": "attach",
-            "name": "Debug",
-            "program": "${workspaceFolder}/<executable file>",
-            "pid": "${command:pickProcess}",
-            "initCommands": [
-                "command script import ${workspaceFolder}/.vscode/jaitype.py"
-            ]
+            "program": "jails-darwin-arm64",
+            "waitFor": true
         },
         {
             "type": "cppvsdbg",
@@ -20,6 +25,15 @@
             "name": "Debug VS",
             "processId": "${command:pickProcess}",
             "visualizerFile": "${workspaceFolder}/jai.natvis",
+        }
+    ],
+    "compounds": [
+        {
+          "name": "Debug Extension and Server",
+          "configurations": [
+            "Attach to Native Server (LLDB)",
+            "Run Extension"
+          ]
         }
     ]
 }

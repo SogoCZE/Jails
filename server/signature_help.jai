@@ -1,32 +1,27 @@
-handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
-    push_allocator(temp);
+handle_signature_help :: (request: LSP_Request_Message_Signature_Help) -> bool, LSP_Signature_Help {
 
     file_path := normalize_path(request.params.textDocument.uri);
 
     file := get_file(file_path);
     if !file {
-        lsp_respond(request.id, null);
-        return;
+        return false, .{};
     }
 
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
     cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
     if !cursor_node {
-        lsp_respond(request.id, null);
-        return;
+        return false, .{};
     }
 
     proc_call := cast(*Procedure_Call) get_node_nearest_parent(cursor_node, kind => kind == .PROCEDURE_CALL);
     if !proc_call {
-        lsp_respond(request.id, null);
-        return;
+        return false, .{};
     }
 
     proc_call_ident := cast(*Identifier) proc_call.procedure;
     if !proc_call_ident {
-        lsp_respond(request.id, null);
-        return;
+        return false, .{};
     }
 
     proc_decl: *Declaration;
@@ -34,36 +29,31 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION {
         path := get_dot_path(cast(*Binary_Operation) proc_call.parent, proc_call);
         if path.count <= 1 {
-            lsp_respond(request.id, null);
-            return;
+            return false, .{};
         }
         path = array_view(path, 0, path.count-1);
 
         type := get_path_type(path);
         if !type {
-            lsp_respond(request.id, null);
-            return;
+            return false, .{};
         }
 
         proc_decl = get_member_in(type, proc_call_ident);
     } else {
         decls := get_declarations(file, cursor_block, *cursor_location, proc_call_ident.name);
         if decls.count == 0 {
-            lsp_respond(request.id, null);
-            return;
+            return false, .{};
         }
 
         proc_decl = decls[0];
     }
 
     if !proc_decl {
-        lsp_respond(request.id, null);
-        return;
+        return false, .{};
     }
 
     if !proc_decl.expression || proc_decl.expression.kind != .PROCEDURE {
-        lsp_respond(request.id, null);
-        return;
+        return false, .{};
     }
 
     procedure := cast(*Procedure) proc_decl.expression;
@@ -109,6 +99,5 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
     signature_help: LSP_Signature_Help;
     signature_help.activeSignature = 0;
     signature_help.signatures = .[signature_help_info];
-
-    lsp_respond(request.id, signature_help);
+    return true, signature_help;
 }

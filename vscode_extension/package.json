@@ -7,9 +7,6 @@
   "publisher": "ApparentlyStudio",
   "author": "Patrik Smělý (SogoCZE)",
   "main": "./out/extension.js",
-  "activationEvents": [
-    "onLanguage:jai"
-  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/SogoCZE/jai_language_server"

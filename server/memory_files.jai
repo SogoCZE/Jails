@@ -10,6 +10,7 @@ deinit_memory_files :: () {
 
 create_memory_file :: (file_path: string, content: string) {
     content_dynamic: [..]u8;
+    content_dynamic.allocator = context.default_allocator;
 
     array_copy(*content_dynamic, cast([]u8) content);
     // free(content);

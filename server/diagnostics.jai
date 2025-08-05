@@ -54,10 +54,14 @@ run_diagnostics :: () {
 
     reset_diagnostics();
 
+    log("diagnostics command: %", command);
+
     result, _, error := run_command(..command, working_directory=server.project_root, capture_and_return_output=true, timeout_ms=2500);
     if result.exit_code == 0 {
         return;
     }
+
+    log("error: %", error);
 
     lines := split(error, "\n");
     defer array_free(lines);
@@ -116,6 +120,8 @@ run_diagnostics :: () {
     diagnostics[0] = diagnostic;
 
     file = path_to_lsp_path(normalize_path(file,, temp)); // split_from_right and slice don't allocate memory so copy the file in case the string with compiler output is freed
+
+    log("sending %", diagnostics);
 
     lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
         method="textDocument/publishDiagnostics",

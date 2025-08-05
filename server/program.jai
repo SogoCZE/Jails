@@ -81,7 +81,12 @@ normalize_path :: (path: string) -> string {
         normalized_path = replace(normalized_path, "file://", "");
     }
 
-    return normalized_path;
+    abs_path, ok := get_absolute_path(normalized_path);
+    if !ok {
+        return normalized_path;
+    }
+
+    return abs_path;
 }
 
 path_to_lsp_path :: (path: string) -> string {
@@ -98,15 +103,15 @@ pool_alloc :: (pool: *Pool) -> Allocator {
 
 parse_file :: (path: string, force := false) {
     // Reset back to default allocator, we dont want to use pool from "parent" file...
-    context.allocator = context.default_allocator;
+    push_allocator(context.default_allocator);
 
     ok, file := table_find_new(*server.files, path);
     if !force && ok {
-        // log("Skipping % because it already exists", path);
+        log("Skipping % because it already exists", path);
         return;
     }
 
-    // log("Parse file: %", path);
+    log("Parse file: %", path);
 
     content := cast(string) get_memory_file(path);
     content_from_disc: bool;
@@ -116,7 +121,7 @@ parse_file :: (path: string, force := false) {
 
         content, exists = read_entire_file(path, log_errors=false);
         if !exists {
-            // log_error("File % does not exists!", path);
+            log_error("File % does not exists!", path);
             return;
         }
 
@@ -255,6 +260,7 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         _import := cast(*Directive_Import) node;
 
         path := get_module_import_path(_import, data.path_without_filename);
+        log("Looking for imported module % rel. to %, found : %", _import.module, data.path_without_filename, path);
 
         module_import: Module_Import;
         module_import.root = path;
@@ -271,6 +277,8 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         _load := cast(*Directive_Load) node;
 
         load_relative_path := join(data.path_without_filename, _load.file, separator="/");
+
+        log("Loading module: %", load_relative_path);
         array_add(*data.file.loads, _load);
         parse_file(load_relative_path); // @TODO: Run this in another thread?
     }
