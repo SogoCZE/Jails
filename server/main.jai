@@ -236,9 +236,11 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             create_diagnostics_metaprogram();
 
             log("Root URI: %", body.params.rootUri.*);
-            log("Root Path: %", body.params.rootPath.*);
 
-            server.project_root = copy_string(body.params.rootPath.*);
+            if (body.params.rootPath != null) {
+                log("Root Path: %", body.params.rootPath.*);
+                server.project_root = body.params.rootPath.*;
+            }
 
             load_config_file();
 
