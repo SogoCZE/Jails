@@ -25,8 +25,10 @@ run_diagnostics :: () {
     command: [..] string;
     defer array_free(command);
 
-    jai_exe_path := join(server.args.jai_path, "bin", jai_exe_name, separator="/");
-    defer free(jai_exe_path);
+    jai_exe_path := jai_exe_name;
+    if server.args.jai_path.count > 0 {
+        jai_exe_path = join(server.args.jai_path, "bin", jai_exe_name, separator="/",, temp);
+    }
 
     array_add(*command, jai_exe_path);
     array_add(*command, build_root_absolute, "-quiet", "-no_color", "+jails_diagnostics");
