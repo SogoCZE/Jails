@@ -70,6 +70,52 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "debuggers": [
+      {
+        "type": "cppvsdbg",
+        "label": "Debug Jai (MSVC)",
+        "languages": [
+          "jai"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the Jai executable",
+                "default": "${workspaceFolder}/program.exe"
+              },
+              "cwd": {
+                "type": "string",
+                "default": "${workspaceFolder}"
+              },
+              "stopAtEntry": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "name": "Debug Jai Executable",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/program.exe",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": true
+          }
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "jai"
+      }
+    ],
     "grammars": [
       {
         "language": "jai",
