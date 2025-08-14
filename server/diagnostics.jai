@@ -26,7 +26,7 @@ run_diagnostics :: () {
     defer array_free(command);
 
     array_add(*command, "jai");
-    array_add(*command, build_root_absolute, "-quiet", "-no_color", "+jails_diagnostics");
+    array_add(*command, build_root_absolute, "-quiet", "-no_color");
 
     // Use fast x64 backend on supported CPUs.
     if CPU == .X64 {
@@ -36,6 +36,8 @@ run_diagnostics :: () {
     for local_module_folder: server.local_modules {
         array_add(*command, "-import_dir", local_module_folder);
     }
+
+    array_add(*command, "+jails_diagnostics");
 
     if server.intermediate_path.count > 0 {
         joined := join(server.project_root, server.intermediate_path, "jails", separator="/",, temp);
