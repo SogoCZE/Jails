@@ -7,5 +7,6 @@
         "build.jai"
     ],
     "build_root": "build.jai",
-    "auto_insert_parentheses": true
+    "auto_insert_parentheses": true,
+    "jai_path": "/Users/john/Downloads/jai"
 }

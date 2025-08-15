@@ -1,18 +1,10 @@
-
-
-handle_completitions :: (request: LSP_Request_Message_Completion) {
-    push_allocator(temp);
+handle_completitions :: (request: LSP_Request_Message_Completion) -> []LSP_Completion_Item {
 
     file_path := normalize_path(request.params.textDocument.uri);
 
-    _exit :: () #expand {
-        `lsp_respond(request.id, null);
-        `return;
-    }
-
     file := get_file(file_path);
     if !file {
-        _exit();
+        return .[];
     }
 
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
@@ -20,40 +12,32 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     cursor_node := get_node_by_location(file, cursor_location);
 
     if !cursor_node {
-        return;
+        return .[];
     }
 
     // We don't wanna to give completions inside strings and comments...
-    if cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT _exit();
+    if cursor_node.kind == Node.Kind.LITERAL || cursor_node.kind == Node.Kind.COMMENT return .[];
 
     if cursor_node.kind == .DIRECTIVE_IMPORT {
-        handle_completitions_import(request, xx cursor_node);
-        return;
+        return handle_completitions_import(xx cursor_node);
     }
 
     if cursor_node.kind == .DIRECTIVE_LOAD {
-        handle_completitions_load(request, file, xx cursor_node);
-        return;
+        return handle_completitions_load(file, xx cursor_node);
     }
 
-    decls: []*Declaration;
-    defer array_free(decls);
+    items := handle_dot_completitions(cursor_node, cursor_location);
+    if items.count > 0 return items;
 
-    if handle_dot_completitions(request, cursor_node, cursor_location) {
-        return;
-    }
-
-    if handle_assignment_completitions(request, cursor_node) {
-        return;
-    }
+    items = handle_assignment_completitions(cursor_node);
+    if items.count > 0 return items;
 
     // General
-    decls = get_declarations(file, cursor_block, *cursor_location);
-
-    send_completions_decls(request, decls);
+    decls := get_declarations(file, cursor_block, *cursor_location);
+    return get_completions_decls(decls);
 }
 
-handle_completitions_load :: (request: LSP_Request_Message_Completion, file: *Program_File, directive_load: *Directive_Load) {
+handle_completitions_load :: (file: *Program_File, directive_load: *Directive_Load) -> []LSP_Completion_Item {
     completions: [..]LSP_Completion_Item;
     current_file_dir := path_strip_filename(file.path);
 
@@ -76,19 +60,18 @@ handle_completitions_load :: (request: LSP_Request_Message_Completion, file: *Pr
 
     is_dir, ok := is_directory(path_to_visit);
     if !is_dir || !ok {
-        lsp_respond(request.id, null);
-        return;
+        return .[];
     }
 
     visit_files(path_to_visit, false, *completions, visit_file, true, true);
 
-    lsp_respond(request.id, completions);
+    return completions;
 }
 
-handle_completitions_import :: (request: LSP_Request_Message_Completion, directive_import: *Directive_Import) {
+handle_completitions_import :: (directive_import: *Directive_Import) -> []LSP_Completion_Item {
     completions: [..]LSP_Completion_Item;
 
-    modules_dir := sprint("%/modules", server.args.jai_path);
+    modules_dir := sprint("%/modules", server.jai_path);
 
     visit_modules :: (info: *File_Visit_Info, completions: *[..]LSP_Completion_Item) {
         if !info.is_directory && !contains(info.short_name, ".jai") return;
@@ -118,12 +101,12 @@ handle_completitions_import :: (request: LSP_Request_Message_Completion, directi
         visit_files(local_modules_dir, false, *completions, visit_modules, true, true);
     }
 
-    lsp_respond(request.id, completions);
+    return completions;
 }
 
-handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_node: *Node, cursor_location: Node.Location) -> bool {
+handle_dot_completitions :: (cursor_node: *Node, cursor_location: Node.Location) -> []LSP_Completion_Item {
     if !cursor_node {
-        return false;
+        return .[];
     }
 
     op: *Binary_Operation;
@@ -132,11 +115,11 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     } else if cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
         op = cast(*Binary_Operation, cursor_node.parent);
     } else {
-        return false;
+        return .[];
     }
 
     if op.operation != .DOT {
-        return false;
+        return .[];
     }
 
     path := get_dot_path(op, null);
@@ -155,41 +138,40 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
 
     type := get_path_type(path);
     if !type {
-        // log_error("type is invalid! (null)");
-        return false;
+        return .[];
     }
 
-    return handle_completitions_for_node(request, type);
+    return handle_completitions_for_node(type);
 }
 
-handle_assignment_completitions :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
+handle_assignment_completitions :: (cursor_node: *Node) -> []LSP_Completion_Item {
     op: *Binary_Operation;
     if cursor_node.kind == .BINARY_OPERATION {
         op = cast(*Binary_Operation, cursor_node);
     } else if cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
         op = cast(*Binary_Operation, cursor_node.parent);
     } else {
-        return false;
+        return .[];
     }
 
     if op.operation != .ASSIGN && op.operation != .IS_EQUAL && op.operation != .IS_NOT_EQUAL {
-        return false;
+        return .[];
     }
 
     // @TODO: support more types!
     if cursor_node.kind != .UNARY_OPERATION {
-        return false;
+        return .[];
     }
 
     left_type := get_node_type(op, true);
     if !left_type {
-        return false;
+        return .[];
     }
 
-    return handle_completitions_for_node(request, left_type);
+    return handle_completitions_for_node(left_type);
 }
 
-handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node: *Node) -> bool {
+handle_completitions_for_node :: (node: *Node) -> []LSP_Completion_Item {
     // log("type kind: %", node.kind);
     // log_node(node);
 
@@ -254,7 +236,7 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
             module_file := get_file(module_file_path);
 
             if !module_file {
-                return false;
+                return .[];
             }
 
             for get_declarations(module_file, only_loaded=true) {
@@ -263,17 +245,14 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
     }
 
     if decls.count == 0 {
-        return false;
+        return .[];
     }
 
-    send_completions_decls(request, decls);
-
-    return true;
+    return get_completions_decls(decls);
 }
 
-send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*Declaration) {
+get_completions_decls :: (decls: []*Declaration) -> []LSP_Completion_Item {
     completions: [..]LSP_Completion_Item;
-    defer array_free(completions);
 
     for decl: decls {
         if !decl.expression && !decl.type_inst continue;
@@ -331,5 +310,5 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         });
     }
 
-    lsp_respond(request.id, completions);
+    return completions;
 }

@@ -1,4 +1,4 @@
-handle_goto_load :: (request: LSP_Request_Message_Definition, file: *Program_File, _load: *Directive_Load) {
+handle_goto_load :: (file: *Program_File, _load: *Directive_Load) -> LSP_Location_Link {
     file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
     load_absolute_path := join(file_path_without_filename, _load.file, separator="/");
 
@@ -9,12 +9,10 @@ handle_goto_load :: (request: LSP_Request_Message_Definition, file: *Program_Fil
     };
     lsp_location.targetUri = path_to_lsp_path(load_absolute_path);
 
-    lsp_respond(request.id, lsp_location);
+    return lsp_location;
 }
 
-handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_File, _import: *Directive_Import) {
-    push_allocator(temp);
-
+handle_goto_import :: (file: *Program_File, _import: *Directive_Import) -> LSP_Location_Link {
     file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
     module_absolute_path := get_module_import_path(_import, file_path_without_filename);
 
@@ -24,12 +22,13 @@ handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_F
         end=.{line=xx _import.location.l0, character=xx(_import.location.c1-1)}
     };
     lsp_location.targetUri = path_to_lsp_path(module_absolute_path);
-
-    lsp_respond(request.id, lsp_location);
+    return lsp_location;
 }
 
-handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
-    if !ident || !ident.parent return false;
+handle_goto_dot :: (ident: *Identifier) -> bool, LSP_Location {
+    if !ident || !ident.parent {
+        return false, .{};
+    }
 
     leaf_node: *Node;
     op: *Binary_Operation;
@@ -56,118 +55,106 @@ handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier)
         // @TODO: anything else?
     }
 
-    if !op return false;
+    if !op {
+        return false, .{};
+    }
 
     path := get_dot_path(op, leaf_node);
     if path.count < 2 {
-        return false;
+        return false, .{};
     }
 
     path = array_view(path, 0, path.count-1);
 
     type := get_path_type(path);
     if !type {
-        return false;
+        return false, .{};
     }
 
     decl := get_member_in(type, ident);
     if !decl {
-        return false;
+        return false, .{};
     }
 
-    lsp_respond(request.id, node_location_to_lsp_location(decl.location));
-
-    return true;
+    return true, node_location_to_lsp_location(decl.location);
 }
 
-handle_goto_assignment :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
+handle_goto_assignment :: (ident: *Identifier) -> bool, LSP_Location {
     if !ident.parent || ident.parent.kind != .UNARY_OPERATION {
-        return false;
+        return false, .{};
     }
 
     unary_op := cast(*Unary_Operation, ident.parent);
     if unary_op.operation != .DOT {
-        return false;
+        return false, .{};
     }
 
     if !unary_op.parent || unary_op.parent.kind != .BINARY_OPERATION  {
-        return false;
+        return false, .{};
     }
 
     binary_op_type := get_node_type(unary_op.parent, true);
     if !binary_op_type {
-        return false;
+        return false, .{};
     }
 
     decl := get_member_in(binary_op_type, ident);
     if !decl {
-        return false;
+        return false, .{};
     }
 
-    lsp_respond(request.id, node_location_to_lsp_location(decl.location));
-
-    return true;
+    return true, node_location_to_lsp_location(decl.location);
 }
 
-handle_goto :: (request: LSP_Request_Message_Definition) {
-    push_allocator(temp);
-
-    file_path := normalize_path(request.params.textDocument.uri);
-
+calc_goto :: (file_path: string, position: LSP_Position) -> []Generic_Location {
     file := get_file(file_path);
     if !file {
-        log_error("File does not exists or has not been parser yet! (%)", file_path);
-        lsp_respond(request.id, null);
-        return;
+        log_error("File does not exists or has not been parsed yet! (%)", file_path);
+        return .[];
     }
 
-    cursor_location := lsp_location_to_node_location(request.params.position, file_path);
-
+    cursor_location := lsp_location_to_node_location(position, file_path);
     node := get_node_by_location(file, cursor_location);
     if !node {
-        lsp_respond(request.id, null);
-        return;
+        return .[];
     }
 
     log("Clicked node: %", node.kind);
 
     if node.kind == .DIRECTIVE_LOAD {
-        handle_goto_load(request, file, xx node);
-        return;
+        return .[generic_location(handle_goto_load(file, xx node))];
     }
 
     if node.kind == .DIRECTIVE_IMPORT {
-        handle_goto_import(request, file, xx node);
-        return;
+        return .[generic_location(handle_goto_import(file, xx node))];
     }
 
     if node.kind != .IDENTIFIER {
-        lsp_respond(request.id, null);
-        return;
+        return .[];
     }
 
     ident := cast(*Identifier) node;
     log("Ident: %", ident.name);
 
-    if handle_goto_assignment(request, ident) {
-        return;
+    ok, loc := handle_goto_assignment(ident);
+    if ok {
+        return .[generic_location(loc)];
     }
 
-    if handle_goto_dot(request, ident) {
-        return;
+    ok, loc = handle_goto_dot(ident);
+    if ok {
+        return .[generic_location(loc)];
     }
 
 
     decls := get_identifier_decl(ident);
     if decls.count == 0 {
-        lsp_respond(request.id, null);
-        return;
+        return .[];
     }
 
-    locations := NewArray(decls.count, LSP_Location);
-    defer array_free(locations);
-
-    for decls locations[it_index] = node_location_to_lsp_location(it.location);
-
-    lsp_respond(request.id, locations);
+    locations := NewArray(decls.count, Generic_Location);
+    for decls {
+        set(*locations[it_index], node_location_to_lsp_location(it.location));
+    }
+    return locations;
 }

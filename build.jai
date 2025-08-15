@@ -10,7 +10,9 @@
     array_add(*import_path, "./modules");
 
     profile_server := array_find(args, "-profile_server");
+    replace_vscode_extension_binary := array_find(args, "-replace-vscode-ext-bin");
     launch_vscode := array_find(args, "-vscode");
+    if launch_vscode replace_vscode_extension_binary = true;
     release := array_find(args, "-release");
     release_very := array_find(args, "-very-release");
     arm := array_find(args, "-arm");
@@ -28,7 +30,8 @@
         options.import_path = import_path;
 
         if release set_optimization(*options, .OPTIMIZED);
-        if release_very set_optimization(*options, .VERY_OPTIMIZED);
+        else if release_very set_optimization(*options, .VERY_OPTIMIZED);
+        else set_optimization(*options, .DEBUG);
 
         if arm options.cpu_target = .ARM64;
 
@@ -59,19 +62,29 @@
         if tracy && tracy.shutdown tracy.shutdown(tracy);
     }
 
-    // When we provide -vscode argument automatically launch vscode with our extension installed.
+    vscode_extension_directory := join(get_working_directory(), "/vscode_extension");
+    vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
+
+    // When we provide `-replace-vscode-ext-bin` argument we patch in our binary to
+    // the already built extension. Also runs for `-vscode`
+    if ok && replace_vscode_extension_binary {
+        assert(OS == .WINDOWS || OS == .MACOS, "Replacing vscode extension binary on Linux is not supported at the time.");
+
+        if OS == .WINDOWS {
+            copy_file("bin/jails.exe", "vscode_extension/out/jails-win32-x64.exe");
+        }
+        if OS == .MACOS {
+            copy_file("bin/jails", "vscode_extension/out/jails-darwin-arm64");
+        }
+    }
+
+    // When we provide `-vscode` argument automatically launch vscode with our extension installed.
     if ok && launch_vscode {
-        vscode_extension_directory := join(get_working_directory(), "/vscode_extension");
-        vscode_extension_development_path := join("--extensionDevelopmentPath=", vscode_extension_directory);
-
-        print("%\n", vscode_extension_development_path);
-
-        assert(OS == .WINDOWS || OS == .MACOS, "Opening vscode on Linux is not supported at the time.");
+        assert(OS == .WINDOWS || OS == .MACOS, "Launching vscode on Linux is not supported at the time.");
 
         vscode_path: string;
 
         if OS == .WINDOWS {
-            copy_file("bin/jails.exe", "vscode_extension/out/jails-win32-x64.exe");
             username, ok := get_username();
             if !ok {
                 log_error("Cannot resolve Windows username. Cannot launch vscode.");
@@ -85,7 +98,6 @@
         }
 
         if OS == .MACOS {
-            copy_file("bin/jails", "vscode_extension/out/jails-darwin-arm64");
             vscode_path = "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code";
         }
 

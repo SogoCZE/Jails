@@ -93,9 +93,17 @@ LSP_Position :: struct {
     character: u32;
 }
 
+operator == :: (a: LSP_Position, b: LSP_Position) -> bool {
+    return a.line == b.line && a.character == b.character;
+}
+
 LSP_Range :: struct {
     start: LSP_Position;
     end: LSP_Position;
+}
+
+operator == :: (a: LSP_Range, b: LSP_Range) -> bool {
+    return a.start == b.start && a.end == b.end;
 }
 
 LSP_Text_Document_Position :: struct {
@@ -226,11 +234,29 @@ LSP_Location :: struct {
     range: LSP_Range;
 }
 
+operator == :: (a: LSP_Location, b: LSP_Location) -> bool {
+    return a.uri == b.uri && a.range == b.range;
+}
+
 LSP_Location_Link :: struct {
     originSelectionRange: LSP_Range;
     targetUri: string;
     targetRange: LSP_Range;
     targetSelectionRange: LSP_Range;
+}
+
+operator == :: (a: LSP_Location_Link, b: LSP_Location_Link) -> bool {
+    return a.originSelectionRange == b.originSelectionRange &&
+           a.targetUri == b.targetUri &&
+           a.targetRange == b.targetRange &&
+           a.targetSelectionRange == b.targetSelectionRange;
+}
+
+Generic_Location :: Tagged_Union(LSP_Location, LSP_Location_Link);
+generic_location :: (loc: $T) -> Generic_Location {
+    gl: Generic_Location;
+    set(*gl, loc);
+    return gl;
 }
 
 /* Diagnostic */
@@ -343,8 +369,15 @@ LSP_Delete_File :: struct {
     annotationID: *string;
 }
 
-
-
+LSP_Did_Change_Workspace_Folders :: struct {
+    using request: LSP_Request_Message;
+    params: struct {
+        event: struct {
+            added: []Workspace_Folder;
+            removed: []Workspace_Folder;
+        };
+    }
+}
 
 /* Workspace Edit */
 
@@ -750,6 +783,17 @@ lsp_respond :: (id: JSON_Value, data: $T) {
         response.id=id,
         result=data,
     });
+}
+
+lsp_respond_array :: (id: JSON_Value, data: []$T) {
+    if data.count == {
+        case 0;
+            lsp_respond(id, null);
+        case 1;
+            lsp_respond(id, data[0]);
+        case;
+            lsp_respond(id, data);
+    }
 }
 
 // lsp_respond_with_already_json_serialized_result_data :: (id: u32, data: string){

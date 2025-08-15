@@ -26,8 +26,8 @@ run_diagnostics :: () {
     defer array_free(command);
 
     jai_exe_path := jai_exe_name;
-    if server.args.jai_path.count > 0 {
-        jai_exe_path = join(server.args.jai_path, "bin", jai_exe_name, separator="/",, temp);
+    if server.jai_path.count > 0 {
+        jai_exe_path = join(server.jai_path, "bin", jai_exe_name, separator="/",, temp);
     }
 
     array_add(*command, jai_exe_path);
@@ -54,10 +54,14 @@ run_diagnostics :: () {
 
     reset_diagnostics();
 
+    log("diagnostics command: %", command);
+
     result, _, error := run_command(..command, working_directory=server.project_root, capture_and_return_output=true, timeout_ms=2500);
     if result.exit_code == 0 {
         return;
     }
+
+    log("error: %", error);
 
     lines := split(error, "\n");
     defer array_free(lines);
@@ -116,6 +120,8 @@ run_diagnostics :: () {
     diagnostics[0] = diagnostic;
 
     file = path_to_lsp_path(normalize_path(file,, temp)); // split_from_right and slice don't allocate memory so copy the file in case the string with compiler output is freed
+
+    log("sending %", diagnostics);
 
     lsp_send(LSP_Client_Message(LSP_Publish_Diagnostics).{
         method="textDocument/publishDiagnostics",

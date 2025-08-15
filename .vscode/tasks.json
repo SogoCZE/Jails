@@ -6,7 +6,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "jai ${workspaceFolder}/build.jai - -vscode",
+            "command": "/Users/john/Downloads/jai/bin/jai-macos ${workspaceFolder}/build.jai - -replace-vscode-ext-bin",
             "presentation": {
                 "echo": true,
                 "reveal": "silent",
