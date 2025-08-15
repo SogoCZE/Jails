@@ -14,7 +14,7 @@ In the future, the language server will support all other basic stuff you would 
 Be aware that this language server is still pretty much unstable... Nonetheless, it can be quite useful even in this early stage of development.
 
 ### Requirements
-- You need to have a **Jai compiler in your path**. The language server searches for the compiler with `whereis` on Mac, Linux and `where` on Windows. You can also specify the compiler path with a command line argument to Jails with `-jai_path /path/to/compiler/jai`.
+- You need to have a **Jai compiler in your path**. The language server searches for the compiler with `whereis` on Mac, Linux and `where` on Windows. You can also specify the path to your jai installation with a command line argument to Jails e.g. `-jai_path /path/to/jai`. Note that this is the path to the root of the installation, the actual compiler binary should be in `bin/` at that location.
 - You may need to create [`jails.json` config file](#config-file) to properly support your project structure. In the future I would like to Jails work for most of the Jai projects out-of-box without any config but for now it is recommended you set up one.
 
 ### When using a custom Build program
