@@ -323,6 +323,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             parse_file(file_path);
             analyze_files();
+            run_diagnostics();
 
             log("File_path: %", file_path);
 
