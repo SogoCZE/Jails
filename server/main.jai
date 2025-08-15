@@ -175,9 +175,10 @@ load_config_file :: () {
 
     ok, config := json_parse_string(config_content, Config);
     if !ok {
-        log("Failed to parse config file!");
+        log("Failed to parse config file %", config_path);
         return;
     }
+    log("Loaded config file %", config_path);
 
     for config.local_modules {
         array_add_if_unique(*server.local_modules, it);
@@ -236,9 +237,11 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             create_diagnostics_metaprogram();
 
             log("Root URI: %", body.params.rootUri.*);
-            log("Root Path: %", body.params.rootPath.*);
 
-            server.project_root = copy_string(body.params.rootPath.*);
+            if (body.params.rootPath != null) {
+                log("Root Path: %", body.params.rootPath.*);
+                server.project_root = copy_string(body.params.rootPath.*);
+            }
 
             load_config_file();
 
