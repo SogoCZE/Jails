@@ -617,59 +617,39 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
 
 get_declarations :: (file: *Program_File, from_block: *Block = null, from_loc: *Node.Location = null, name := "", only_loaded := false) -> []*Declaration {
     decls: [..]*Declaration;
+    decls.allocator = temp;
 
-    // Globals in all linked files (loaded or imported)
-    if file {
-        for linked_file: file.linked_files {
-            if only_loaded && linked_file.from_import {
-                continue;
-            }
+    if !only_loaded {
+        processed: [..]*Program_File;
+        processed.allocator = temp;
 
-            // -- Global using --
-            // We are accepting usings only from loaded files.
-            // if !linked_file.from_import {
+        for server_file: server.files {
+            if array_find(processed, server_file) then continue;
 
-            //     // This is stupid!!
-            //     for linked_file.file.nodes {
-            //         if !is_global(it, file, linked_file.file, linked_file.from_import) {
-            //             continue;
-            //         }
+            array_add(*processed, server_file);
 
-            //         if it.kind != .USING {
-            //             continue;
-            //         }
-
-            //         _using := cast(*Using, it);
-
-            //         if skip_using == _using {
-            //             continue;
-            //         }
-
-            //         if !_using.expression {
-            //             continue;
-            //         }
-
-            //         copied_using := skip_using;
-            //         skip_using = _using;
-
-            //         used_type := get_node_type(_using.expression);
-            //         if !used_type continue;
-
-            //         add_all_fields_of(*decls, used_type, name);
-
-            //         skip_using = copied_using;
-            //     }
-            // }
-
-            // We are searching for specific decl
             if name.count > 0 {
-                for decl: table_find_multiple(*linked_file.file.declarations, name) {
-                    if is_global(decl, file, linked_file.file, linked_file.from_import) array_add(*decls, decl);
+                for decl: table_find_multiple(*server_file.declarations, name) {
+                    if is_global(decl, file, server_file, false) {
+                        array_add_if_unique(*decls, decl);
+                    }
                 }
             } else { // We are adding all globals decls
-                for decl: linked_file.file.declarations {
-                    if is_global(decl, file, linked_file.file, linked_file.from_import) array_add(*decls, decl);
+                for decl: server_file.declarations {
+                    if is_global(decl, file, server_file, false) {
+                        array_add_if_unique(*decls, decl);
+                    }
                 }
+            }
+        }
+    } else {
+        if name.count > 0 {
+            for decl: table_find_multiple(*file.declarations, name) {
+                array_add_if_unique(*decls, decl);
+            }
+        } else { // We are adding all globals decls
+            for decl: file.declarations {
+                array_add_if_unique(*decls, decl);
             }
         }
     }
