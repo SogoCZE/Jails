@@ -161,13 +161,13 @@ parse_file :: (path: string, force := false) {
     array_add_if_unique(*server.files_to_be_analyzed, file);
 
     // We must revalidate all files that are using this file in some way.
-    files_avaiable_from_this_file := get_files_that_are_avaiable_from(file,, temp);
-    for file_that_load_this_file: files_avaiable_from_this_file {
-        // if array_find(server.files_to_be_analyzed, file_that_load_this_file) {
+    files_using_this_file := get_files_that_use(file,, temp);
+    for file_using_this_file: files_using_this_file {
+        // if array_find(server.files_to_be_analyzed, file_using_this_file) {
         //     continue;
         // }
 
-        array_add_if_unique(*server.files_to_be_analyzed, file_that_load_this_file);
+        array_add_if_unique(*server.files_to_be_analyzed, file_using_this_file);
     }
 }
 
@@ -745,7 +745,7 @@ is_global :: (node: *Node, from_file: *Program_File, it_file: *Program_File, fro
     return false;
 }
 
-get_files_that_are_avaiable_from :: (target_file: *Program_File) -> []*Program_File {
+get_files_that_use :: (target_file: *Program_File) -> []*Program_File {
     files: [..]*Program_File;
 
     for file: server.files {

@@ -177,9 +177,10 @@ load_config_file :: () {
 
     ok, config := json_parse_string(config_content, Config);
     if !ok {
-        log("Failed to parse config file!");
+        log("Failed to parse config file %", config_path);
         return;
     }
+    log("Loaded config file %", config_path);
 
     for config.local_modules {
         array_add_if_unique(*server.local_modules, it);
@@ -238,9 +239,11 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             create_diagnostics_metaprogram();
 
             log("Root URI: %", body.params.rootUri.*);
-            log("Root Path: %", body.params.rootPath.*);
 
-            server.project_root = copy_string(body.params.rootPath.*);
+            if (body.params.rootPath != null) {
+                log("Root Path: %", body.params.rootPath.*);
+                server.project_root = copy_string(body.params.rootPath.*);
+            }
 
             load_config_file();
 
@@ -396,6 +399,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
     }
 }
 
+#if OS == .WINDOWS {
+    jai_exe_name :: "jai.exe";
+} else #if OS == .MACOS {
+    jai_exe_name :: "jai-macos";
+} else #if OS == .LINUX {
+    jai_exe_name :: "jai-linux";
+}
+
 main :: () {
     context.logger = lsp_log;
 
@@ -410,17 +421,8 @@ main :: () {
     server.verbose = args.verbose;
     server.profile = args.profile;
 
-    if args.jai_path.count == 0 {
-        jai_name: string;
-        #if OS == .WINDOWS {
-            jai_name = "jai";
-        } else #if OS == .MACOS {
-            jai_name = "jai-macos";
-        } else #if OS == .LINUX {
-            jai_name = "jai-linux";
-        }
-
-        server.jai_path = find_jai_path(jai_name);
+    if server.jai_path.count == 0 {
+        server.jai_path = find_jai_path(jai_exe_name);
         if !server.jai_path {
             log_error("Failed to resolve Jai path");
             // @TODO: Send this fatal error over LSP somehow?
