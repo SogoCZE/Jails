@@ -6,6 +6,7 @@ Args :: struct {
     verbose: bool;
     profile: bool;
     jai_path: string;
+    jai_exe_name: string;
 }
 
 User_Options :: struct {
@@ -110,7 +111,15 @@ find_entry_file :: (root: string) -> string {
     return ""; // TODO: What we gonna do when we do not find any?
 }
 
-find_jai_path :: (executable_name: string) -> string {
+#if OS == .WINDOWS {
+    DEFAULT_JAI_EXE_NAME :: "jai.exe";
+} else #if OS == .MACOS {
+    DEFAULT_JAI_EXE_NAME :: "jai-macos";
+} else #if OS == .LINUX {
+    DEFAULT_JAI_EXE_NAME :: "jai-linux";
+}
+
+find_jai_path :: (executable_name: string) -> string, string {
     result: Process_Result;
     raw_path: string;
     err: string;
@@ -143,11 +152,12 @@ find_jai_path :: (executable_name: string) -> string {
 
     if raw_path.count == 0 {
         #if OS == .MACOS || OS == .LINUX {
-            if executable_name == "jai" return "";
-            return find_jai_path("jai");
+            if executable_name == "jai" return "", "";
+            path, exe_name := find_jai_path("jai");
+            return path, exe_name;
         }
 
-        return "";
+        return "", "";
     }
 
     path := split(raw_path, "/");
@@ -155,7 +165,7 @@ find_jai_path :: (executable_name: string) -> string {
     pop(*path); // jai.exe or jai
     pop(*path); // bin
 
-    return join(..path, separator="/");
+    return join(..path, separator="/"), executable_name;
 }
 
 load_config_file :: () {
@@ -278,6 +288,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 parse_file(tprint("%/modules/Preload.jai", server.args.jai_path), true);
             }
 
+
             analyze_files();
 
             to_send: LSP_Result_Initialize;
@@ -397,14 +408,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
     }
 }
 
-#if OS == .WINDOWS {
-    jai_exe_name :: "jai.exe";
-} else #if OS == .MACOS {
-    jai_exe_name :: "jai-macos";
-} else #if OS == .LINUX {
-    jai_exe_name :: "jai-linux";
-}
-
 main :: () {
     context.logger = lsp_log;
 
@@ -416,12 +419,12 @@ main :: () {
     }
 
     if server.args.jai_path.count == 0 {
-        server.args.jai_path = find_jai_path(jai_exe_name);
+        server.args.jai_path, server.args.jai_exe_name = find_jai_path(DEFAULT_JAI_EXE_NAME);
         if !server.args.jai_path {
             log_error("Failed to resolve Jai path");
             // @TODO: Send this fatal error over LSP somehow?
         } else {
-            log("Jai path: %", server.args.jai_path);
+            log("Jai path: % (%)", server.args.jai_path, server.args.jai_exe_name);
         }
     }
 
