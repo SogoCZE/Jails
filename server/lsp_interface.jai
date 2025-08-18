@@ -242,8 +242,8 @@ LSP_Publish_Diagnostics :: struct {
 
 LSP_Diagnostic :: struct {
     range: LSP_Range;
-    serverity: s64; // *LSP_Diagnostic_Severity;
     // code: *string; // @NOTE: potentionaly int
+    severity: s64; // *LSP_Diagnostic_Severity;
     // codeDescription: LSP_Code_Description;
     // source: *string;
     message: string;

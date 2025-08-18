@@ -77,6 +77,7 @@ run_diagnostics :: () {
         ok: bool;
         location: string;
         ok, file, location = split_from_right(rest, ":");
+        file = replace(file, "\/\/", "\/",, temp);
         if !ok continue;
 
         line_and_character := split(location, ",");
@@ -89,7 +90,7 @@ run_diagnostics :: () {
         if !c_ok continue;
 
         diagnostic.message = message;
-        diagnostic.serverity = xx LSP_Diagnostic_Severity.ERROR;
+        diagnostic.severity = xx LSP_Diagnostic_Severity.ERROR;
 
         diagnostic.range.start.line = line-1;
         diagnostic.range.start.character = character-1;
