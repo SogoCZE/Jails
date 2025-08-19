@@ -179,7 +179,11 @@ load_config_file :: () {
     }
 
     config_path := join(server.project_root, "/jails.json");
-    if !file_exists(config_path) return;
+    if !file_exists(config_path) {
+        log("Failed to find 'jails.json' in your project root. Tried: %", config_path);
+        return;
+    }
+    log("Attempting to load config file: %", config_path);
 
     config_content := read_entire_file(config_path);
 
@@ -249,10 +253,14 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             log("Root URI: %", body.params.rootUri.*);
 
             if (body.params.rootPath != null) {
-                log("Root Path: %", body.params.rootPath.*);
                 server.project_root = copy_string(body.params.rootPath.*);
             }
+            else {
+                log("Extracting root path from URI...");
+                server.project_root = normalize_path(body.params.rootUri.*);
+            }
 
+            log("Root Path: %", server.project_root);
             load_config_file();
 
             if server.build_root.count == 0 {
