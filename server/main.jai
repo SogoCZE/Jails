@@ -180,7 +180,7 @@ load_config_file :: () {
 
     config_path := join(server.project_root, "/jails.json");
     if !file_exists(config_path) {
-        log("Failed to find 'jails.json' in your project root. Tried: %", config_path);
+        log_error("Failed to find 'jails.json' in your project root. Tried: %", config_path);
         return;
     }
     log("Attempting to load config file: %", config_path);
@@ -250,17 +250,29 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             create_diagnostics_metaprogram();
 
-            log("Root URI: %", body.params.rootUri.*);
+            // The order of precedence for establishing our project_root is:
+            // - workspaceFolder (initially we only use the first path specified)
+            // - rootUri
+            // - rootPath
 
-            if (body.params.rootPath != null) {
+            if (body.params.workspaceFolders.count > 0) {
+                log("Workspace folders: %", body.params.workspaceFolders.*);
+                server.project_root = normalize_path(body.params.workspaceFolders.*[0].uri);
+            }
+            else if (body.params.rootUri != null) {
+                log("Root URI: %", body.params.rootUri.*);
+                server.project_root = normalize_path(body.params.rootUri.*);
+            }
+            else if (body.params.rootPath != null) {
+                log("Root Path: %", body.params.rootPath.*);
                 server.project_root = copy_string(body.params.rootPath.*);
             }
             else {
-                log("Extracting root path from URI...");
-                server.project_root = normalize_path(body.params.rootUri.*);
+                log_error("Unable to determine the project root!");
+                return;
             }
 
-            log("Root Path: %", server.project_root);
+            log("Project Root: %", server.project_root);
             load_config_file();
 
             if server.build_root.count == 0 {
