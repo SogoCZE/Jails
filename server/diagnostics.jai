@@ -77,7 +77,7 @@ run_diagnostics :: () {
         ok: bool;
         location: string;
         ok, file, location = split_from_right(rest, ":");
-        file = replace(file, "\/\/", "\/",, temp);
+        file = replace(file, "//", "/",, temp);
         if !ok continue;
 
         line_and_character := split(location, ",");
