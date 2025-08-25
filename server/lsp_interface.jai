@@ -88,6 +88,23 @@ LSP_Log_Message :: struct {
     };
 }
 
+LSP_Window_Show_Message_Type :: enum {
+    ERROR :: 1;
+    WARNING :: 2;
+    INFO :: 3;
+    LOG :: 4;
+    DEBUG :: 5;
+}
+
+LSP_Window_Show_Message :: struct {
+    using request: LSP_Request_Message;
+    method = "window/showMessage";
+    params: struct{
+        type: LSP_Window_Show_Message_Type;
+        message: string;
+    }
+}
+
 LSP_Position :: struct {
     line: u32;
     character: u32;
@@ -732,6 +749,15 @@ lsp_log :: (message : string, data : *void, info : Log_Info) {
     }
 
     lsp_send(sent_log);
+}
+
+lsp_window_message :: (format: string, args: ..Any, type: LSP_Window_Show_Message_Type = .INFO) {
+    content := sprint(format, ..args);
+    message: LSP_Window_Show_Message;
+    message.params.message = content;
+    message.params.type = type;
+    lsp_send(message);
+    free(content);
 }
 
 lsp_send :: (data: $T) {
