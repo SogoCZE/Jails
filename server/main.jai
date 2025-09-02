@@ -23,6 +23,7 @@ Server :: struct {
     build_root: string;
     intermediate_path: string;
     jai_path: string;
+    jai_exe_name: string;
 
     project_root: string;
     files: Table(string, *Program_File);
@@ -112,7 +113,15 @@ find_entry_file :: (root: string) -> string {
     return ""; // TODO: What we gonna do when we do not find any?
 }
 
-find_jai_path :: (executable_name: string) -> string {
+#if OS == .WINDOWS {
+    DEFAULT_JAI_EXE_NAME :: "jai.exe";
+} else #if OS == .MACOS {
+    DEFAULT_JAI_EXE_NAME :: "jai-macos";
+} else #if OS == .LINUX {
+    DEFAULT_JAI_EXE_NAME :: "jai-linux";
+}
+
+find_jai_path :: (executable_name: string) -> string, string {
     result: Process_Result;
     raw_path: string;
     err: string;
@@ -128,7 +137,7 @@ find_jai_path :: (executable_name: string) -> string {
             result, raw_path, err = run_command("whereis", executable_name, capture_and_return_output=true);
         }
 
-        raw_path = replace(raw_path, tprint("%: ", executable_name), "");
+        raw_path = replace(raw_path, tprint("%:", executable_name), "");
         raw_path = trim(raw_path);
 
         BUFFER_SIZE :: 4096;
@@ -145,11 +154,12 @@ find_jai_path :: (executable_name: string) -> string {
 
     if raw_path.count == 0 {
         #if OS == .MACOS || OS == .LINUX {
-            if executable_name == "jai" return "";
-            return find_jai_path("jai");
+            if executable_name == "jai" return "", "";
+            path, exe_name := find_jai_path("jai");
+            return path, exe_name;
         }
 
-        return "";
+        return "", "";
     }
 
     path := split(raw_path, "/");
@@ -157,7 +167,7 @@ find_jai_path :: (executable_name: string) -> string {
     pop(*path); // jai.exe or jai
     pop(*path); // bin
 
-    return join(..path, separator="/");
+    return join(..path, separator="/"), executable_name;
 }
 
 load_config_file :: () {
@@ -166,12 +176,17 @@ load_config_file :: () {
         roots: []string;
         build_root: string;
         jai_path: string;
+        jai_exe_name: string;
         intermediate_path: string;
         auto_insert_parentheses := true;
     }
 
     config_path := join(server.project_root, "/jails.json");
-    if !file_exists(config_path) return;
+    if !file_exists(config_path) {
+        log_error("Failed to find 'jails.json' in your project root. Tried: %", config_path);
+        return;
+    }
+    log("Attempting to load config file: %", config_path);
 
     config_content := read_entire_file(config_path);
 
@@ -238,13 +253,29 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             create_diagnostics_metaprogram();
 
-            log("Root URI: %", body.params.rootUri.*);
+            // The order of precedence for establishing our project_root is:
+            // - workspaceFolder (initially we only use the first path specified)
+            // - rootUri
+            // - rootPath
 
-            if (body.params.rootPath != null) {
+            if (body.params.workspaceFolders.count > 0) {
+                log("Workspace folders: %", body.params.workspaceFolders.*);
+                server.project_root = normalize_path(body.params.workspaceFolders.*[0].uri);
+            }
+            else if (body.params.rootUri != null) {
+                log("Root URI: %", body.params.rootUri.*);
+                server.project_root = normalize_path(body.params.rootUri.*);
+            }
+            else if (body.params.rootPath != null) {
                 log("Root Path: %", body.params.rootPath.*);
                 server.project_root = copy_string(body.params.rootPath.*);
             }
+            else {
+                log_error("Unable to determine the project root!");
+                return;
+            }
 
+            log("Project Root: %", server.project_root);
             load_config_file();
 
             if server.build_root.count == 0 {
@@ -279,6 +310,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 parse_file(tprint("%/modules/Runtime_Support.jai", server.jai_path), true);
                 parse_file(tprint("%/modules/Preload.jai", server.jai_path), true);
             }
+
 
             analyze_files();
 
@@ -399,14 +431,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
     }
 }
 
-#if OS == .WINDOWS {
-    jai_exe_name :: "jai.exe";
-} else #if OS == .MACOS {
-    jai_exe_name :: "jai-macos";
-} else #if OS == .LINUX {
-    jai_exe_name :: "jai-linux";
-}
-
 main :: () {
     context.logger = lsp_log;
 
@@ -422,12 +446,12 @@ main :: () {
     server.profile = args.profile;
 
     if server.jai_path.count == 0 {
-        server.jai_path = find_jai_path(jai_exe_name);
+        server.jai_path, server.jai_exe_name = find_jai_path(DEFAULT_JAI_EXE_NAME);
         if !server.jai_path {
             log_error("Failed to resolve Jai path");
             // @TODO: Send this fatal error over LSP somehow?
         } else {
-            log("Jai path: %", server.jai_path);
+            log("Jai path: % (%)", server.jai_path, server.jai_exe_name);
         }
     }
 

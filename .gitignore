@@ -20,3 +20,6 @@ bin/
 
 # Linux
 *.so
+
+# Notes for future self
+last.md

@@ -15,63 +15,6 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "problemMatcher": [
-                {
-                    "severity": "error",
-                    "fileLocation": "absolute",
-                    "pattern": [
-                        {
-                            "regexp": "^(.*):(\\d+),(\\d+).*Error: (.*)$",
-                            "file": 1,
-                            "line": 2,
-                            "column": 3,
-                            "message": 4
-                        }
-                    ],
-                    "owner": "jai"
-                },
-                {
-                    "severity": "warning",
-                    "fileLocation": "absolute",
-                    "pattern": [
-                        {
-                            "regexp": "^(.*):(\\d+),(\\d+).*Warning: (.*)$",
-                            "file": 1,
-                            "line": 2,
-                            "column": 3,
-                            "message": 4
-                        }
-                    ],
-                    "owner": "jai"
-                },
-                {
-                    "severity": "info",
-                    "fileLocation": "absolute",
-                    "pattern": [
-                        {
-                            "regexp": "^(.*):(\\d+),(\\d+).*Info: (.*)$",
-                            "file": 1,
-                            "line": 2,
-                            "column": 3,
-                            "message": 4
-                        }
-                    ],
-                    "owner": "jai"
-                },
-                {
-                    "severity": "info",
-                    "fileLocation": "absolute",
-                    "pattern": [
-                        {
-                            "regexp": "^(.*)\\((.*):(\\d+)\\)$",
-                            "file": 2,
-                            "line": 3,
-                            "message": 1,
-                        }
-                    ],
-                    "owner": "jai"
-                },
-            ],
             "group": {
                 "kind": "build",
                 "isDefault": true,

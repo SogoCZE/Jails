@@ -187,33 +187,35 @@ lsp_document_symbol_from_node :: (node: *Node, default_symbol_kind: LSP_Symbol_K
             ok = true;
 
         case .DIRECTIVE_AS; #through;
-        case .USING;
-            if !node.parent {
-                return .{}, false; // @TODO: We do not support global using in symbols for now!
-            }
 
-            used_expression := get_used_expression(node);
-            if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
-                return .{}, false;
-            }
+        case .USING; return .{}, false;
+        // case .USING;
+        //     if !node.parent || node.parent.kind == .DIRECTIVE_SCOPE {
+        //         return .{}, false; // @TODO: We do not support global using in symbols for now!
+        //     }
 
-            symbol.detail = symbol.name;
+        //     used_expression := get_used_expression(node);
+        //     if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
+        //         return .{}, false;
+        //     }
 
-            if used_expression.kind == .DECLARATION {
-                used_decl := cast(*Declaration) used_expression;
-                symbol.name = used_decl.name;
-            }
+        //     symbol.detail = symbol.name;
 
-            used_type := get_node_type(used_expression);
-            if !used_type {
-                return .{}, false;
-            }
+        //     if used_expression.kind == .DECLARATION {
+        //         used_decl := cast(*Declaration) used_expression;
+        //         symbol.name = used_decl.name;
+        //     }
 
-            if used_type.parent && used_type.parent != used_expression {
-                symbol, ok = lsp_document_symbol_from_node(used_type.parent, .FIELD);
-            } else {
-                symbol, ok = lsp_document_symbol_from_node(used_type, .FIELD);
-            }
+        //     used_type := get_node_type(used_expression);
+        //     if !used_type {
+        //         return .{}, false;
+        //     }
+
+        //     if used_type.parent && used_type.parent != used_expression {
+        //         symbol, ok = lsp_document_symbol_from_node(used_type.parent, .FIELD);
+        //     } else {
+        //         symbol, ok = lsp_document_symbol_from_node(used_type, .FIELD);
+        //     }
 
         case .ENUM; #through;
         case .UNION; #through;
