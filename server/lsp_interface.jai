@@ -270,7 +270,7 @@ LSP_Diagnostic :: struct {
 }
 
 LSP_Diagnostic_Severity :: enum {
-    ERROR;
+    ERROR :: 1;
     WARNING;
     INFORMATION;
     HINT;
