@@ -649,7 +649,18 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
                             add_decl = false;
                         }
 
-                        if add_decl array_add(decls, decl);
+                        if add_decl {
+                            for decls.* {
+                                if it == decl {
+                                    add_decl = false;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if add_decl {
+                            array_add(decls, decl);
+                        }
                 }
 
             }
