@@ -1,3 +1,222 @@
+handle_goto_enum_literal :: (request: LSP_Request_Message_Definition, file: *Program_File, ident: *Identifier) -> bool {
+    // Check if this identifier is part of an enum literal (parent is UNARY_OPERATION with DOT)
+    if !ident.parent || ident.parent.kind != .UNARY_OPERATION {
+        return false;
+    }
+
+    unary_op := cast(*Unary_Operation) ident.parent;
+    if unary_op.operation != .DOT {
+        return false;
+    }
+
+    if !unary_op.parent {
+        return false;
+    }
+
+    // Check what context the enum literal is in
+    parent_node := unary_op.parent;
+    original_parent_node := parent_node;
+    enum_type: *Node;
+
+    // For enum_flags with OR/AND operations in .PROCEDURE_CALL arguments, traverse up to find the actual context
+    while parent_node && parent_node.kind == .BINARY_OPERATION {
+        binary_op := cast(*Binary_Operation) parent_node;
+        if binary_op.operation == .PIPE || binary_op.operation == .BITWISE_AND {
+            parent_node = binary_op.parent;
+        } else {
+            break;
+        }
+    }
+
+    if parent_node && parent_node.kind != .PROCEDURE_CALL {
+        parent_node = original_parent_node;
+    }
+
+    if !parent_node {
+        return false;
+    }
+
+    if parent_node.kind == .PROCEDURE_CALL {
+        // For procedure arguments:
+        // - SDL_CreateGPUDevice(.SPIRV | .MSL | .DXIL, ...)
+        proc_call := cast(*Procedure_Call) parent_node;
+
+        if proc_call.procedure && proc_call.procedure.kind == .IDENTIFIER {
+            proc_ident := cast(*Identifier) proc_call.procedure;
+
+            // Find which argument contains our enum literal (might be nested in OR or AND operations if it's an enum_flag)
+            arg_index := -1;
+            for arg, index: proc_call.arguments {
+                // Check if our unary_op is somewhere within this argument
+                if is_parent_of(arg, unary_op) {
+                    arg_index = index;
+                    break;
+                }
+            }
+
+            if arg_index >= 0 {
+                // Get the procedure declaration
+                proc_decls := get_identifier_decl(proc_ident);
+
+                if proc_decls.count > 0 {
+                    proc_decl := proc_decls[0];
+
+                    if proc_decl.expression && proc_decl.expression.kind == .PROCEDURE {
+                        procedure := cast(*Procedure) proc_decl.expression;
+
+                        // Get the type of the corresponding parameter
+                        if arg_index < procedure.arguments.count {
+                            param := procedure.arguments[arg_index];
+                            unwrapped := unwrap_polymorphic_constant(param);
+
+                            if unwrapped && unwrapped.kind == .DECLARATION {
+                                param_decl := cast(*Declaration) unwrapped;
+                                if param_decl.type_inst {
+                                    enum_type = get_node_type(param_decl.type_inst);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+    } else if parent_node.kind == .DECLARATION {
+        // For struct field defaults: se: Some_Enum = .A
+        decl := cast(*Declaration) parent_node;
+
+        if decl.type_inst {
+            enum_type = get_node_type(decl.type_inst);
+        }
+
+    } else if parent_node.kind == .BINARY_OPERATION {
+        binary_op := cast(*Binary_Operation) parent_node;
+
+        // Special case: Check if this comparison is part of a member access chain
+        if binary_op.parent && binary_op.parent.kind == .BINARY_OPERATION {
+            parent_op := cast(*Binary_Operation) binary_op.parent;
+
+            if parent_op.operation == .DOT {
+                comparison_left := binary_op.left;
+                if comparison_left && comparison_left.kind == .IDENTIFIER {
+                    operation_ident := cast(*Identifier) comparison_left;
+                    left_type := get_node_type(parent_op.left);
+
+                    if left_type {
+                        decl := get_member_in(left_type, operation_ident);
+                        if decl {
+                            enum_type = get_node_type(decl);
+                        }
+                    }
+                }
+            }
+        }
+
+        // If not found yet, handle normal cases
+        if !enum_type {
+            if binary_op.operation == .ASSIGN {
+                // For: se = .B or flags = .SPIRV | .MSL
+                // Also handles: ident.parent.kind = .UNARY_OPERATION
+
+                if binary_op.left && binary_op.left.kind == .BINARY_OPERATION {
+                    // Left side is a member access chain
+                    member_access := cast(*Binary_Operation) binary_op.left;
+                    if member_access.operation == .DOT {
+                        // Get the type of the entire member access chain
+                        enum_type = get_node_type(member_access);
+                    }
+                } else if binary_op.left && binary_op.left.kind == .IDENTIFIER {
+                    // Left side is a simple identifier
+                    left_ident := cast(*Identifier) binary_op.left;
+                    decls := get_identifier_decl(left_ident);
+
+                    if decls.count > 0 {
+                        decl := decls[0];
+                        if decl.expression && decl.expression.kind == .BINARY_OPERATION {
+                            member_access := cast(*Binary_Operation) decl.expression;
+                            if member_access.operation == .DOT && member_access.left {
+                                enum_type = get_node_type(member_access.left);
+                            }
+                        }
+                        if !enum_type && decl.type_inst {
+                            enum_type = get_node_type(decl.type_inst);
+                        }
+                    }
+                }
+            } else if binary_op.operation == .IS_EQUAL    || binary_op.operation == .IS_NOT_EQUAL ||
+                      binary_op.operation == .LOGICAL_AND || binary_op.operation == .LOGICAL_OR   ||
+                      binary_op.operation == .PIPE        || binary_op.operation == .BITWISE_AND {
+                other_side: *Node;
+                if binary_op.left == unary_op {
+                    other_side = binary_op.right;
+                } else {
+                    other_side = binary_op.left;
+                }
+
+                // Handle member access chains
+                if other_side && other_side.kind == .BINARY_OPERATION {
+                    member_chain := cast(*Binary_Operation) other_side;
+                    if member_chain.operation == .DOT {
+                        enum_type = get_node_type(other_side);
+                    }
+                } else if other_side && other_side.kind == .IDENTIFIER {
+                    other_ident := cast(*Identifier) other_side;
+                    decls := get_identifier_decl(other_ident);
+
+                    if decls.count > 0 {
+                        decl := decls[0];
+                        if decl.expression && decl.expression.kind == .BINARY_OPERATION {
+                            member_access := cast(*Binary_Operation) decl.expression;
+                            if member_access.operation == .DOT && member_access.left {
+                                enum_type = get_node_type(member_access.left);
+                            }
+                        }
+                        if !enum_type && decl.type_inst {
+                            enum_type = get_node_type(decl.type_inst);
+                        }
+                    }
+                }
+
+                if !enum_type {
+                    enum_type = get_node_type(other_side);
+                }
+            }
+        }
+    }
+
+    if !enum_type {
+        log("Couldn't determine enum literal type");
+        return false;
+    }
+
+    if enum_type.kind != .ENUM {
+        return false;
+    }
+
+    _enum := cast(*Enum) enum_type;
+    if !_enum.block {
+        return false;
+    }
+
+    for member: _enum.block.members {
+        if member.kind == .IDENTIFIER {
+            member_ident := cast(*Identifier) member;
+            if member_ident.name == ident.name {
+                lsp_respond(request.id, node_location_to_lsp_location(member_ident.location));
+                return true;
+            }
+        } else if member.kind == .DECLARATION {
+            member_decl := cast(*Declaration) member;
+            if member_decl.name == ident.name {
+                lsp_respond(request.id, node_location_to_lsp_location(member_decl.location));
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 handle_goto_load :: (request: LSP_Request_Message_Definition, file: *Program_File, _load: *Directive_Load) {
     file_path_without_filename := trim_right(path_strip_filename(file.path), "/");
     load_absolute_path := join(file_path_without_filename, _load.file, separator="/");
@@ -263,6 +482,10 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
     if handle_goto_dot(request, ident) {
+        return;
+    }
+
+    if handle_goto_enum_literal(request, file, ident) {
         return;
     }
 
