@@ -388,6 +388,7 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
 
         item: LSP_Completion_Item;
         item.label = decl.name;
+        item.insertText = decl.name;
         item.insertTextFormat=xx LSP_Completion_Item.Insert_Text_Format.SNIPPET;
         item.labelDetails.description = "---";
 
@@ -407,12 +408,10 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
 
             case .STRUCT;
                 item.kind = xx LSP_Completion_Item.Kind.Struct;
-                item.insertText = decl.name;
                 item.labelDetails.description = "struct";
 
             case .ENUM;
                 item.kind = xx LSP_Completion_Item.Kind.Enum;
-                item.insertText = decl.name;
                 item.labelDetails.description = "enum";
 
             case;
