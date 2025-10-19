@@ -26,8 +26,8 @@ run_diagnostics :: () {
     defer array_free(command);
 
     jai_exe_path := DEFAULT_JAI_EXE_NAME;
-    if server.args.jai_path.count > 0 {
-        jai_exe_path = join(server.args.jai_path, "bin", server.args.jai_exe_name, separator="/",, temp);
+    if server.jai_path.count > 0 {
+        jai_exe_path = join(server.jai_path, "bin", server.jai_exe_name, separator="/",, temp);
     }
 
     array_add(*command, jai_exe_path);

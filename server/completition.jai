@@ -143,7 +143,7 @@ handle_completitions_load :: (request: LSP_Request_Message_Completion, file: *Pr
 handle_completitions_import :: (request: LSP_Request_Message_Completion, directive_import: *Directive_Import) {
     completions: [..]LSP_Completion_Item;
 
-    modules_dir := sprint("%/modules", server.args.jai_path);
+    modules_dir := sprint("%/modules", server.jai_path);
 
     visit_modules :: (info: *File_Visit_Info, completions: *[..]LSP_Completion_Item) {
         if !info.is_directory && !contains(info.short_name, ".jai") return;
