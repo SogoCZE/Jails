@@ -61,15 +61,32 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
         return;
     }
 
-    if !proc_decl.expression || proc_decl.expression.kind != .PROCEDURE {
+    if proc_decl.type_inst {
+        proc_inst := cast(*Identifier)proc_decl.type_inst;
+        proc_decls := get_identifier_decl(proc_inst);
+        proc_decl = proc_decls[0];
+    }
+
+    procedure: *Procedure = null;
+
+    if proc_decl.expression.kind == .DIRECTIVE_TYPE
+    {
+        dt := cast(*Directive_Type)proc_decl.expression;
+        if dt.expression.kind == .PROCEDURE {
+            procedure = cast(*Procedure)dt.expression;
+        }
+    }
+    else if proc_decl.expression && proc_decl.expression.kind == .PROCEDURE {
+        procedure = cast(*Procedure) proc_decl.expression;
+    }
+    else {
         lsp_respond(request.id, null);
         return;
     }
 
-    procedure := cast(*Procedure) proc_decl.expression;
-
     builder: String_Builder;
-    ast_print(*builder, proc_decl);
+    print_to_builder(*builder, "% :: ", proc_decl.name);
+    ast_print(*builder, procedure);
 
     signature_help_info: LSP_Signature_Information;
     signature_help_info.label = builder_to_string(*builder);
