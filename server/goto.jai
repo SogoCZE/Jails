@@ -220,19 +220,23 @@ handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *
 
     decls := get_identifier_decl(ident);
     if decls.count == 0 {
-        lsp_respond(request.id, null);
         return false;
     }
 
     procedures: [..]*Procedure;
-    for decl: decls {
-        if !decl.expression || decl.expression.kind != .PROCEDURE {
+    for proc_decl: decls {
+        type := get_node_type(proc_decl, stop_at_procedure=true);
+        if type.kind != .PROCEDURE {
+            remove proc_decl;
             continue;
         }
 
-        array_add(*procedures, cast(*Procedure) decl.expression);
+        array_add(*procedures, cast(*Procedure) type);
     }
 
+    if procedures.count == 0 {
+        return false;
+    }
 
     best_override_index := get_best_overload_for_procedure_call(procedures, proc_call);
 
@@ -241,7 +245,6 @@ handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *
     }
 
     lsp_respond(request.id, node_location_to_lsp_location(procedures[best_override_index].parent.location));
-
     return true;
 }
 

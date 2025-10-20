@@ -976,7 +976,7 @@ select_first_decl :: (decls: []*Declaration, level: int) -> *Declaration {
     return decls[0];
 }
 
-get_node_type :: (root: *Node, solve_array := false, select_decl := select_first_decl) -> *Node {
+get_node_type :: (root: *Node, solve_array := false, select_decl := select_first_decl, stop_at_procedure := false) -> *Node {
     current_node: *Node = root;
 
     level: int;
@@ -1095,10 +1095,24 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
         if current_node.kind == .PROCEDURE {
             proc := cast(*Procedure) current_node;
 
+            if stop_at_procedure {
+                return proc;
+            }
+
             if proc.returns.count > 0 {
                 current_node = proc.returns[0].expression;
                 continue;
             }
+        }
+
+        if current_node.kind == .DIRECTIVE_TYPE {
+            dt := cast(*Directive_Type) current_node;
+            if dt.expression && dt.expression.kind == .PROCEDURE {
+                current_node = dt.expression;
+                continue;
+            }
+
+            break;
         }
 
         if current_node.kind == .UNARY_OPERATION {
