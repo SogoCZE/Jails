@@ -211,6 +211,40 @@ handle_goto_assignment :: (request: LSP_Request_Message_Definition, ident: *Iden
     return true;
 }
 
+handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
+    if !ident.parent || ident.parent.kind != .PROCEDURE_CALL {
+        return false;
+    }
+
+    proc_call := cast(*Procedure_Call) ident.parent;
+
+    decls := get_identifier_decl(ident);
+    if decls.count == 0 {
+        lsp_respond(request.id, null);
+        return false;
+    }
+
+    procedures: [..]*Procedure;
+    for decl: decls {
+        if !decl.expression || decl.expression.kind != .PROCEDURE {
+            continue;
+        }
+
+        array_add(*procedures, cast(*Procedure) decl.expression);
+    }
+
+
+    best_override_index := get_best_overload_for_procedure_call(procedures, proc_call);
+
+    if !procedures[best_override_index].parent {
+        return false;
+    }
+
+    lsp_respond(request.id, node_location_to_lsp_location(procedures[best_override_index].parent.location));
+
+    return true;
+}
+
 handle_goto :: (request: LSP_Request_Message_Definition) {
     push_allocator(temp);
 
@@ -263,6 +297,10 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     }
 
     if handle_goto_dot(request, ident) {
+        return;
+    }
+
+    if handle_procedure_call_goto(request, ident) {
         return;
     }
 

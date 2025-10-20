@@ -29,7 +29,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
         return;
     }
 
-    proc_decl: *Declaration;
+    proc_decls: [..]*Declaration;
 
     if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION {
         path := get_dot_path(cast(*Binary_Operation) proc_call.parent, proc_call);
@@ -45,7 +45,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
             return;
         }
 
-        proc_decl = get_member_in(type, proc_call_ident);
+        array_add(*proc_decls, get_member_in(type, proc_call_ident));
     } else {
         decls := get_declarations(file, cursor_block, *cursor_location, proc_call_ident.name);
         if decls.count == 0 {
@@ -53,23 +53,40 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
             return;
         }
 
-        proc_decl = decls[0];
+        array_copy(*proc_decls, decls);
     }
 
-    if !proc_decl {
+    procedures: [..]*Procedure;
+    for proc_decl: proc_decls {
+        if !proc_decl.expression || proc_decl.expression.kind != .PROCEDURE {
+            remove proc_decl;
+        }
+
+        array_add(*procedures, cast(*Procedure) proc_decl.expression);
+    }
+
+    if proc_decls.count == 0 {
         lsp_respond(request.id, null);
         return;
     }
 
-    if !proc_decl.expression || proc_decl.expression.kind != .PROCEDURE {
-        lsp_respond(request.id, null);
-        return;
+    signatures: [..]LSP_Signature_Information;
+    for proc_decl: proc_decls {
+        array_add(*signatures, turn_procedure_into_signature_information(proc_decl, proc_call, cursor_location));
     }
 
-    procedure := cast(*Procedure) proc_decl.expression;
+    signature_help: LSP_Signature_Help;
+    signature_help.activeSignature = cast(u32) get_best_overload_for_procedure_call(procedures, proc_call);
+    signature_help.signatures = signatures;
 
+    lsp_respond(request.id, signature_help);
+}
+
+turn_procedure_into_signature_information :: (proc_decl: *Declaration, proc_call: *Procedure_Call, cursor_location: Node.Location) -> LSP_Signature_Information {
     builder: String_Builder;
     ast_print(*builder, proc_decl);
+
+    procedure := cast(*Procedure) proc_decl.expression;
 
     signature_help_info: LSP_Signature_Information;
     signature_help_info.label = builder_to_string(*builder);
@@ -106,9 +123,5 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
         };
     }
 
-    signature_help: LSP_Signature_Help;
-    signature_help.activeSignature = 0;
-    signature_help.signatures = .[signature_help_info];
-
-    lsp_respond(request.id, signature_help);
+    return signature_help_info;
 }

@@ -625,6 +625,11 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
         case .BLOCK;
             block := cast(*Block) node;
 
+            // global file block we dont want that!
+            if !block.parent {
+                return;
+            }
+
             if !from_loc return;
 
             for block.members {
@@ -1450,4 +1455,133 @@ get_path_type :: (path: []*Node) -> *Node {
     }
 
     return current_type;
+}
+
+Base_Type :: enum {
+    UNKNOWN;
+
+    STRING;
+
+    INT;
+    S64;
+    S32;
+    S16;
+    S8;
+    U64;
+    U32;
+    U16;
+    U8;
+
+    FLOAT;
+    FLOAT32;
+    FLOAT64;
+
+    BOOL;
+
+    VOID;
+}
+
+get_base_type_from_ident_or_literal :: (node: *Node) -> Base_Type {
+    if node.kind == .IDENTIFIER {
+        ident := cast(*Identifier) node;
+
+        if ident.name == {
+            case "string";  return .STRING;
+
+            case "int";     return .INT;
+            case "s64";     return .S64;
+            case "s32";     return .S32;
+            case "s16";     return .S16;
+            case "s8";      return .S8;
+            case "u64";     return .U64;
+            case "u32";     return .U32;
+            case "u16";     return .U16;
+            case "u8";      return .U8;
+
+            case "float";     return .FLOAT;
+            case "float32";   return .FLOAT32;
+            case "float64";   return .FLOAT64;
+
+            case "bool";      return .BOOL;
+
+            case "void";      return .VOID;
+        }
+
+        return .UNKNOWN;
+    }
+
+    if node.kind == .LITERAL {
+        literal := cast(*Literal) node;
+
+        if literal.value_type == {
+            case .INT;      return .INT;
+            case .FLOAT;    return .FLOAT;
+            case .STRING;   return .STRING;
+            case .BOOL;     return .BOOL;
+            case;           return .UNKNOWN;
+        }
+    }
+
+    return .UNKNOWN;
+}
+
+is_same_type :: (a: *Node, b: *Node) -> bool {
+    if !a || !b {
+        return false;
+    }
+
+    // complex types (user defined) as Entity, Monster, Player...
+    if a.kind != .IDENTIFIER && a.kind != .LITERAL || b.kind != .IDENTIFIER && b.kind != .LITERAL  {
+        return a == b;
+    }
+
+    // likely base type as string, int...
+    a_base_type := get_base_type_from_ident_or_literal(a);
+    b_base_type := get_base_type_from_ident_or_literal(b);
+
+    if a_base_type == .UNKNOWN || b_base_type == .UNKNOWN {
+        return false;
+    }
+
+    return a_base_type == b_base_type;
+}
+
+// @TODO: vargs, polymorphic types
+get_best_overload_for_procedure_call :: (procedures: []*Procedure, call: *Procedure_Call) -> int {
+    if procedures.count < 2 {
+        return 0;
+    }
+
+    current_best := 0;
+    current_best_matched_args: u16 = 0;
+
+    for procedure: procedures {
+        matched_args: u16;
+
+        if call.arguments.count > procedure.arguments.count {
+            continue;
+        }
+
+        for call_arg, call_arg_index: call.arguments {
+            arg := procedure.arguments[call_arg_index];
+
+            call_arg_type := get_node_type(call_arg);
+            arg_type := get_node_type(arg);
+
+            // log("Arg [%]: caller (% - %), calle (% - %)", arg_index, to_string(call_arg_type), call_arg_type.kind, to_string(arg_type), arg_type.kind);
+
+            if !is_same_type(arg_type, call_arg_type) {
+                break call_arg;
+            }
+
+            matched_args += 1;
+        }
+
+        if matched_args > current_best_matched_args {
+            current_best = it_index;
+            current_best_matched_args = matched_args;
+        }
+    }
+
+    return current_best;
 }

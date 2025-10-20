@@ -24,3 +24,7 @@ to_debug_string :: (node: *Node) -> string {
             return tprint("%", node.kind);
     }
 }
+
+log_path :: (path: []*Node) {
+    for path log("[%]: %", it_index, to_string(it));
+}
