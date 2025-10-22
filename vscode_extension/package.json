@@ -19,7 +19,8 @@
     "watch": "tsc --watch",
     "pack:linux": "cp ../bin/jails ./out/jails-linux-x64 && vsce package",
     "pack:mac": "cp ../bin/jails ./out/jails-darwin-arm64 && vsce package",
-    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win32-x64.exe && vsce package"
+    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win32-x64.exe && vsce package",
+    "all:windows": "npm run compile && npm run pack:windows"
   },
   "license": "MIT",
   "engines": {

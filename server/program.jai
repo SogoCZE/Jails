@@ -66,7 +66,7 @@ reset_file :: (using file: Program_File) {
 }
 
 get_file :: (path: string) -> *Program_File {
-    ok, file := table_find_new(*server.files, path);
+    ok, file := table_find(*server.files, path);
     if !ok return null;
     return file;
 }
@@ -100,7 +100,7 @@ parse_file :: (path: string, force := false) {
     // Reset back to default allocator, we dont want to use pool from "parent" file...
     context.allocator = context.default_allocator;
 
-    ok, file := table_find_new(*server.files, path);
+    ok, file := table_find(*server.files, path);
     if !force && ok {
         // log("Skipping % because it already exists", path);
         return;
@@ -958,8 +958,8 @@ get_identifier_decl :: (ident: *Identifier) -> []*Declaration {
     }
 
     // for file: server.files {
-    //     decls, ok := table_find(*file.resolved_identifiers, ident);
-    //     if !ok continue;
+    //     ok, decls := table_find(*file.resolved_identifiers, ident);
+    //     if !ok  continue;
     //     return decls;
     // }
 
