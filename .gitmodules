@@ -1,6 +1,6 @@
-[submodule "server/modules/jason"]
-	path = modules/jason
-	url = https://github.com/rluba/jason.git
+[submodule "server/modules/jaison"]
+	path = modules/jaison
+	url = https://github.com/rluba/jaison.git
 [submodule "server/modules/unicode_utils"]
 	path = modules/unicode_utils
 	url = https://github.com/rluba/jai-unicode.git

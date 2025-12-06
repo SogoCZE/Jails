@@ -84,6 +84,15 @@ normalize_path :: (path: string) -> string {
     return normalized_path;
 }
 
+normalize_and_copy_path :: (path: string) -> string {
+    if(path.count == 0) {
+        return "";
+    }
+
+    str := normalize_path(path);
+    return copy_string(str);
+}
+
 path_to_lsp_path :: (path: string) -> string {
     #if OS == .WINDOWS {
         return join("file:///", path);
@@ -944,29 +953,14 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     return lsp_location;
 }
 
-get_identifier_decl :: (ident: *Identifier) -> []*Declaration {
-    // log("Resolving '%' ident at %:%:%", ident.name, ident.location.file, ident.location.l0, ident.location.c0);
-
+get_identifier_decls :: (ident: *Identifier) -> []*Declaration {
     file := get_file(ident.location.file);
-
-    // log("Ident: %", ident.name);
-    // block := get_node_nearest_block(ident);
-    decls := get_declarations(file, ident, *ident.location, ident.name);
-    if decls.count == 0 {
-        // array_add(*file.unresolved_identifiers, ident);
+    if !file {
         return .[];
     }
 
-    // for file: server.files {
-    //     ok, decls := table_find(*file.resolved_identifiers, ident);
-    //     if !ok  continue;
-    //     return decls;
-    // }
-
-    return decls;
+    return get_declarations(file, ident, *ident.location, ident.name);
 }
-
-// Skip_Node_Func :: #type (node: *Node) -> bool;
 
 select_first_decl :: (decls: []*Declaration, level: int) -> *Declaration {
     if decls.count == 0 {
@@ -988,7 +982,7 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
 
         if current_node.kind == .IDENTIFIER {
             ident := cast(*Identifier, current_node);
-            ident_decls := get_identifier_decl(ident);
+            ident_decls := get_identifier_decls(ident);
 
             if ident_decls.count == 0 {
                 // log("Does not find anything for '%'...", ident.name);
@@ -1255,6 +1249,50 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
     }
 
     return null;
+}
+
+get_block_member_declarations :: (block: *Block) -> []*Declaration {
+    decls:[..]*Declaration;
+    
+    for member: block.members {
+        if member.kind == {
+            case .IDENTIFIER;
+                _ident := cast(*Identifier) member;
+                if _ident {
+                    decl := New(Declaration); // @MEMORY: We should free this or it is temp?
+                    decl.name = _ident.name;
+                    decl.expression = *empty_identifier;
+                    decl.location = _ident.location;
+                    decl.const = true;
+
+                    array_add(*decls, decl);
+                }
+            case .DECLARATION;
+                decl := cast(*Declaration) member;
+                if decl {
+                    array_add(*decls, decl);
+                }
+
+            case .DIRECTIVE_AS; #through;
+            case .USING;
+                used_expression := get_used_expression(member);
+                if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
+                    continue;
+                }
+
+                used_type := get_node_type(used_expression);
+                block := get_block_of(used_type);
+
+                if block {
+                    results :=get_block_member_declarations(block);
+                    for result:results {
+                        array_add(*decls,result);
+                    }
+                }
+        }
+    }
+
+    return decls;
 }
 
 unwrap_as :: (node: *Node) -> *Node {

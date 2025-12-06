@@ -77,6 +77,6 @@ Compile server with `jai build.jai` or compile and run test VSCode with preinsta
 
 ## Dependencies
 - [jai_parser](https://github.com/SogoCZE/jai_parser)
-- [Jason](https://github.com/rluba/jason)
+- [Jaison](https://github.com/rluba/jaison)
 - [Jai unicode](https://github.com/rluba/jai-unicode)
 - [Tracy](https://github.com/rluba/jai-tracy) (profiling)
