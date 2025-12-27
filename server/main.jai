@@ -255,7 +255,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             // - rootUri
             // - rootPath
 
-            if (body.params.workspaceFolders.count > 0) {
+            if (body.params.workspaceFolders != null && body.params.workspaceFolders.count > 0) {
                 log("Workspace folders: %", body.params.workspaceFolders.*);
                 server.project_root = normalize_path(body.params.workspaceFolders.*[0].uri);
             }
