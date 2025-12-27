@@ -284,9 +284,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             // - rootPath
             // - cwd
 
-            gotRoot, root := get_root_from_initialization(body);
-            if (gotRoot) {
-                server.project_root = root;
+            gotRootFromInitialization, rootFromInitialization := get_root_from_initialization(body);
+            if (gotRootFromInitialization) {
+                server.project_root = rootFromInitialization;
             } else {
                 log_error("Unable to determine the project root!");
 
