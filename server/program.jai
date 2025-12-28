@@ -84,6 +84,15 @@ normalize_path :: (path: string) -> string {
     return normalized_path;
 }
 
+normalize_and_copy_path :: (path: string) -> string {
+    if(path.count == 0) {
+        return "";
+    }
+
+    str := normalize_path(path);
+    return copy_string(str);
+}
+
 path_to_lsp_path :: (path: string) -> string {
     #if OS == .WINDOWS {
         return join("file:///", path);

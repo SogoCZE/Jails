@@ -233,6 +233,34 @@ create_diagnostics_metaprogram :: () {
     log("Metaprogram file created! (%)", metaprogram_source_file_path);
 }
 
+get_root_from_initialization :: (body: LSP_Request_Message_Initialize) -> (bool, string) {
+    if (body.params.workspaceFolders != null && body.params.workspaceFolders.count > 0) {
+        log("Workspace folders: %", body.params.workspaceFolders.*);
+        uri: string = body.params.workspaceFolders.*[0].uri;
+        if (uri.count > 0) {
+            return true, normalize_and_copy_path(uri);
+        }
+    }
+
+    if (body.params.rootUri != null) {
+        log("Root URI: %", body.params.rootUri.*);
+        uri := body.params.rootUri.*;
+        if (uri.count > 0) {
+            return true, normalize_and_copy_path(uri);
+        }
+    }
+
+    if (body.params.rootPath != null) {
+        log("Root Path: %", body.params.rootPath.*);
+        uri := body.params.rootPath.*;
+        if (uri.count > 0) {
+            return true, normalize_and_copy_path(uri);
+        }
+    }
+
+    return false, "";
+}
+
 handle_request :: (request: LSP_Request_Message, raw_request: string) {
     // log("Got %", request.method);
 
@@ -254,22 +282,23 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             // - workspaceFolder (initially we only use the first path specified)
             // - rootUri
             // - rootPath
+            // - cwd
 
-            if (body.params.workspaceFolders.count > 0) {
-                log("Workspace folders: %", body.params.workspaceFolders.*);
-                server.project_root = normalize_path(body.params.workspaceFolders.*[0].uri);
-            }
-            else if (body.params.rootUri != null) {
-                log("Root URI: %", body.params.rootUri.*);
-                server.project_root = normalize_path(body.params.rootUri.*);
-            }
-            else if (body.params.rootPath != null) {
-                log("Root Path: %", body.params.rootPath.*);
-                server.project_root = copy_string(body.params.rootPath.*);
-            }
-            else {
+            gotRootFromInitialization, rootFromInitialization := get_root_from_initialization(body);
+            if (gotRootFromInitialization) {
+                server.project_root = rootFromInitialization;
+            } else {
                 log_error("Unable to determine the project root!");
-                return;
+
+                cwd := get_working_directory();
+                if (cwd.count > 0) {
+                    // This isn't inherently erroneous, but this is useful info for the error log.
+                    log_error("Falling back to the current working directory as the project root.");
+                    server.project_root = normalize_and_copy_path(cwd);
+                } else {
+                    log_error("Unable to fallback to the current working directory as the project root. Exiting.");
+                    return;
+                }
             }
 
             log("Project Root: %", server.project_root);
