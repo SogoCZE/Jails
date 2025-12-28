@@ -301,7 +301,6 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
                 }
             }
 
-
             log("Project Root: %", server.project_root);
             load_config_file();
 
