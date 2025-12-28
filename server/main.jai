@@ -234,7 +234,7 @@ create_diagnostics_metaprogram :: () {
 }
 
 get_root_from_initialization :: (body: LSP_Request_Message_Initialize) -> (bool, string) {
-    if (body.params.workspaceFolders != null && body.params.workspaceFolders.count > 0) {
+    if body.params.workspaceFolders != null && body.params.workspaceFolders.count > 0 {
         log("Workspace folders: %", body.params.workspaceFolders.*);
         uri: string = body.params.workspaceFolders.*[0].uri;
         if (uri.count > 0) {
@@ -242,7 +242,7 @@ get_root_from_initialization :: (body: LSP_Request_Message_Initialize) -> (bool,
         }
     }
 
-    if (body.params.rootUri != null) {
+    if body.params.rootUri != null {
         log("Root URI: %", body.params.rootUri.*);
         uri := body.params.rootUri.*;
         if (uri.count > 0) {
@@ -250,7 +250,7 @@ get_root_from_initialization :: (body: LSP_Request_Message_Initialize) -> (bool,
         }
     }
 
-    if (body.params.rootPath != null) {
+    if body.params.rootPath != null {
         log("Root Path: %", body.params.rootPath.*);
         uri := body.params.rootPath.*;
         if (uri.count > 0) {
@@ -285,7 +285,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             // - cwd
 
             gotRootFromInitialization, rootFromInitialization := get_root_from_initialization(body);
-            if (gotRootFromInitialization) {
+            if gotRootFromInitialization {
                 server.project_root = rootFromInitialization;
             } else {
                 log_error("Unable to determine the project root!");
