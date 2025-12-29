@@ -4,11 +4,14 @@
 // see: https://zed.dev/docs/debugger
 [
     {
-        "label": "Jails",
+        "label": "Run Jails",
         "adapter": "CodeLLDB",
         "request": "launch",
         "cwd": "$ZED_WORKTREE_ROOT",
         "program": "bin/jails",
+        "initCommands": [
+            "command script import $ZED_WORKTREE_ROOT/.vscode/jaitype.py"
+        ],
         "build": {
             "cwd": "$ZED_WORKTREE_ROOT",
             "command": "jai",
@@ -16,5 +19,15 @@
                 "build.jai"
             ]
         }
+    },
+    {
+        "label": "Attach Jails",
+        "adapter": "CodeLLDB",
+        "pid": "$ZED_PICK_PID",
+        "request": "attach",
+        "cwd": "$ZED_WORKTREE_ROOT",
+        "initCommands": [
+            "command script import $ZED_WORKTREE_ROOT/.vscode/jaitype.py"
+        ]
     }
 ]

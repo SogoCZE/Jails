@@ -103,7 +103,7 @@ handle_goto_procedure_named_argument :: (request: LSP_Request_Message_Definition
     }
 
     // We need to resolve the calle procedure.
-    decls := get_identifier_decl(cast(*Identifier) procedure_call.procedure);
+    decls := get_identifier_decls(cast(*Identifier) procedure_call.procedure);
     if decls.count == 0 {
         return false;
     }
@@ -160,7 +160,7 @@ handle_goto_struct_literal :: (request: LSP_Request_Message_Definition, file: *P
     }
 
     // We need to resolve struct literal type.
-    decls := get_identifier_decl(cast(*Identifier) literal.struct_literal_info.type);
+    decls := get_identifier_decls(cast(*Identifier) literal.struct_literal_info.type);
     if decls.count == 0 {
         return false;
     }
@@ -218,7 +218,7 @@ handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *
 
     proc_call := cast(*Procedure_Call) ident.parent;
 
-    decls := get_identifier_decl(ident);
+    decls := get_identifier_decls(ident);
     if decls.count == 0 {
         return false;
     }
@@ -307,7 +307,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    decls := get_identifier_decl(ident);
+    decls := get_identifier_decls(ident);
     if decls.count == 0 {
         lsp_respond(request.id, null);
         return;

@@ -953,29 +953,14 @@ node_location_to_lsp_location :: (location: Node.Location) -> LSP_Location {
     return lsp_location;
 }
 
-get_identifier_decl :: (ident: *Identifier) -> []*Declaration {
-    // log("Resolving '%' ident at %:%:%", ident.name, ident.location.file, ident.location.l0, ident.location.c0);
-
+get_identifier_decls :: (ident: *Identifier) -> []*Declaration {
     file := get_file(ident.location.file);
-
-    // log("Ident: %", ident.name);
-    // block := get_node_nearest_block(ident);
-    decls := get_declarations(file, ident, *ident.location, ident.name);
-    if decls.count == 0 {
-        // array_add(*file.unresolved_identifiers, ident);
+    if !file {
         return .[];
     }
 
-    // for file: server.files {
-    //     ok, decls := table_find(*file.resolved_identifiers, ident);
-    //     if !ok  continue;
-    //     return decls;
-    // }
-
-    return decls;
+    return get_declarations(file, ident, *ident.location, ident.name);
 }
-
-// Skip_Node_Func :: #type (node: *Node) -> bool;
 
 select_first_decl :: (decls: []*Declaration, level: int) -> *Declaration {
     if decls.count == 0 {
@@ -997,7 +982,7 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
 
         if current_node.kind == .IDENTIFIER {
             ident := cast(*Identifier, current_node);
-            ident_decls := get_identifier_decl(ident);
+            ident_decls := get_identifier_decls(ident);
 
             if ident_decls.count == 0 {
                 // log("Does not find anything for '%'...", ident.name);
