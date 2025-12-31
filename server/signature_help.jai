@@ -5,6 +5,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
 
     file := get_file(file_path);
     if !file {
+        log("Not file!");
         lsp_respond(request.id, null);
         return;
     }
@@ -31,7 +32,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
 
     proc_decls: [..]*Declaration;
 
-    if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION {
+    if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION && proc_call.parent.(*Binary_Operation).operation == .DOT {
         path := get_dot_path(cast(*Binary_Operation) proc_call.parent, proc_call);
         if path.count <= 1 {
             lsp_respond(request.id, null);
@@ -45,7 +46,8 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
             return;
         }
 
-        array_add(*proc_decls, get_member_in(type, proc_call_ident));
+        decls := get_members_in(type, proc_call_ident);
+        array_add(*proc_decls, ..decls);
     } else {
         decls := get_declarations(file, cursor_block, *cursor_location, proc_call_ident.name);
         if decls.count == 0 {
@@ -58,6 +60,11 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
 
     procedures: [..]*Procedure;
     for proc_decl: proc_decls {
+        if !proc_decl {
+            remove proc_decl;
+            continue;
+        }
+
         type := get_node_type(proc_decl, stop_at_procedure=true);
         if type.kind != .PROCEDURE {
             remove proc_decl;
@@ -126,4 +133,3 @@ turn_procedure_into_signature_information :: (proc_decl: *Declaration, procedure
 
     return signature_help_info;
 }
-

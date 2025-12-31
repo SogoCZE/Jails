@@ -56,7 +56,9 @@ handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier)
         // @TODO: anything else?
     }
 
-    if !op return false;
+    if !op {
+        return false;
+    }
 
     path := get_dot_path(op, leaf_node);
     if path.count < 2 {
@@ -67,16 +69,17 @@ handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier)
 
     type := get_path_type(path);
     if !type {
-        return false;
+        lsp_respond(request.id, null);
+        return true;
     }
 
     decl := get_member_in(type, ident);
     if !decl {
-        return false;
+        lsp_respond(request.id, null);
+        return true;
     }
 
     lsp_respond(request.id, node_location_to_lsp_location(decl.location));
-
     return true;
 }
 
@@ -107,7 +110,6 @@ handle_goto_procedure_named_argument :: (request: LSP_Request_Message_Definition
     if decls.count == 0 {
         return false;
     }
-
 
     procedure_decl := decls[0]; // TODO: here we need to resolve procedure overloading in the future.
     if !procedure_decl.expression {
@@ -268,7 +270,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    log("Clicked node: %", node.kind);
+    // log("Clicked node: %", node.kind);
 
     if node.kind == .DIRECTIVE_LOAD {
         handle_goto_load(request, file, xx node);

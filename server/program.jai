@@ -10,6 +10,7 @@ Program_File :: struct {
     nodes: [..]*Node;
     global_block: Block;
     declarations: Table(string, *Declaration);
+    comments: [..]Comment_Token;
     // resolved_identifiers: Table(*Identifier, []*Declaration);
     linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
 
@@ -21,6 +22,10 @@ Linked_File :: struct {
     from_import: bool;
     file: *Program_File;
 }
+
+resizable_array_identifier := Identifier.{
+    name = "Resizable_Array",
+};
 
 empty_identifier := Identifier.{
     name = "",
@@ -62,6 +67,7 @@ reset_file :: (using file: Program_File) {
     array_reset(*nodes);
     array_reset(*loads);
     array_reset(*imports);
+    array_reset(*comments);
     release(*file.ast_pool);
 }
 
@@ -69,6 +75,18 @@ get_file :: (path: string) -> *Program_File {
     ok, file := table_find(*server.files, path);
     if !ok return null;
     return file;
+}
+
+search_for_file :: (name: string) -> *Program_File {
+    final_file: *Program_File;
+
+    for file, file_name: server.files {
+        if contains(file_name, name) {
+            final_file = file;
+        }
+    }
+
+    return final_file;
 }
 
 normalize_path :: (path: string) -> string {
@@ -118,7 +136,7 @@ parse_file :: (path: string, force := false) {
     // log("Parse file: %", path);
 
     content := cast(string) get_memory_file(path);
-    content_from_disc: bool;
+    content_from_file: bool;
 
     if content.count == 0 {
         exists: bool;
@@ -129,7 +147,7 @@ parse_file :: (path: string, force := false) {
             return;
         }
 
-        content_from_disc = true;
+        content_from_file = true;
     }
 
     if ok {
@@ -162,9 +180,10 @@ parse_file :: (path: string, force := false) {
         }
 
         file.global_block.members = parser.user_data.global_members;
+        file.comments = parser.lexer.comments;
     }
 
-    if content_from_disc free(content);
+    if content_from_file free(content);
     // log("Parsed: % (nodes: %, declarations: %, pointer: %)", path, file.nodes.count, file.declarations.count, file);
 
     array_add_if_unique(*server.files_to_be_analyzed, file);
@@ -643,12 +662,45 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
 
             for block.members {
 
-                // We only accept `nodes` if they were declared before our cursor location.
+                // We only accept `nodes` if they were declared before our cursor/node location.
                 if from_loc.l0 < it.location.l0 continue;
 
                 if it.kind == {
                     case .USING; // @TODO: solve crash when having two using
                         add_decls_from_using(decls, cast(*Using) it, name);
+
+                    case .COMPOUND_DECLARATION;
+                        comp_decl := cast(*Compound_Declaration) it;
+
+                        if only_consts && !comp_decl.const {
+                            continue;
+                        }
+
+                        for comp_member: comp_decl.members {
+                            if comp_member.kind != .COMPOUND_DECLARATION_ITEM {
+                                continue;
+                            }
+
+                            comp_item := cast(*Compound_Declaration_Item) comp_member;
+                            if comp_item.item_kind != .DECLARATION || !comp_item.expression || comp_item.expression.kind != .IDENTIFIER {
+                                continue;
+                            }
+
+                            comp_item_ident := cast(*Identifier) comp_item.expression;
+
+                            if name && name != comp_item_ident.name {
+                                continue;
+                            }
+
+                            // @TODO: is this ok? Do we really wan't to create "virtual" decl here?
+                            decl := New(Declaration);
+                            decl.parent = comp_item_ident.parent;
+                            decl.location = comp_item_ident.location;
+                            decl.name = comp_item_ident.name;
+                            decl.expression = *unknown_identifier_node; // @TODO: We need to resolve the expression from parent Compound_Declaration.
+
+                            array_add(decls, decl);
+                        }
 
                     case .DECLARATION;
                         decl := cast(*Declaration) it;
@@ -1164,7 +1216,51 @@ get_block_of :: (node: *Node) -> *Block {
     return null;
 }
 
+// This depends on Preload having this type. We need to keep this in sync with the compiler.
+get_internal_array_struct :: (resizable: bool) -> *Struct {
+    preload := search_for_file("modules/Preload.jai");
+    if !preload {
+        return null;
+    }
+
+    // @TODO: Array_View_64 is actually not correct type because data in it is type of *u8 and it should be *void.
+    // Currently there is no plain Array_View with *void in Preload so we will keep it this way for now.
+    // In the future we can put this builtins inside some "virtual" file.
+    search_for := ifx resizable then "Resizable_Array" else "Array_View_64";
+
+    ok, decl := table_find(*preload.declarations, search_for);
+    if !ok || !decl.expression || decl.expression.kind != .STRUCT {
+        return null;
+    }
+
+    return cast(*Struct) decl.expression;
+}
+
+// This depends on Preload having this type. We need to keep this in sync with the compiler.
+get_internal_string_struct :: () -> *Struct {
+    preload := search_for_file("modules/Preload.jai");
+    if !preload {
+        return null;
+    }
+
+    ok, decl := table_find(*preload.declarations, "Newstring");
+    if !ok || !decl.expression || decl.expression.kind != .STRUCT {
+        return null;
+    }
+
+    return cast(*Struct) decl.expression;
+}
+
 get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
+    decls := get_members_in(parent, ident);
+    if decls.count == 0 {
+        return null;
+    }
+
+    return decls[0];
+}
+
+get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
     if parent.kind == .DIRECTIVE_IMPORT {
         import := cast(*Directive_Import) parent;
 
@@ -1172,32 +1268,33 @@ get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
         module_file := get_file(module_file_path);
 
         if !module_file {
-            return null;
+            return .[];
         }
 
-        decls := get_declarations(module_file, only_loaded=true, name=ident.name);
-        if decls.count == 0 {
-            return null;
-        }
+        return get_declarations(module_file, only_loaded=true, name=ident.name);
+    }
 
-        return decls[0];
+    // Special case for array
+    if parent.kind == .ARRAY_TYPE {
+        parent_array_type := cast(*Array_Type) parent;
+        internal_array_struct := get_internal_array_struct(parent_array_type.resizable);
+        if internal_array_struct {
+            parent = internal_array_struct;
+        }
+    }
+
+    // Special case for string
+    parent_base_type := get_base_type_from_ident_or_literal(parent);
+    if parent_base_type == .STRING {
+        internal_string_struct := get_internal_string_struct();
+        if internal_string_struct {
+            parent = internal_string_struct;
+        }
     }
 
     block := get_block_of(parent);
-    if !block return null;
-    return get_block_member(block, ident);
-}
-
-get_root_of_dot_path :: (op: *Binary_Operation) -> *Binary_Operation {
-    current := op;
-
-    while current.parent && current.parent.kind == .BINARY_OPERATION {
-        parent := cast(*Binary_Operation) current.parent;
-        if parent.operation != .DOT break;
-        current = parent;
-    }
-
-    return current;
+    if !block return .[];
+    return .[get_block_member(block, ident)];
 }
 
 get_block_member_type :: (block: *Block, ident: *Identifier, solve_array := false) -> *Node {
@@ -1295,12 +1392,6 @@ get_last_binary_op :: (first: *Binary_Operation) -> *Binary_Operation {
         current = cast(*Binary_Operation) current.right;
     }
 
-    // if current == first {
-    //     if current.left && current.kind == .BINARY_OPERATION {
-    //         return cast(*Binary_Operation) current.left;
-    //     }
-    // }
-
     return current;
 }
 
@@ -1349,18 +1440,9 @@ get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
         if current_op.left array_add(*path, current_op.left);
     }
 
-    // @TODO: Can we reverse without making new array? This seems dumb!
-    reversed_path: [..]*Node;
-    index: int;
-    for < node: path {
-        if node && node.kind != .IDENTIFIER && node.kind != .ARRAY_SUBSCRIPT && node.kind != .PROCEDURE_CALL {
-            return reversed_path;
-        }
+    array_reverse(path);
 
-        array_add(*reversed_path, node);
-    }
-
-    return reversed_path;
+    return path;
 }
 
 get_path_type :: (path: []*Node) -> *Node {
@@ -1375,7 +1457,7 @@ get_path_type :: (path: []*Node) -> *Node {
             case .ARRAY_SUBSCRIPT; #through;
             case .IDENTIFIER;
                 identifier: *Identifier;
-                solve_array: bool = true;
+                solve_array: bool = false;
 
                 if node.kind == .IDENTIFIER {
                     identifier = cast(*Identifier) node;
@@ -1592,4 +1674,23 @@ get_best_overload_for_procedure_call :: (procedures: []*Procedure, call: *Proced
     }
 
     return current_best;
+}
+
+inside_comment :: (location: Node.Location) -> bool {
+    file := get_file(location.file);
+    if !file {
+        return false;
+    }
+
+    for comment: file.comments {
+        // location start >= comment start
+        if (location.l0 < comment.l1 || (location.l0 == comment.l1 && location.c0 < comment.c1)) {
+              // location.end > comment.start
+              if (location.l1 > comment.l0 || (location.l1 == comment.l0 && location.c1 > comment.c0)) {
+                  return true;
+              }
+          }
+    }
+
+    return false;
 }
