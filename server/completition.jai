@@ -53,9 +53,8 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     }
 
     // General
-    decls := get_declarations(file, cursor_node, *cursor_location, is_dot_completion = request.params._context.triggerCharacter == ".");
-
-    send_completions_decls(request, decls, should_add_basic_keywords = false);
+    decls := get_declarations(file, cursor_node, *cursor_location);
+    send_completions_decls(request, decls, should_add_basic_keywords=true);
 }
 
 // handle_completitions_procedure_call :: (request: LSP_Request_Message_Completion, file: *Program_File, cursor_node: *Node, cursor_location: *Node.Location) -> bool {
@@ -228,7 +227,8 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
 
     type := get_path_type(path);
     if !type {
-        return false;
+        lsp_respond(request.id, null);
+        return true;
     }
 
     return handle_completitions_for_node(request, type);
@@ -349,9 +349,9 @@ handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node:
             }
     }
 
-    if decls.count == 0 {
-        return false;
-    }
+    // if decls.count == 0 {
+    //     return false;
+    // }
 
     send_completions_decls(request, decls);
 
