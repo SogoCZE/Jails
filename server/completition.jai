@@ -192,7 +192,7 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     } else if is_dot_binary_op(cursor_node.parent) {
         op = cast(*Binary_Operation) cursor_node.parent;
     } else {
-        log("cursor nor parent is dot binary op!");
+        // log("cursor nor parent is dot binary op!");
         return false;
     }
 

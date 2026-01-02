@@ -1171,6 +1171,15 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
                 continue;
             }
 
+            if unary_op.operation == .POINTER_DEREFERENCE {
+                if !unary_op.expression {
+                    break;
+                }
+
+                current_node = unary_op.expression;
+                continue;
+            }
+
             break;
         }
 
@@ -1264,6 +1273,8 @@ get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
 }
 
 get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
+    decls: [..]*Declaration;
+
     if parent.kind == .DIRECTIVE_IMPORT {
         import := cast(*Directive_Import) parent;
 
@@ -1271,7 +1282,7 @@ get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
         module_file := get_file(module_file_path);
 
         if !module_file {
-            return .[];
+            return decls;
         }
 
         return get_declarations(module_file, only_loaded=true, name=ident.name);
@@ -1296,13 +1307,26 @@ get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
     }
 
     block := get_block_of(parent);
-    if !block return .[];
-    return .[get_block_member(block, ident)];
+    if !block {
+        return decls;
+    }
+
+    block_member := get_block_member(block, ident);
+    if !block_member {
+        return decls;
+    }
+
+    array_add(*decls, block_member);
+
+    return decls;
 }
 
 get_block_member_type :: (block: *Block, ident: *Identifier, solve_array := false) -> *Node {
     decl := get_block_member(block, ident);
-    if !decl return null;
+    if !decl {
+        return null;
+    }
+
     return get_node_type(decl, solve_array);
 }
 
@@ -1537,6 +1561,39 @@ get_path_type :: (path: []*Node) -> *Node {
                 current_type = node;
                 resolved_nodes += 1;
 
+            case .UNARY_OPERATION;
+                _unary_op := cast(*Unary_Operation) node;
+                if _unary_op.operation == .POINTER_DEREFERENCE {
+                    if !_unary_op.expression {
+                        break;
+                    }
+
+                    current_type = get_node_type(_unary_op.expression, true);
+                    if !current_type {
+                        break;
+                    }
+
+                    resolved_nodes += 1;
+                }
+
+            case .CAST;
+                _cast := cast(*Cast) node;
+
+                cast_type := _cast.cast_expression;
+                if cast_type && cast_type.kind == .UNARY_OPERATION {
+                    cast_type = unwrap_pointer(cast(*Unary_Operation) _cast.cast_expression);
+                }
+
+                if !cast_type {
+                    break;
+                }
+
+                current_type = get_node_type(cast_type, true);
+                if !current_type {
+                    break;
+                }
+
+                resolved_nodes += 1;
             case; // abort!
                 return null;
         }
