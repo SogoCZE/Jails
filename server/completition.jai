@@ -183,18 +183,19 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     }
 
     op: *Binary_Operation;
-    if cursor_node.kind == .BINARY_OPERATION {
-        op = cast(*Binary_Operation, cursor_node);
-    } else if cursor_node.parent && cursor_node.parent.kind == .BINARY_OPERATION {
-        op = cast(*Binary_Operation, cursor_node.parent);
+    if is_dot_binary_op(cursor_node) {
+        op = cast(*Binary_Operation) cursor_node;
+    } else if is_dot_binary_op(cursor_node.parent) {
+        op = cast(*Binary_Operation) cursor_node.parent;
     } else {
+        log("cursor nor parent is dot binary op!");
         return false;
     }
 
     root_binary_op := op;
     while root_binary_op.right && root_binary_op.right.kind == .BINARY_OPERATION {
         right := cast(*Binary_Operation) root_binary_op.right;
-        if is_after(cursor_location, right.location) {
+        if right.operation != .DOT || is_after(cursor_location, right.location) {
             break;
         }
 

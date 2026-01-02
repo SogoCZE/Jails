@@ -399,7 +399,6 @@ get_node_by_location :: (file: *Program_File, location: Node.Location, filter: N
         nearest_node = node;
     }
 
-
     return nearest_node;
 }
 
@@ -1424,7 +1423,7 @@ get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
         } else if root_binary_op.left == from {
             array_add(*path, root_binary_op.left);
         } else {
-            log_error("left nor right is from"); // is this correct? Should we assert?
+            // log_error("left nor right is from"); // is this correct? Should we assert?
             return path;
         }
     }
@@ -1693,4 +1692,21 @@ inside_comment :: (location: Node.Location) -> bool {
     }
 
     return false;
+}
+
+is_dot_binary_op :: (node: *Node) -> bool {
+    if !node {
+        return false;
+    }
+
+    if node.kind != .BINARY_OPERATION {
+        return false;
+    }
+
+    binary_op := cast(*Binary_Operation) node;
+    if binary_op.operation != .DOT {
+        return false;
+    }
+
+    return true;
 }

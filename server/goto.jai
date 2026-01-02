@@ -264,30 +264,30 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
 
     cursor_location := lsp_location_to_node_location(request.params.position, file_path);
 
-    node := get_node_by_location(file, cursor_location);
-    if !node {
+    cursor_node := get_node_by_location(file, cursor_location);
+    if !cursor_node {
         lsp_respond(request.id, null);
         return;
     }
 
-    // log("Clicked node: %", node.kind);
+    log("Clicked node: %", cursor_node.kind);
 
-    if node.kind == .DIRECTIVE_LOAD {
-        handle_goto_load(request, file, xx node);
+    if cursor_node.kind == .DIRECTIVE_LOAD {
+        handle_goto_load(request, file, xx cursor_node);
         return;
     }
 
-    if node.kind == .DIRECTIVE_IMPORT {
-        handle_goto_import(request, file, xx node);
+    if cursor_node.kind == .DIRECTIVE_IMPORT {
+        handle_goto_import(request, file, xx cursor_node);
         return;
     }
 
-    if node.kind != .IDENTIFIER {
+    if cursor_node.kind != .IDENTIFIER {
         lsp_respond(request.id, null);
         return;
     }
 
-    ident := cast(*Identifier) node;
+    ident := cast(*Identifier) cursor_node;
 
     if handle_goto_procedure_named_argument(request, file, ident) {
         return;
