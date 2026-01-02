@@ -725,8 +725,10 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
     get_declarations_from_parent(decls, node.parent, from_loc, name, only_consts);
 }
 
-get_declarations :: (file: *Program_File, from_node: *Node = null, from_loc: *Node.Location = null, name := "", only_loaded := false) -> []*Declaration {
+get_declarations :: (file: *Program_File, from_node: *Node = null, from_loc: *Node.Location = null, name := "", only_loaded := false, is_dot_completion: bool = false) -> []*Declaration {
     decls: [..]*Declaration;
+    
+    log("get_declarations '%' is_dot_completion: %\n", name, is_dot_completion);
 
     // Globals in all linked files (loaded or imported)
     if file {
@@ -779,8 +781,10 @@ get_declarations :: (file: *Program_File, from_node: *Node = null, from_loc: *No
                     if is_global(decl, file, linked_file.file, linked_file.from_import) array_add(*decls, decl);
                 }
             } else { // We are adding all globals decls
-                for decl: linked_file.file.declarations {
-                    if is_global(decl, file, linked_file.file, linked_file.from_import) array_add(*decls, decl);
+                if !is_dot_completion {
+                    for decl: linked_file.file.declarations {
+                        if is_global(decl, file, linked_file.file, linked_file.from_import) array_add(*decls, decl);
+                    }
                 }
             }
         }
@@ -789,7 +793,7 @@ get_declarations :: (file: *Program_File, from_node: *Node = null, from_loc: *No
     // Scopes, Procedures ... (parents)
     // if from_block {
 
-    if from_node {
+    if from_node && !is_dot_completion {
         get_declarations_from_parent(*decls, from_node, from_loc, name, false);
     }
     // }
