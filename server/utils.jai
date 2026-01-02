@@ -40,3 +40,7 @@ array_reverse :: (array: []$T) {
 log_path :: (path: []*Node) {
     for path log("[%]: %", it_index, to_string(it));
 }
+
+operator == :: (a: Node.Location, b: Node.Location) -> bool {
+    return a.l0 == b.l0 && a.l1 == b.l1 && a.c0 == b.c0 && a.c1 == b.c1;
+}

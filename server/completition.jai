@@ -19,7 +19,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         return;
     }
 
-    cursor_block := cast(*Block) get_node_by_location(file, cursor_location, .BLOCK);
     cursor_node := get_node_by_location(file, cursor_location);
 
     if cursor_node {
@@ -187,7 +186,6 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     } else if is_dot_binary_op(cursor_node.parent) {
         op = cast(*Binary_Operation) cursor_node.parent;
     } else {
-        // log("cursor nor parent is dot binary op!");
         return false;
     }
 
@@ -262,9 +260,6 @@ handle_assignment_completitions :: (request: LSP_Request_Message_Completion, cur
 }
 
 handle_completitions_for_node :: (request: LSP_Request_Message_Completion, node: *Node) -> bool {
-    // log("type kind: %", node.kind);
-    // log_node(node);
-
     decls: [..]*Declaration;
     defer array_free(decls);
 

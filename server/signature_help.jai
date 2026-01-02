@@ -66,7 +66,7 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
         }
 
         type := get_node_type(proc_decl, stop_at_procedure=true);
-        if type.kind != .PROCEDURE {
+        if !type || type.kind != .PROCEDURE {
             remove proc_decl;
             continue;
         }
