@@ -728,8 +728,6 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
 get_declarations :: (file: *Program_File, from_node: *Node = null, from_loc: *Node.Location = null, name := "", only_loaded := false, is_dot_completion: bool = false) -> []*Declaration {
     decls: [..]*Declaration;
     
-    log("get_declarations '%' is_dot_completion: %\n", name, is_dot_completion);
-
     // Globals in all linked files (loaded or imported)
     if file {
         for linked_file: file.linked_files {
