@@ -455,6 +455,8 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string
     for member: block.members {
         if !member continue;
 
+        log_node(member);
+
         if member.kind == {
             case .IDENTIFIER;
                 ident := cast(*Identifier) member;
@@ -470,6 +472,9 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string
             case .DECLARATION;
                 decl := cast(*Declaration) member;
                 if !filter_name || filter_name == decl.name array_add(decls, decl);
+
+            case .COMPOUND_DECLARATION;
+                compound_declaration_to_declarations(decls, cast(*Compound_Declaration) member, filter_name);
 
             case .DIRECTIVE_AS; #through;
             case .USING; // @TODO: handle `using` modifiers like `except`, `only` and `map`.
@@ -670,60 +675,11 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
 
                     case .COMPOUND_DECLARATION;
                         comp_decl := cast(*Compound_Declaration) it;
-
                         if only_consts && !comp_decl.const {
                             continue;
                         }
 
-                        type_or_value_expr: *Node;
-                        if comp_decl.type_inst {
-                            if comp_decl.type_inst.expression {
-                                type_or_value_expr = comp_decl.type_inst.expression;
-                            } else if comp_decl.type_inst.type_inst {
-                                type_or_value_expr = comp_decl.type_inst.type_inst;
-                            }
-                        }
-
-                        for comp_member: comp_decl.members {
-                            if comp_member.kind != .COMPOUND_DECLARATION_ITEM {
-                                continue;
-                            }
-
-                            comp_item := cast(*Compound_Declaration_Item) comp_member;
-                            if comp_item.item_kind != .DECLARATION || !comp_item.expression || comp_item.expression.kind != .IDENTIFIER {
-                                continue;
-                            }
-
-                            comp_item_ident := cast(*Identifier) comp_item.expression;
-
-                            if name && name != comp_item_ident.name {
-                                continue;
-                            }
-
-                            item_expr: *Node = *unknown_identifier_node;
-                            if type_or_value_expr {
-                                if type_or_value_expr.kind == .IDENTIFIER {
-                                    item_expr = type_or_value_expr;
-                                }
-
-                                if type_or_value_expr.kind == .COMMA_SEPARATED_EXPRESSION {
-                                    comma_sep_expr := cast(*Comma_Separated_Expression) type_or_value_expr;
-
-                                    if comma_sep_expr.members.count > it_index {
-                                        item_expr = comma_sep_expr.members[it_index];
-                                    }
-                                }
-                            }
-
-                            // @TODO: is this ok? Do we really wan't to create "virtual" decl here?
-                            decl := New(Declaration);
-                            decl.parent = comp_item_ident.parent;
-                            decl.location = comp_item_ident.location;
-                            decl.name = comp_item_ident.name;
-                            decl.expression = item_expr;
-
-                            array_add(decls, decl);
-                        }
+                        compound_declaration_to_declarations(decls, comp_decl, name);
 
                     case .DECLARATION;
                         decl := cast(*Declaration) it;
@@ -1790,4 +1746,56 @@ is_dot_binary_op :: (node: *Node) -> bool {
     }
 
     return true;
+}
+
+compound_declaration_to_declarations :: (decls: *[..]*Declaration, comp_decl: *Compound_Declaration, filter_name: string = "") {
+    type_or_value_expr: *Node;
+    if comp_decl.type_inst {
+        if comp_decl.type_inst.expression {
+            type_or_value_expr = comp_decl.type_inst.expression;
+        } else if comp_decl.type_inst.type_inst {
+            type_or_value_expr = comp_decl.type_inst.type_inst;
+        }
+    }
+
+    for comp_member: comp_decl.members {
+        if comp_member.kind != .COMPOUND_DECLARATION_ITEM {
+            continue;
+        }
+
+        comp_item := cast(*Compound_Declaration_Item) comp_member;
+        if comp_item.item_kind != .DECLARATION || !comp_item.expression || comp_item.expression.kind != .IDENTIFIER {
+            continue;
+        }
+
+        comp_item_ident := cast(*Identifier) comp_item.expression;
+
+        if filter_name && filter_name != comp_item_ident.name {
+            continue;
+        }
+
+        item_expr: *Node = *unknown_identifier_node;
+        if type_or_value_expr {
+            if type_or_value_expr.kind == .IDENTIFIER {
+                item_expr = type_or_value_expr;
+            }
+
+            if type_or_value_expr.kind == .COMMA_SEPARATED_EXPRESSION {
+                comma_sep_expr := cast(*Comma_Separated_Expression) type_or_value_expr;
+
+                if comma_sep_expr.members.count > it_index {
+                    item_expr = comma_sep_expr.members[it_index];
+                }
+            }
+        }
+
+        // @TODO: is this ok? Do we really wan't to create "virtual" decl here?
+        decl := New(Declaration);
+        decl.parent = comp_item_ident.parent;
+        decl.location = comp_item_ident.location;
+        decl.name = comp_item_ident.name;
+        decl.expression = item_expr;
+
+        array_add(decls, decl);
+    }
 }
