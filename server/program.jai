@@ -675,6 +675,15 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
                             continue;
                         }
 
+                        type_or_value_expr: *Node;
+                        if comp_decl.type_inst {
+                            if comp_decl.type_inst.expression {
+                                type_or_value_expr = comp_decl.type_inst.expression;
+                            } else if comp_decl.type_inst.type_inst {
+                                type_or_value_expr = comp_decl.type_inst.type_inst;
+                            }
+                        }
+
                         for comp_member: comp_decl.members {
                             if comp_member.kind != .COMPOUND_DECLARATION_ITEM {
                                 continue;
@@ -691,12 +700,27 @@ get_declarations_from_parent :: (decls: *[..]*Declaration, node: *Node, from_loc
                                 continue;
                             }
 
+                            item_expr: *Node = *unknown_identifier_node;
+                            if type_or_value_expr {
+                                if type_or_value_expr.kind == .IDENTIFIER {
+                                    item_expr = type_or_value_expr;
+                                }
+
+                                if type_or_value_expr.kind == .COMMA_SEPARATED_EXPRESSION {
+                                    comma_sep_expr := cast(*Comma_Separated_Expression) type_or_value_expr;
+
+                                    if comma_sep_expr.members.count > it_index {
+                                        item_expr = comma_sep_expr.members[it_index];
+                                    }
+                                }
+                            }
+
                             // @TODO: is this ok? Do we really wan't to create "virtual" decl here?
                             decl := New(Declaration);
                             decl.parent = comp_item_ident.parent;
                             decl.location = comp_item_ident.location;
                             decl.name = comp_item_ident.name;
-                            decl.expression = *unknown_identifier_node; // @TODO: We need to resolve the expression from parent Compound_Declaration.
+                            decl.expression = item_expr;
 
                             array_add(decls, decl);
                         }
