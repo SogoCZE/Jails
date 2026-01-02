@@ -1167,6 +1167,15 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
                 continue;
             }
 
+            if unary_op.operation == .POINTER_DEREFERENCE {
+                if !unary_op.expression {
+                    break;
+                }
+
+                current_node = unary_op.expression;
+                continue;
+            }
+
             break;
         }
 
@@ -1548,6 +1557,39 @@ get_path_type :: (path: []*Node) -> *Node {
                 current_type = node;
                 resolved_nodes += 1;
 
+            case .UNARY_OPERATION;
+                _unary_op := cast(*Unary_Operation) node;
+                if _unary_op.operation == .POINTER_DEREFERENCE {
+                    if !_unary_op.expression {
+                        break;
+                    }
+
+                    current_type = get_node_type(_unary_op.expression, true);
+                    if !current_type {
+                        break;
+                    }
+
+                    resolved_nodes += 1;
+                }
+
+            case .CAST;
+                _cast := cast(*Cast) node;
+
+                cast_type := _cast.cast_expression;
+                if cast_type && cast_type.kind == .UNARY_OPERATION {
+                    cast_type = unwrap_pointer(cast(*Unary_Operation) _cast.cast_expression);
+                }
+
+                if !cast_type {
+                    break;
+                }
+
+                current_type = get_node_type(cast_type, true);
+                if !current_type {
+                    break;
+                }
+
+                resolved_nodes += 1;
             case; // abort!
                 return null;
         }
