@@ -455,8 +455,6 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string
     for member: block.members {
         if !member continue;
 
-        log_node(member);
-
         if member.kind == {
             case .IDENTIFIER;
                 ident := cast(*Identifier) member;
