@@ -294,31 +294,24 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
     ident := cast(*Identifier) cursor_node;
 
     if handle_goto_procedure_named_argument(request, file, ident) {
-        log("handle_goto_procedure_named_argument");
         return;
     }
 
     if handle_goto_struct_literal(request, file, ident) {
-        log("handle_goto_struct_literal");
         return;
     }
 
     if handle_goto_assignment(request, ident) {
-        log("handle_goto_assignment");
         return;
     }
 
     if handle_goto_dot(request, ident) {
-        log("handle_goto_dot");
         return;
     }
 
     if handle_procedure_call_goto(request, ident) {
-        log("handle_procedure_call_goto");
         return;
     }
-
-    log("get_identifier_decls");
 
     decls := get_identifier_decls(ident);
     if decls.count == 0 {
