@@ -3,8 +3,6 @@
 handle_completitions :: (request: LSP_Request_Message_Completion) {
     push_allocator(temp);
 
-    log("handle_completions %\n", request);
-
     file_path := normalize_path(request.params.textDocument.uri);
 
     file := get_file(file_path);
@@ -25,7 +23,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     cursor_node := get_node_by_location(file, cursor_location);
 
     if cursor_node {
-        log("cursor node\n");
         // We don't wanna to give completions inside strings.
         if cursor_node.kind == .DIRECTIVE_STRING || (cursor_node.kind == Node.Kind.LITERAL && cursor_node.(*Literal).value_type == .STRING) {
             lsp_respond(request.id, null);
@@ -58,7 +55,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     // General
     decls := get_declarations(file, cursor_node, *cursor_location, is_dot_completion = request.params._context.triggerCharacter == ".");
 
-    log("sending %\n", decls.count);
     send_completions_decls(request, decls, should_add_basic_keywords = false);
 }
 
@@ -455,6 +451,5 @@ send_completions_decls :: (request: LSP_Request_Message_Completion, decls: []*De
         array_add(*completions, item);
     }
 
-    log("lsp_respond % items\n", completions.count);
     lsp_respond(request.id, completions);
 }
