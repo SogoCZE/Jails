@@ -1260,6 +1260,8 @@ get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
 }
 
 get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
+    decls: [..]*Declaration;
+
     if parent.kind == .DIRECTIVE_IMPORT {
         import := cast(*Directive_Import) parent;
 
@@ -1267,7 +1269,7 @@ get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
         module_file := get_file(module_file_path);
 
         if !module_file {
-            return .[];
+            return decls;
         }
 
         return get_declarations(module_file, only_loaded=true, name=ident.name);
@@ -1292,13 +1294,26 @@ get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
     }
 
     block := get_block_of(parent);
-    if !block return .[];
-    return .[get_block_member(block, ident)];
+    if !block {
+        return decls;
+    }
+
+    block_member := get_block_member(block, ident);
+    if !block_member {
+        return decls;
+    }
+
+    array_add(*decls, block_member);
+
+    return decls;
 }
 
 get_block_member_type :: (block: *Block, ident: *Identifier, solve_array := false) -> *Node {
     decl := get_block_member(block, ident);
-    if !decl return null;
+    if !decl {
+        return null;
+    }
+
     return get_node_type(decl, solve_array);
 }
 

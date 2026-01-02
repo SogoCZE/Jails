@@ -270,7 +270,7 @@ handle_goto :: (request: LSP_Request_Message_Definition) {
         return;
     }
 
-    log("Clicked node: %", cursor_node.kind);
+    // log("Clicked node: %", cursor_node.kind);
 
     if cursor_node.kind == .DIRECTIVE_LOAD {
         handle_goto_load(request, file, xx cursor_node);
