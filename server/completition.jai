@@ -21,12 +21,6 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
 
     cursor_node := get_node_by_location(file, cursor_location);
 
-    // We don't wanna to give completions inside strings and comments...
-    if cursor_node.kind == Node.Kind.COMMENT _exit();
-
-
-
-
     if cursor_node {
         // We don't wanna to give completions inside strings.
         if cursor_node.kind == .DIRECTIVE_STRING || (cursor_node.kind == Node.Kind.LITERAL && cursor_node.(*Literal).value_type == .STRING) {
