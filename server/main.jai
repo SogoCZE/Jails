@@ -11,6 +11,7 @@ Args :: struct {
 
 User_Options :: struct {
     auto_insert_parentheses: bool;
+    use_symbols_from_local_modules: bool;
 }
 
 Server :: struct {
@@ -176,6 +177,7 @@ load_config_file :: () {
         jai_path: string;
         intermediate_path: string;
         auto_insert_parentheses := true;
+        use_symbols_from_local_modules := true;
     }
 
     config_path := join(server.project_root, "/jails.json");
@@ -202,6 +204,7 @@ load_config_file :: () {
     server.build_root = config.build_root;
     server.intermediate_path = config.intermediate_path;
     server.user_options.auto_insert_parentheses = config.auto_insert_parentheses;
+    server.user_options.use_symbols_from_local_modules = config.use_symbols_from_local_modules;
 
     if config.jai_path.count > 0 {
         server.args.jai_path = config.jai_path;

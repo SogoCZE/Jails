@@ -11,9 +11,8 @@
 
     profile_server := array_find(args, "-profile_server");
     launch_vscode := array_find(args, "-vscode");
+    very_debug := array_find(args, "-very-debug");
     release := array_find(args, "-release");
-    release_very := array_find(args, "-very-release");
-    arm := array_find(args, "-arm");
 
     ok: bool;
 
@@ -27,10 +26,8 @@
         options.output_path = "./bin";
         options.import_path = import_path;
 
-        if release set_optimization(*options, .OPTIMIZED);
-        if release_very set_optimization(*options, .VERY_OPTIMIZED);
-
-        if arm options.cpu_target = .ARM64;
+        if release set_optimization(*options, .VERY_OPTIMIZED);
+        if very_debug set_optimization(*options, .VERY_DEBUG);
 
         set_build_options(options, w);
 
