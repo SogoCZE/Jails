@@ -26,6 +26,12 @@
         options.output_path = "./bin";
         options.import_path = import_path;
 
+        if !release {
+            // Use the X64 backend and natvis type for the best vscode debug experience
+            options.backend = .X64;
+            options.use_natvis_compatible_types = true;
+        }
+
         if release set_optimization(*options, .VERY_OPTIMIZED);
         if very_debug set_optimization(*options, .VERY_DEBUG);
 

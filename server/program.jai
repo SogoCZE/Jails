@@ -471,6 +471,9 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string
                 decl := cast(*Declaration) member;
                 if !filter_name || filter_name == decl.name array_add(decls, decl);
 
+            case .UNION;
+                add_all_fields_of(decls, member);
+            
             case .COMPOUND_DECLARATION;
                 compound_declaration_to_declarations(decls, cast(*Compound_Declaration) member, filter_name);
 
@@ -1307,6 +1310,10 @@ get_block_member_type :: (block: *Block, ident: *Identifier, solve_array := fals
 get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
     for member: block.members {
         if member.kind == {
+            case .UNION;
+                _union := cast(*Union)member;
+
+                return get_block_member(_union.block, ident);
             case .IDENTIFIER;
                 _ident := cast(*Identifier) member;
                 if _ident.name == ident.name {
