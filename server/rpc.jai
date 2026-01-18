@@ -12,7 +12,7 @@ read_from_stdin :: (buffer: *u8, bytes_to_read: u64) -> u64 {
     }
 
     while bytes_to_read > readed  {
-        #if OS != .WINDOWS { // Linux, MacOS 
+        #if OS != .WINDOWS { // Linux, MacOS
             read_this_time = posix.read(posix.STDIN_FILENO, buffer+readed, bytes_to_read-readed);
             if read_this_time < 0 {
               // probably EAGAIN or EINTR?
@@ -47,7 +47,7 @@ read_line_from_stdin :: (buffer: []u8) -> u64 {
         total_read += 1;
         if buffer[total_read - 1] == #char "\n" {
             break;
-        } 
+        }
     }
 
     return total_read;
@@ -104,7 +104,7 @@ read_message_from_stdin :: () -> string, bool {
 
     body := to_string(body_buffer.data, body_buffer.count);
 
-    return body, true;        
+    return body, true;
 }
 
 send_message :: (data: $T) {

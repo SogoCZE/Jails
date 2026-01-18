@@ -1,128 +1,129 @@
 {
-  "name": "jails",
-  "displayName": "Jai Language",
-  "description": "Experimental language support for Jai programming language (Language Server, Syntax highlighting)",
-  "icon": "images/icon.png",
-  "version": "0.2.0",
-  "publisher": "ApparentlyStudio",
-  "author": "Patrik Smělý (SogoCZE)",
-  "main": "./out/extension.js",
-  "activationEvents": [
-    "onLanguage:jai"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/SogoCZE/jai_language_server"
-  },
-  "scripts": {
-    "compile": "tsc -b",
-    "watch": "tsc --watch",
-    "pack:linux": "cp ../bin/jails ./out/jails-linux-x64 && vsce package",
-    "pack:mac": "cp ../bin/jails ./out/jails-darwin-arm64 && vsce package",
-    "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win32-x64.exe && vsce package",
-    "all:windows": "npm run compile && npm run pack:windows"
-  },
-  "license": "MIT",
-  "engines": {
-    "vscode": "^1.84.2"
-  },
-  "categories": [
-    "Programming Languages"
-  ],
-  "dependencies": {
-    "vscode-languageclient": "9.0.1"
-  },
-  "devDependencies": {
-    "@types/node": "20.10.2",
-    "@types/vscode": "1.84.2",
-    "typescript": "5.3.2"
-  },
-  "keywords": [
-    "Jai"
-  ],
-  "contributes": {
-    "commands": [
-      {
-        "command": "jails.restart",
-        "title": "Restart",
-        "category": "Jails"
-      },
-      {
-        "command": "jails.start",
-        "title": "Start",
-        "category": "Jails"
-      },
-      {
-        "command": "jails.stop",
-        "title": "Stop",
-        "category": "Jails"
-      }
+    "name": "jails",
+    "displayName": "Jai Language",
+    "description": "Experimental language support for Jai programming language (Language Server, Syntax highlighting)",
+    "icon": "images/icon.png",
+    "version": "0.2.0",
+    "publisher": "ApparentlyStudio",
+    "author": "Patrik Smělý (SogoCZE)",
+    "main": "./out/extension.js",
+    "activationEvents": [
+        "onLanguage:jai"
     ],
-    "languages": [
-      {
-        "id": "jai",
-        "aliases": [
-          "Jai",
-          "jai"
-        ],
-        "extensions": [
-          ".jai"
-        ],
-        "configuration": "./language-configuration.json"
-      }
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/SogoCZE/jai_language_server"
+    },
+    "scripts": {
+        "compile": "tsc -b",
+        "watch": "tsc --watch",
+        "pack": "vsce package",
+        "pack:linux": "cp ../bin/jails ./out/jails-linux-x64 && vsce package",
+        "pack:mac": "cp ../bin/jails ./out/jails-darwin-arm64 && vsce package",
+        "pack:windows": "copy ..\\bin\\jails.exe .\\out\\jails-win32-x64.exe && vsce package",
+        "all:windows": "npm run compile && npm run pack:windows"
+    },
+    "license": "MIT",
+    "engines": {
+        "vscode": "^1.84.2"
+    },
+    "categories": [
+        "Programming Languages"
     ],
-    "debuggers": [
-      {
-        "type": "cppvsdbg",
-        "label": "Debug Jai (MSVC)",
-        "languages": [
-          "jai"
-        ],
-        "configurationAttributes": {
-          "launch": {
-            "required": [
-              "program"
-            ],
-            "properties": {
-              "program": {
-                "type": "string",
-                "description": "Path to the Jai executable",
-                "default": "${workspaceFolder}/program.exe"
-              },
-              "cwd": {
-                "type": "string",
-                "default": "${workspaceFolder}"
-              },
-              "stopAtEntry": {
-                "type": "boolean",
-                "default": false
-              }
+    "dependencies": {
+        "vscode-languageclient": "9.0.1"
+    },
+    "devDependencies": {
+        "@types/node": "20.10.2",
+        "@types/vscode": "1.84.2",
+        "typescript": "5.3.2"
+    },
+    "keywords": [
+        "Jai"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "jails.restart",
+                "title": "Restart",
+                "category": "Jails"
+            },
+            {
+                "command": "jails.start",
+                "title": "Start",
+                "category": "Jails"
+            },
+            {
+                "command": "jails.stop",
+                "title": "Stop",
+                "category": "Jails"
             }
-          }
-        },
-        "initialConfigurations": [
-          {
-            "name": "Debug Jai Executable",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/program.exe",
-            "cwd": "${workspaceFolder}",
-            "stopAtEntry": true
-          }
+        ],
+        "languages": [
+            {
+                "id": "jai",
+                "aliases": [
+                    "Jai",
+                    "jai"
+                ],
+                "extensions": [
+                    ".jai"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "debuggers": [
+            {
+                "type": "cppvsdbg",
+                "label": "Debug Jai (MSVC)",
+                "languages": [
+                    "jai"
+                ],
+                "configurationAttributes": {
+                    "launch": {
+                        "required": [
+                            "program"
+                        ],
+                        "properties": {
+                            "program": {
+                                "type": "string",
+                                "description": "Path to the Jai executable",
+                                "default": "${workspaceFolder}/program.exe"
+                            },
+                            "cwd": {
+                                "type": "string",
+                                "default": "${workspaceFolder}"
+                            },
+                            "stopAtEntry": {
+                                "type": "boolean",
+                                "default": false
+                            }
+                        }
+                    }
+                },
+                "initialConfigurations": [
+                    {
+                        "name": "Debug Jai Executable",
+                        "type": "cppvsdbg",
+                        "request": "launch",
+                        "program": "${workspaceFolder}/program.exe",
+                        "cwd": "${workspaceFolder}",
+                        "stopAtEntry": true
+                    }
+                ]
+            }
+        ],
+        "breakpoints": [
+            {
+                "language": "jai"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "jai",
+                "scopeName": "source.jai",
+                "path": "./syntaxes/jai.tmLanguage.json"
+            }
         ]
-      }
-    ],
-    "breakpoints": [
-      {
-        "language": "jai"
-      }
-    ],
-    "grammars": [
-      {
-        "language": "jai",
-        "scopeName": "source.jai",
-        "path": "./syntaxes/jai.tmLanguage.json"
-      }
-    ]
-  }
+    }
 }
