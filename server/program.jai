@@ -1356,6 +1356,50 @@ get_block_member :: (block: *Block, ident: *Identifier) -> *Declaration {
     return null;
 }
 
+get_block_member_declarations :: (block: *Block) -> []*Declaration {
+    decls:[..]*Declaration;
+    
+    for member: block.members {
+        if member.kind == {
+            case .IDENTIFIER;
+                _ident := cast(*Identifier) member;
+                if _ident {
+                    decl := New(Declaration); // @MEMORY: We should free this or it is temp?
+                    decl.name = _ident.name;
+                    decl.expression = *empty_identifier;
+                    decl.location = _ident.location;
+                    decl.const = true;
+
+                    array_add(*decls, decl);
+                }
+            case .DECLARATION;
+                decl := cast(*Declaration) member;
+                if decl {
+                    array_add(*decls, decl);
+                }
+
+            case .DIRECTIVE_AS; #through;
+            case .USING;
+                used_expression := get_used_expression(member);
+                if !used_expression || used_expression.kind != .DECLARATION && used_expression.kind != .IDENTIFIER {
+                    continue;
+                }
+
+                used_type := get_node_type(used_expression);
+                block := get_block_of(used_type);
+
+                if block {
+                    results :=get_block_member_declarations(block);
+                    for result:results {
+                        array_add(*decls,result);
+                    }
+                }
+        }
+    }
+
+    return decls;
+}
+
 unwrap_as :: (node: *Node) -> *Node {
     if !node return null;
 

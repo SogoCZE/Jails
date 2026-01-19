@@ -27,6 +27,11 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
             lsp_respond(request.id, null);
             return;
         }
+        
+        if cursor_node.kind == .LITERAL {
+            handle_completions_struct(request, cursor_node);
+            return;
+        }
 
         if cursor_node.kind == .DIRECTIVE_IMPORT {
             handle_completitions_import(request, xx cursor_node);
@@ -54,6 +59,43 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     // General
     decls := get_declarations(file, cursor_node, *cursor_location);
     send_completions_decls(request, decls, should_add_basic_keywords=true);
+}
+
+handle_completions_struct::(request:LSP_Request_Message_Completion, node:*Node) -> bool {
+    literal := cast(*Literal)node;
+    if literal.value_type == .STRUCT {
+        // TODO: Infer the type for .{} structs literals... right now, assume struct_literal_info.type == null as undeterminable for completions.
+        if !literal.struct_literal_info.type || literal.struct_literal_info.type.kind != .IDENTIFIER {
+            return false;
+        }
+
+        identifier_decls := get_identifier_decls(cast(*Identifier) literal.struct_literal_info.type);
+        if identifier_decls.count == 0 {
+            return false;
+        }
+        
+        struct_decl := identifier_decls[0];
+        
+        if struct_decl.expression == null {
+            return false;
+        }
+
+        _struct := cast(*Struct) struct_decl.expression;
+
+        block := get_block_of(_struct);
+
+        if block == null {
+            return false;
+        }
+
+        decls := get_block_member_declarations(block);
+        
+        send_completions_decls(request, decls);
+
+        return true;
+    }
+
+    return false;
 }
 
 // handle_completitions_procedure_call :: (request: LSP_Request_Message_Completion, file: *Program_File, cursor_node: *Node, cursor_location: *Node.Location) -> bool {
