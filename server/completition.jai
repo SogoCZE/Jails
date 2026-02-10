@@ -46,6 +46,14 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
             return;
         }
 
+        if handle_case_completions(request, cursor_node) {
+            return;
+        }
+
+        if handle_types_in_declaration(request, cursor_node) {
+            return;
+        }
+
         // if handle_completitions_procedure_call(request, file, cursor_node, *cursor_location) {
         //     return;
         // }
@@ -230,6 +238,36 @@ handle_dot_completitions :: (request: LSP_Request_Message_Completion, cursor_nod
     }
 
     return handle_completitions_for_node(request, type);
+}
+
+handle_types_in_declaration :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
+    if cursor_node.kind == .UNARY_OPERATION && cursor_node.parent && cursor_node.parent.kind == .DECLARATION {
+        node_type := get_node_type(cursor_node.parent);
+
+        return handle_completitions_for_node(request, node_type);
+    }
+
+
+    return false;
+}
+
+handle_case_completions :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
+    if cursor_node.parent && cursor_node.parent.kind == .CASE {
+        case_node := cast(*Case)cursor_node.parent;
+
+        if case_node.parent && case_node.parent.kind == .BLOCK && case_node.parent.parent && case_node.parent.parent.kind == .IF {
+            if_node := cast(*If)case_node.parent.parent;
+
+            case_type := get_node_type(if_node.condition, true);
+            if !case_type {
+                return false;
+            }
+
+            return handle_completitions_for_node(request, case_type);
+        }
+    }
+
+    return false;
 }
 
 handle_assignment_completitions :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
