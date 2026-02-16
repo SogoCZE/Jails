@@ -252,7 +252,7 @@ handle_types_in_declaration :: (request: LSP_Request_Message_Completion, cursor_
 }
 
 handle_case_completions :: (request: LSP_Request_Message_Completion, cursor_node: *Node) -> bool {
-    if cursor_node.parent && cursor_node.parent.kind == .CASE {
+    if cursor_node.kind == .UNARY_OPERATION && cursor_node.parent && cursor_node.parent.kind == .CASE {
         case_node := cast(*Case)cursor_node.parent;
 
         if case_node.parent && case_node.parent.kind == .BLOCK && case_node.parent.parent && case_node.parent.parent.kind == .IF {
