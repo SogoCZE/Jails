@@ -1107,8 +1107,25 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
         }
 
         if current_node.kind == .BINARY_OPERATION {
-            path := get_dot_path(cast(*Binary_Operation) current_node, null);
-            current_node = get_path_type(path);
+            bin_op := cast(*Binary_Operation)current_node;
+            
+            if bin_op.operation == {
+                case .IS_NOT_EQUAL;
+                    #through;
+                case .IS_EQUAL;
+                    #through;
+                case .ASSIGN;
+                    if bin_op.left.kind == .BINARY_OPERATION {
+                        path := get_dot_path(xx bin_op.left, null);
+                        current_node = get_path_type(path);
+                    } else {
+                        current_node = get_path_type(.[bin_op.left]);
+                    }
+                case;
+                    path := get_dot_path(bin_op, null);
+                    current_node = get_path_type(path);
+            }
+            
             continue;
         }
 
