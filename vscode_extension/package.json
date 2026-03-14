@@ -3,7 +3,7 @@
     "displayName": "Jai Language",
     "description": "Experimental language support for Jai programming language (Language Server, Syntax highlighting)",
     "icon": "images/icon.png",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "publisher": "ApparentlyStudio",
     "author": "Patrik Smělý (SogoCZE)",
     "main": "./out/extension.js",
