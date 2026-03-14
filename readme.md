@@ -56,7 +56,7 @@ You can create a config file `jails.json` inside your project root to specify:
 - `roots` (`main.jai`, `build.jai`) - this is used to set up files that are being parsed on init - you don't need to set this but it will improve your experience.
 - `local modules` (`modules`) - this tells the language server to also search for modules in these folders.
 - `build_root` - entry file for compiling (currently used for running compiler diagnostics - errors in the editor)
-- `intermediate_path` - path where the language server will store intermediate files (like diagnostics)
+- `intermediate_path` - path where the compiler will store intermediate files (like added strings etc) while running trough Jails diagnostics (error reporting). Usually you can leave this empty and it will default to the compiler default `.build`.
 
 ```json
 {
@@ -68,7 +68,7 @@ You can create a config file `jails.json` inside your project root to specify:
         "build.jai"
     ],
     "build_root": "build.jai",
-    "intermediate_path": "tmp/"
+    "intermediate_path": ".build"
 }
 ```
 

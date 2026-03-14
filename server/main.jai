@@ -169,17 +169,17 @@ find_jai_path :: (executable_name: string) -> string, string {
     return join(..path, separator="/"), executable_name;
 }
 
-load_config_file :: () {
-    Config :: struct {
-        local_modules: []string;
-        roots: []string;
-        build_root: string;
-        jai_path: string;
-        intermediate_path: string;
-        auto_insert_parentheses := true;
-        use_symbols_from_local_modules := true;
-    }
+Config_File :: struct {
+    local_modules: []string;
+    roots: []string;
+    build_root: string;
+    jai_path: string;
+    intermediate_path: string;
+    auto_insert_parentheses := true;
+    use_symbols_from_local_modules := true;
+}
 
+load_config_file :: () {
     config_path := join(server.project_root, "/jails.json");
     if !file_exists(config_path) {
         log_error("Failed to find 'jails.json' in your project root. Tried: %", config_path);
@@ -189,7 +189,7 @@ load_config_file :: () {
 
     config_content := read_entire_file(config_path);
 
-    ok, config := json_parse_string(config_content, Config);
+    ok, config := json_parse_string(config_content, Config_File);
     if !ok {
         log("Failed to parse config file %", config_path);
         return;
