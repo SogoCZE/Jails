@@ -232,7 +232,7 @@ handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *
     procedures: [..]*Procedure;
     for proc_decl: decls {
         type := get_node_type(proc_decl, stop_at_procedure=true);
-        if type.kind != .PROCEDURE {
+        if !type || type.kind != .PROCEDURE {
             remove proc_decl;
             continue;
         }

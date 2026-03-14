@@ -473,7 +473,7 @@ add_all_fields_of :: (decls: *[..]*Declaration, node: *Node, filter_name: string
 
             case .UNION;
                 add_all_fields_of(decls, member);
-            
+
             case .COMPOUND_DECLARATION;
                 compound_declaration_to_declarations(decls, cast(*Compound_Declaration) member, filter_name);
 
@@ -1108,7 +1108,7 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
 
         if current_node.kind == .BINARY_OPERATION {
             bin_op := cast(*Binary_Operation)current_node;
-            
+
             if bin_op.operation == {
                 case .IS_NOT_EQUAL;
                     #through;
@@ -1125,7 +1125,7 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
                     path := get_dot_path(bin_op, null);
                     current_node = get_path_type(path);
             }
-            
+
             continue;
         }
 
@@ -1152,6 +1152,16 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
             dt := cast(*Directive_Type) current_node;
             if dt.expression && dt.expression.kind == .PROCEDURE {
                 current_node = dt.expression;
+                continue;
+            }
+
+            break;
+        }
+
+        if current_node.kind == .DIRECTIVE_BAKE_ARGUMENTS {
+            directive_bake_arguments := cast(*Directive_Bake_Arguments) current_node;
+            if directive_bake_arguments.expression && directive_bake_arguments.expression.kind == .PROCEDURE {
+                current_node = directive_bake_arguments.expression;
                 continue;
             }
 
