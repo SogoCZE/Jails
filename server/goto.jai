@@ -220,6 +220,10 @@ handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *
 
     proc_call := cast(*Procedure_Call) ident.parent;
 
+    if proc_call.procedure != ident {
+        return false;
+    }
+
     decls := get_identifier_decls(ident);
     if decls.count == 0 {
         return false;
