@@ -28,7 +28,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
             return;
         }
 
-        if cursor_node.kind == Node.Kind.COMMENT _exit();
+        if cursor_node.kind == Node.Kind.COMMENT return;
 
         if cursor_node.kind == .DIRECTIVE_IMPORT {
             handle_completitions_import(request, xx cursor_node);
@@ -38,7 +38,8 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
         // We don't wanna to give completions inside strings and comments...
         if cursor_node.kind == .LITERAL {
             if handle_completions_struct(request, cursor_node) == false {
-                _exit(); // Exit here. We're a literal but not a struct, so we can't provide completions
+                lsp_respond(request.id, null);
+                return; // Exit here. We're a literal but not a struct, so we can't provide completions
             }
 
             return;
@@ -71,7 +72,7 @@ handle_completitions :: (request: LSP_Request_Message_Completion) {
     }
 
     // General
-    decls = get_declarations(file, cursor_node, *cursor_location);
+    decls := get_declarations(file, cursor_node, *cursor_location);
 
     send_completions_decls(request, decls, should_add_basic_keywords=true);
 }
