@@ -1441,7 +1441,7 @@ get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
         return path;
     }
 
-    root_binary_op := get_last_binary_op(binary_op);
+    root_binary_op := ifx from == null then get_last_binary_op(binary_op) else binary_op;
 
     if root_binary_op.operation != .DOT {
         // log("root_binary_op.operation != .DOT -> %", to_string(root_binary_op));
@@ -1463,7 +1463,7 @@ get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
             return path;
         }
     }
-
+    
     current_op: *Binary_Operation = root_binary_op;
     while current_op.parent && current_op.parent.kind == .BINARY_OPERATION {
         current_op = cast(*Binary_Operation, current_op.parent);
@@ -1474,7 +1474,7 @@ get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
 
         if current_op.left array_add(*path, current_op.left);
     }
-
+    
     array_reverse(path);
 
     return path;
@@ -1598,13 +1598,17 @@ get_path_type :: (path: []*Node) -> *Node {
 
                 current_type = get_node_type(cast_type, true);
                 if !current_type {
-                    break;
+                    return null;
                 }
 
                 resolved_nodes += 1;
             case; // abort!
                 return null;
         }
+    }
+
+    if current_type && current_type.kind == .IDENTIFIER && current_type.location.file.data != null {
+        return get_path_type(.[current_type]);
     }
 
     // We are unable to resolve whole path so the final type would be invalid.
@@ -1817,6 +1821,20 @@ compound_declaration_to_declarations :: (decls: *[..]*Declaration, comp_decl: *C
 
                 if comma_sep_expr.members.count > it_index {
                     item_expr = comma_sep_expr.members[it_index];
+                }
+            }
+
+            if type_or_value_expr.kind == .PROCEDURE_CALL {
+                proc_call := cast(*Procedure_Call) type_or_value_expr;
+
+                proc_node := get_node_type(proc_call, stop_at_procedure = true);
+
+                if proc_node.kind == .PROCEDURE {
+                    proc := cast(*Procedure) proc_node;
+                    
+                    if it_index < proc.returns.count {
+                        item_expr = proc.returns[it_index];
+                    }
                 }
             }
         }
