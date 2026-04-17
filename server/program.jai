@@ -1480,9 +1480,17 @@ get_dot_path :: (binary_op: *Binary_Operation, from: *Node) -> []*Node {
     return path;
 }
 
-get_path_type :: (path: []*Node) -> *Node {
+get_path_type :: (path: []*Node, recursion_limit: s16 = 1024) -> *Node {
     current_type: *Node;
     resolved_nodes: int;
+
+    if recursion_limit <= 0 {
+        // Enforce some kind of limit to the recursive search, else we run the risk
+        // of exhausting our stack and getting killed. A good way to test this is to do
+        // a goto definition search on a context's field.
+        log_error("Recurisve search limit reached, quitting search");
+        return null;
+    }
 
     for node: path {
         if !node break;
@@ -1608,7 +1616,7 @@ get_path_type :: (path: []*Node) -> *Node {
     }
 
     if current_type && current_type.kind == .IDENTIFIER && current_type.location.file.data != null {
-        return get_path_type(.[current_type]);
+        return get_path_type(.[current_type], recursion_limit - 1);
     }
 
     // We are unable to resolve whole path so the final type would be invalid.
