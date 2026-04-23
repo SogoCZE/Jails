@@ -355,6 +355,24 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             handle_goto(body);
 
+        case "textDocument/references";
+            success, body := json_parse_string(raw_request, LSP_Request_Message_References,, temp);
+            if !success {
+                log_error("Unable to parse textDocument/references message");
+                return;
+            }
+
+            handle_references(body);
+
+        case "textDocument/implementation";
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Implementation,, temp);
+            if !success {
+                log_error("Unable to parse textDocument/implementation message");
+                return;
+            }
+
+            handle_implementation(body);
+
         case "textDocument/didSave";
             success, body := json_parse_string(raw_request, LSP_Did_Save_Text_Document,, temp);
             if !success {
@@ -542,6 +560,7 @@ main :: () {
 
 #load "completition.jai";
 #load "goto.jai";
+#load "references.jai";
 #load "signature_help.jai";
 #load "hover.jai";
 #load "symbols.jai";
