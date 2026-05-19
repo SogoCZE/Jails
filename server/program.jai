@@ -1,6 +1,7 @@
 Module_Import :: struct {
     module: string;
     root: string;
+    is_using: bool;
 }
 
 Program_File :: struct {
@@ -286,16 +287,41 @@ node_visit :: (node: *Node, data: Node_Visit_Data) {
         _import := cast(*Directive_Import) node;
 
         path := get_module_import_path(_import, data.path_without_filename);
+        if path.count > 0 path = normalize_path(path);
+
+        parent := _import.parent;
+        wrapped_in_decl := parent && parent.kind == .DECLARATION;
+        wrapped_in_bare_using := parent && parent.kind == .USING;
 
         module_import: Module_Import;
         module_import.root = path;
         module_import.module = _import.module;
+        module_import.is_using = wrapped_in_bare_using;
 
-        if !_import.parent || _import.parent.kind != .DECLARATION {
+        if !wrapped_in_decl {
             array_add(*data.file.imports, module_import);
         }
 
         parse_file(path); // @TODO: Run this in another thread?
+    }
+
+    if node.kind == .USING {
+        _using := cast(*Using) node;
+        if _using.expression && _using.expression.kind == .DECLARATION {
+            decl := cast(*Declaration) _using.expression;
+            if decl.expression && decl.expression.kind == .DIRECTIVE_IMPORT {
+                _import := cast(*Directive_Import) decl.expression;
+                path := get_module_import_path(_import, data.path_without_filename);
+                if path.count > 0 path = normalize_path(path);
+
+                module_import: Module_Import;
+                module_import.root = path;
+                module_import.module = _import.module;
+                module_import.is_using = true;
+
+                array_add(*data.file.imports, module_import);
+            }
+        }
     }
 
     if node.kind == .DIRECTIVE_LOAD {
@@ -886,12 +912,20 @@ is_avaiable_from :: (file: *Program_File, path: string, already_checked: *[..]st
             }
 
             next_file := get_file(it.root);
-            if next_file && is_avaiable_from(next_file, path, already_checked, true) {
+            if !next_file continue;
+
+            found: bool;
+            if it.is_using {
+                found = is_avaiable_from(next_file, path, already_checked, false);
+            } else {
+                found = is_avaiable_from(next_file, path, already_checked, true);
+            }
+
+            if found {
                 from_import = true;
                 loaded = true;
                 break;
             }
-
         }
     }
 
