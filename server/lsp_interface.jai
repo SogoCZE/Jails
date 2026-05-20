@@ -497,6 +497,8 @@ LSP_Result_Initialize :: struct {
         workspaceSymbolProvider := true;
 
         definitionProvider := true;
+        referencesProvider := true;
+        implementationProvider := true;
         // hoverProvider := true;
 
         signatureHelpProvider: struct {
@@ -522,6 +524,21 @@ LSP_Result_Initialize :: struct {
 }
 
 LSP_Request_Message_Definition :: struct {
+    using request: LSP_Request_Message;
+    params: LSP_Text_Document_Position;
+}
+
+LSP_Request_Message_References :: struct {
+    using request: LSP_Request_Message;
+    params: struct {
+        using base: LSP_Text_Document_Position;
+        _context: struct {
+            includeDeclaration: bool;
+        } @JsonName(context)
+    }
+}
+
+LSP_Request_Message_Implementation :: struct {
     using request: LSP_Request_Message;
     params: LSP_Text_Document_Position;
 }
