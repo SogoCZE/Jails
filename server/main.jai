@@ -451,14 +451,23 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 
             handle_signature_help(body);
 
-        case "textDocument/hover";
-            // success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
-            // if !success {
-            //     log_error("Unable to parse textDocument/completion message");
-            //     return;
-            // }
+        case "textDocument/rename";
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Rename,, temp);
+            if !success {
+                log_error("Unable to parse textDocument/rename message");
+                return;
+            }
 
-            // handle_hover(body);
+            handle_rename(body);
+
+        case "textDocument/hover";
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Hover,, temp);
+            if !success {
+                log_error("Unable to parse textDocument/hover message");
+                return;
+            }
+
+            handle_hover(body);
     }
 }
 
@@ -542,10 +551,12 @@ main :: () {
 #load "memory_files.jai";
 
 #load "completition.jai";
+#load "resolve.jai";
 #load "goto.jai";
 #load "signature_help.jai";
 #load "hover.jai";
 #load "symbols.jai";
+#load "rename.jai";
 #load "utils.jai";
 
 #if OS == .WINDOWS {

@@ -29,228 +29,55 @@ handle_goto_import :: (request: LSP_Request_Message_Definition, file: *Program_F
 }
 
 handle_goto_dot :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
-    if !ident || !ident.parent return false;
+    if !ident return false;
 
-    leaf_node: *Node;
-    op: *Binary_Operation;
+    decls, matched := resolve_dot_member(ident);
+    if !matched return false;
 
-    if ident.parent.kind == {
-        case .BINARY_OPERATION;
-            op = cast(*Binary_Operation) ident.parent;
-            leaf_node = ident;
-
-        case .ARRAY_SUBSCRIPT;
-            array_subscript := cast(*Array_Subscript) ident.parent;
-            if array_subscript.parent && array_subscript.parent.kind == .BINARY_OPERATION {
-                op = cast(*Binary_Operation) array_subscript.parent;
-                leaf_node = array_subscript;
-            }
-
-        case .PROCEDURE_CALL;
-            proc_call := cast(*Procedure_Call) ident.parent;
-            if proc_call.parent && proc_call.parent.kind == .BINARY_OPERATION {
-                op = cast(*Binary_Operation) proc_call.parent;
-                leaf_node = proc_call;
-            }
-
-        // @TODO: anything else?
-    }
-
-    if !op {
-        return false;
-    }
-
-    path := get_dot_path(op, leaf_node);
-    if path.count < 2 {
-        return false;
-    }
-
-    path = array_view(path, 0, path.count-1);
-
-    type := get_path_type(path);
-    if !type {
+    if decls.count == 0 {
         lsp_respond(request.id, null);
         return true;
     }
 
-    decl := get_member_in(type, ident);
-    if !decl {
-        lsp_respond(request.id, null);
-        return true;
-    }
-
-    lsp_respond(request.id, node_location_to_lsp_location(decl.location));
+    lsp_respond(request.id, node_location_to_lsp_location(decls[0].location));
     return true;
 }
 
 handle_goto_procedure_named_argument :: (request: LSP_Request_Message_Definition, file: *Program_File, ident: *Identifier) -> bool {
-    if !ident.parent || ident.parent.kind != .BINARY_OPERATION {
-        return false;
-    }
+    decls, matched := resolve_procedure_named_argument(ident);
+    if !matched || decls.count == 0 return false;
 
-    binary_op := cast(*Binary_Operation) ident.parent;
-
-    // We only want to resolve this if its the left side.
-    if binary_op.right == ident {
-        return false;
-    }
-
-    if !binary_op.parent || binary_op.parent.kind != .PROCEDURE_CALL {
-        return false;
-    }
-
-    procedure_call := cast(*Procedure_Call) binary_op.parent;
-
-    if !procedure_call.procedure {
-        return false;
-    }
-
-    // We need to resolve the calle procedure.
-    decls := get_identifier_decls(cast(*Identifier) procedure_call.procedure);
-    if decls.count == 0 {
-        return false;
-    }
-
-    procedure_decl := decls[0]; // TODO: here we need to resolve procedure overloading in the future.
-    if !procedure_decl.expression {
-        return false;
-    }
-
-    procedure := cast(*Procedure) procedure_decl.expression;
-
-    for arg: procedure.arguments {
-        unwrapped_arg := unwrap_polymorphic_constant(arg);
-
-        // It should always be decl??
-        if unwrapped_arg.kind != .DECLARATION {
-            log("arg.kind: %", arg.kind);
-            continue;
-        }
-
-        arg_decl := cast(*Declaration) unwrapped_arg;
-
-        if arg_decl.name == ident.name {
-            lsp_respond(request.id, node_location_to_lsp_location(arg_decl.location));
-            return true;
-        }
-    }
-
-    return false;
+    lsp_respond(request.id, node_location_to_lsp_location(decls[0].location));
+    return true;
 }
 
 handle_goto_struct_literal :: (request: LSP_Request_Message_Definition, file: *Program_File, ident: *Identifier) -> bool {
-    if !ident.parent || ident.parent.kind != .BINARY_OPERATION {
-        return false;
-    }
+    decls, matched := resolve_struct_literal_field(ident);
+    if !matched || decls.count == 0 return false;
 
-    binary_op := cast(*Binary_Operation) ident.parent;
-
-    // We only want to resolve this if its the left side.
-    if binary_op.right == ident {
-        return false;
-    }
-
-    if !binary_op.parent || binary_op.parent.kind != .LITERAL {
-        return false;
-    }
-
-    literal := cast(*Literal) binary_op.parent;
-
-    // TODO: Infer the type for .{} structs literals...
-    if literal.value_type != .STRUCT || !literal.struct_literal_info.type || literal.struct_literal_info.type.kind != .IDENTIFIER {
-        return false;
-    }
-
-    // We need to resolve struct literal type.
-    decls := get_identifier_decls(cast(*Identifier) literal.struct_literal_info.type);
-    if decls.count == 0 {
-        return false;
-    }
-
-    struct_decl := decls[0];
-    if !struct_decl.expression {
-        return false;
-    }
-
-
-    _struct := cast(*Struct) struct_decl.expression;
-
-    decl := get_member_in(_struct, ident);
-    if !decl {
-        return false;
-    }
-
-    lsp_respond(request.id, node_location_to_lsp_location(decl.location));
+    lsp_respond(request.id, node_location_to_lsp_location(decls[0].location));
     return true;
 }
 
 handle_goto_assignment :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
-    if !ident.parent || ident.parent.kind != .UNARY_OPERATION {
-        return false;
-    }
+    decls, matched := resolve_assignment_field(ident);
+    if !matched || decls.count == 0 return false;
 
-    unary_op := cast(*Unary_Operation, ident.parent);
-    if unary_op.operation != .DOT {
-        return false;
-    }
-
-    if !unary_op.parent || unary_op.parent.kind != .BINARY_OPERATION  {
-        return false;
-    }
-
-    binary_op_type := get_node_type(unary_op.parent, true);
-    if !binary_op_type {
-        return false;
-    }
-
-    decl := get_member_in(binary_op_type, ident);
-    if !decl {
-        return false;
-    }
-
-    lsp_respond(request.id, node_location_to_lsp_location(decl.location));
-
+    lsp_respond(request.id, node_location_to_lsp_location(decls[0].location));
     return true;
 }
 
 handle_procedure_call_goto :: (request: LSP_Request_Message_Definition, ident: *Identifier) -> bool {
-    if !ident.parent || ident.parent.kind != .PROCEDURE_CALL {
-        return false;
-    }
+    decls, matched := resolve_procedure_call_best(ident);
+    if !matched || decls.count == 0 return false;
 
-    proc_call := cast(*Procedure_Call) ident.parent;
+    proc_decl := decls[0];
+    type := get_node_type(proc_decl, stop_at_procedure=true);
+    if !type || type.kind != .PROCEDURE return false;
+    procedure := cast(*Procedure) type;
+    if !procedure.parent return false;
 
-    if proc_call.procedure != ident {
-        return false;
-    }
-
-    decls := get_identifier_decls(ident);
-    if decls.count == 0 {
-        return false;
-    }
-
-    procedures: [..]*Procedure;
-    for proc_decl: decls {
-        type := get_node_type(proc_decl, stop_at_procedure=true);
-        if !type || type.kind != .PROCEDURE {
-            remove proc_decl;
-            continue;
-        }
-
-        array_add(*procedures, cast(*Procedure) type);
-    }
-
-    if procedures.count == 0 {
-        return false;
-    }
-
-    best_override_index := get_best_overload_for_procedure_call(procedures, proc_call);
-
-    if !procedures[best_override_index].parent {
-        return false;
-    }
-
-    lsp_respond(request.id, node_location_to_lsp_location(procedures[best_override_index].parent.location));
+    lsp_respond(request.id, node_location_to_lsp_location(procedure.parent.location));
     return true;
 }
 
