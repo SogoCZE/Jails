@@ -19,6 +19,8 @@ Program_File :: struct {
     declarations: Table(string, *Declaration);
     comments: [..]Comment_Token;
     // resolved_identifiers: Table(*Identifier, []*Declaration);
+    document_symbols: []LSP_Document_Symbol;
+    serialized_workspace_symbols: Table(string, string);
     linked_files: []Linked_File; // @TODO: this is probably stupid name for this!
 
     ast_pool: Pool;
@@ -317,6 +319,8 @@ rebuild_context_model :: () {
 
 analyze_files :: () {
     for file: server.files_to_be_analyzed {
+        file.document_symbols = .[];
+        file.serialized_workspace_symbols = .{};
         release(*file.analysis_pool);
     }
 
@@ -347,6 +351,7 @@ analyze_files :: () {
         }
 
         file.linked_files = linked_files;
+        cache_symbols_for_file(file);
     }
 
     rebuild_context_model();
@@ -1129,7 +1134,22 @@ get_identifier_decls :: (ident: *Identifier) -> []*Declaration {
         return .[];
     }
 
-    return get_declarations(file, ident, *ident.location, ident.name);
+    declarations := get_declarations(file, ident, *ident.location, ident.name);
+    if declarations.count > 0 {
+        return declarations;
+    }
+
+    // Fall back to matching declarations from all parsed files. This can return
+    // false positives, but is preferable to returning nothing when normal scope
+    // resolution fails for a global declaration.
+    fallback_declarations: [..]*Declaration;
+    for parsed_file: server.files {
+        for declaration: table_find_multiple(*parsed_file.declarations, ident.name) {
+            array_add(*fallback_declarations, declaration);
+        }
+    }
+
+    return fallback_declarations;
 }
 
 select_first_decl :: (decls: []*Declaration, level: int) -> *Declaration {

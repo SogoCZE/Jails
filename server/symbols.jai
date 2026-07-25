@@ -8,6 +8,8 @@
 // Go Server does include "compiler" packages
 // We should make more reseach on this topic and ask people around what they think
 // and how they use this feature...
+MAX_NUMBER_OF_WORKSPACE_SYMBOLS_TO_RETURN_TO_PREVENT_VSCODE_FROM_BEING_SUPER_SLOW :: 1000;
+
 handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
     push_allocator(temp);
     search_query := to_lower_copy(request.params.query);
@@ -18,23 +20,10 @@ handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
         return;
     }
 
-    flattern_document_symbol_to_workspace_symbols :: (search_query: string, document_symbol: LSP_Document_Symbol, file_path: string, to: *[..]LSP_Workspace_Symbol, name_prefix := "") {
-        workspace_symbol: LSP_Workspace_Symbol;
-        workspace_symbol.name = join(name_prefix, document_symbol.name);
-        workspace_symbol.kind = document_symbol.kind;
-        workspace_symbol.location = .{path_to_lsp_path(file_path), document_symbol.range};
+    builder: String_Builder;
+    append(*builder, "[");
 
-        for child_symbol: document_symbol.children {
-            flattern_document_symbol_to_workspace_symbols(search_query, child_symbol, file_path, to, join(workspace_symbol.name, "."));
-        }
-
-        // Naive search that should be enough?
-        if contains(to_lower_copy(workspace_symbol.name), search_query) {
-            array_add(to, workspace_symbol);
-        }
-    }
-
-    workspace_symbols: [..]LSP_Workspace_Symbol;
+    symbol_count := 0;
     for file: server.files {
         // Skip non workspace files
         if !begins_with(file.path, server.project_root) {
@@ -52,15 +41,27 @@ handle_workspace_symbol :: (request: LSP_Request_Message_Workspace_Symbol) {
             }
         }
 
-        symbols: [..]LSP_Document_Symbol;
-        load_symbols_from_file(file, *symbols);
+        for serialized_symbol, symbol_name: file.serialized_workspace_symbols {
+            if symbol_count == MAX_NUMBER_OF_WORKSPACE_SYMBOLS_TO_RETURN_TO_PREVENT_VSCODE_FROM_BEING_SUPER_SLOW {
+                break file;
+            }
 
-        for document_symbol: symbols {
-            flattern_document_symbol_to_workspace_symbols(search_query, document_symbol, file.path, *workspace_symbols);
+            if !contains(to_lower_copy(symbol_name), search_query) {
+                continue;
+            }
+
+            if symbol_count > 0 {
+                append(*builder, ",");
+            }
+
+            append(*builder, serialized_symbol);
+            symbol_count += 1;
         }
     }
 
-    lsp_respond(request.id, workspace_symbols);
+    append(*builder, "]");
+    json_serialized_symbol_list := builder_to_string(*builder);
+    lsp_respond_with_already_json_serialized_result_data(request.id, json_serialized_symbol_list);
 }
 
 handle_document_symbol :: (request: LSP_Request_Message_Document_Symbol) {
@@ -75,10 +76,31 @@ handle_document_symbol :: (request: LSP_Request_Message_Document_Symbol) {
         return;
     }
 
+    lsp_respond(request.id, file.document_symbols);
+}
+
+cache_symbols_for_file :: (file: *Program_File) {
+    push_allocator(pool_alloc(*file.analysis_pool));
+
     symbols: [..]LSP_Document_Symbol;
     load_symbols_from_file(file, *symbols);
+    file.document_symbols = symbols;
 
-    lsp_respond(request.id, symbols);
+    serialize_workspace_symbols :: (file: *Program_File, document_symbols: []LSP_Document_Symbol, name_prefix := "") {
+        for document_symbol: document_symbols {
+            workspace_symbol: LSP_Workspace_Symbol;
+            workspace_symbol.name = join(name_prefix, document_symbol.name);
+            workspace_symbol.kind = document_symbol.kind;
+            workspace_symbol.location = .{path_to_lsp_path(file.path), document_symbol.range};
+
+            serialized_symbol := json_write_string(workspace_symbol);
+            table_add(*file.serialized_workspace_symbols, workspace_symbol.name, serialized_symbol);
+
+            serialize_workspace_symbols(file, document_symbol.children, join(workspace_symbol.name, "."));
+        }
+    }
+
+    serialize_workspace_symbols(file, file.document_symbols);
 }
 
 load_symbols_from_file :: (file: *Program_File, load_to: *[..]LSP_Document_Symbol) {

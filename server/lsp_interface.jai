@@ -778,22 +778,22 @@ lsp_respond :: (id: JSON_Value, data: $T) {
     });
 }
 
-// lsp_respond_with_already_json_serialized_result_data :: (id: u32, data: string){
-//     Reply_With_Placeholder :: struct {
-//         using response: LSP_Response_Message;
-//         result := "T";
-//     }
+lsp_respond_with_already_json_serialized_result_data :: (id: JSON_Value, data: string) {
+    Reply_With_Placeholder :: struct {
+        using response: LSP_Response_Message;
+        result := "T";
+    }
 
-//     body_with_placeholder := json_write_string(Reply_With_Placeholder.{id = id});
-//     defer free(body_with_placeholder);
+    body_with_placeholder := json_write_string(Reply_With_Placeholder.{response.id=id});
+    defer free(body_with_placeholder);
 
-//     found_separator, prefix, postfix := split_from_right(body_with_placeholder, "\"T\"");
+    found_separator, prefix, postfix := split_from_right(body_with_placeholder, "\"T\"");
 
-//     assert(found_separator);
-//     final_body := tprint("%0%0%0", prefix, data, postfix);
+    assert(found_separator);
+    final_body := tprint("%0%0%0", prefix, data, postfix);
 
-//     print("Content-Length: %\r\n\r\n%", final_body.count, final_body);
-// }
+    print("Content-Length: %\r\n\r\n%", final_body.count, final_body);
+}
 
 lsp_respond_with_error :: (id: JSON_Value, code: LSP_Error_Codes, message: string, data: $T) {
     reply: struct {
