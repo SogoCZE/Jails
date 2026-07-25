@@ -14,6 +14,12 @@ User_Options :: struct {
     use_symbols_from_local_modules: bool;
 }
 
+Context_Model :: struct {
+    pool: Pool;
+    effective_type: *Struct;
+    fields: []*Declaration;
+}
+
 Server :: struct {
     args: Args;
     quit := false;
@@ -27,6 +33,7 @@ Server :: struct {
     project_root: string;
     files: Table(string, *Program_File);
     files_to_be_analyzed: [..]*Program_File;
+    context_model: Context_Model;
 
     memory_files_lock: Mutex;
     memory_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
@@ -490,6 +497,8 @@ main :: () {
 
     defer deinit(*server.files);
 
+    set_allocators(*server.context_model.pool, context.default_allocator);
+
     server.files_to_be_analyzed.allocator = context.default_allocator;
 
     init_memory_files();
@@ -515,6 +524,7 @@ main :: () {
     }
 
     log("Shutdown");
+    release(*server.context_model.pool);
     exit(0);
 }
 

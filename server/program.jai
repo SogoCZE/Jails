@@ -219,6 +219,100 @@ resolve_file_graph :: () {
     }
 }
 
+get_add_context_declaration :: (directive: *Directive_Add_Context) -> *Declaration {
+    if !directive return null;
+
+    node := directive.expression;
+    for 0..15 {
+        if !node return null;
+
+        if node.kind == .DECLARATION {
+            decl := cast(*Declaration) node;
+            if !decl.name || !decl.type_inst && !decl.expression return null;
+            return decl;
+        }
+
+        if node.kind == .DIRECTIVE_AS {
+            node = (cast(*Directive_As) node).expression;
+            continue;
+        }
+
+        if node.kind == .USING {
+            node = (cast(*Using) node).expression;
+            continue;
+        }
+
+        return null;
+    }
+
+    return null;
+}
+
+is_inside_directive_code :: (node: *Node) -> bool {
+    current := node.parent;
+    while current {
+        if current.kind == .DIRECTIVE_CODE return true;
+        current = current.parent;
+    }
+
+    return false;
+}
+
+add_context_model_field :: (fields: *[..]*Declaration, members: *[..]*Node, decl: *Declaration) {
+    if !decl || !decl.name || !decl.type_inst && !decl.expression return;
+
+    for existing: fields.* {
+        if existing.name == decl.name return;
+    }
+
+    array_add(fields, decl);
+    array_add(members, xx decl);
+}
+
+rebuild_context_model :: () {
+    server.context_model.effective_type = null;
+    server.context_model.fields = .[];
+    release(*server.context_model.pool);
+
+    push_allocator(pool_alloc(*server.context_model.pool));
+
+    effective_type := New(Struct);
+    block := New(Block);
+    effective_type.block = block;
+    block.parent = xx effective_type;
+
+    fields: [..]*Declaration;
+    members: [..]*Node;
+
+    runtime_support_file := search_for_file("modules/Runtime_Support.jai");
+    if runtime_support_file {
+        ok, context_base_decl := table_find(*runtime_support_file.declarations, "Context_Base");
+        if ok && context_base_decl.expression && context_base_decl.expression.kind == .STRUCT {
+            context_base := cast(*Struct) context_base_decl.expression;
+            if context_base.block {
+                for member: context_base.block.members {
+                    if member && member.kind == .DECLARATION {
+                        add_context_model_field(*fields, *members, cast(*Declaration) member);
+                    }
+                }
+            }
+        }
+    }
+
+    for file: server.files {
+        for node: file.nodes {
+            if node.kind != .DIRECTIVE_ADD_CONTEXT || is_inside_directive_code(node) continue;
+
+            decl := get_add_context_declaration(cast(*Directive_Add_Context) node);
+            add_context_model_field(*fields, *members, decl);
+        }
+    }
+
+    block.members = members;
+    server.context_model.fields = fields;
+    server.context_model.effective_type = effective_type;
+}
+
 analyze_files :: () {
     for file: server.files_to_be_analyzed {
         release(*file.analysis_pool);
@@ -253,6 +347,7 @@ analyze_files :: () {
         file.linked_files = linked_files;
     }
 
+    rebuild_context_model();
     array_reset(*server.files_to_be_analyzed);
 }
 
@@ -1055,6 +1150,10 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
 
         if current_node.kind == .IDENTIFIER {
             ident := cast(*Identifier, current_node);
+            if ident.name == "context" {
+                return xx server.context_model.effective_type;
+            }
+
             ident_decls := get_identifier_decls(ident);
 
             if ident_decls.count == 0 {
@@ -1081,6 +1180,10 @@ get_node_type :: (root: *Node, solve_array := false, select_decl := select_first
 
         if current_node.kind == .DIRECTIVE_IMPORT {
             return current_node;
+        }
+
+        if current_node.kind == .DIRECTIVE_CONTEXT {
+            return xx server.context_model.effective_type;
         }
 
         if current_node.kind == .ARRAY_SUBSCRIPT {
@@ -1262,6 +1365,7 @@ unwrap_pointer :: (unary_op: *Unary_Operation) -> *Node {
 }
 
 get_block_of :: (node: *Node) -> *Block {
+    if !node return null;
     if node.kind == .BLOCK return cast(*Block) node;
 
     if node.kind == {
@@ -1319,6 +1423,8 @@ get_member_in :: (parent: *Node, ident: *Identifier) -> *Declaration {
 
 get_members_in :: (parent: *Node, ident: *Identifier) -> []*Declaration {
     decls: [..]*Declaration;
+
+    if !parent return decls;
 
     if parent.kind == .DIRECTIVE_IMPORT {
         import := cast(*Directive_Import) parent;
@@ -1526,9 +1632,8 @@ get_path_type :: (path: []*Node, recursion_limit: s16 = 1024) -> *Node {
     resolved_nodes: int;
 
     if recursion_limit <= 0 {
-        // Enforce some kind of limit to the recursive search, else we run the risk
-        // of exhausting our stack and getting killed. A good way to test this is to do
-        // a goto definition search on a context's field.
+        // Enforce a limit on recursive type aliases and unresolved paths so malformed
+        // programs cannot exhaust the stack.
         log_error("Recurisve search limit reached, quitting search");
         return null;
     }

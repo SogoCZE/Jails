@@ -1,7 +1,9 @@
 # Jails
+
 Jails is an experimental language server for the Jai programming language.
 
 ## Features
+
 - Basic Go-To Definition
 - Autocomplete for available symbols (types, procedures etc)
 - Signature help for procedure calls
@@ -9,16 +11,19 @@ Jails is an experimental language server for the Jai programming language.
 
 In the future, the language server will support all other basic stuff you would get from any other LSP. Also, the plan is to support some specific Jai features from an editor support perspective like for example macro evaluation inside the editor etc.
 
-
 ## Usage
+
 Be aware that this language server is still pretty much unstable... Nonetheless, it can be quite useful even in this early stage of development.
 
 ### Requirements
+
 - You need to have a **Jai compiler in your path**. The language server searches for the compiler with `whereis` on Mac, Linux and `where` on Windows. You can also specify the path to your jai installation with a command line argument to Jails e.g. `-jai_path /path/to/jai`. Note that this is the path to the root of the installation, the actual compiler binary should be in `bin/` at that location.
 - You may need to create [`jails.json` config file](#config-file) to properly support your project structure. In the future I would like to Jails work for most of the Jai projects out-of-box without any config but for now it is recommended you set up one.
 
 ### When using a custom Build program
+
 By default, Jails does not generate any output files, however, when using a custom build program it will output whatever your build program is set to. In that case, you should disable the output on your own, by combining `JAILS_DIAGNOSTICS_BUILD` with `#exists` to detect if it is build by the LSP.
+
 ```odin
 #if #exists(JAILS_DIAGNOSTICS_BUILD) options.output_type = .NO_OUTPUT;
 ```
@@ -32,13 +37,50 @@ if found  child_options.output_type = .NO_OUTPUT;
 ```
 
 ### Cloning
+
 This repo uses git submodules. Clone it using `git clone --recurse-submodules`.
 
 ### Building
+
 Compile the release version of the server with `jai build.jai - -release`. Jails binary will be generated in the `bin` folder.
 
 ### VS Code
+
 Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ApparentlyStudio.jails) or you can build it yourself. The prebuilt version supports x64 Windows and ARM64 MacOS at the moment.
+
+### Neovim
+
+Neovim 0.11 and newer can configure Jails with the built-in LSP API. Add the
+following to your `init.lua` or LSP plugin configuration, replacing the two
+example paths with the locations of your Jails binary and Jai installation:
+
+```lua
+-- Register the filetype before enabling the language server.
+vim.filetype.add({ extension = { jai = "jai" } })
+
+local jails = {
+    cmd = {
+        vim.fn.expand("~/path/to/Jails/bin/jails"),
+        "-jai_path",
+        vim.fn.expand("~/path/to/jai"),
+    },
+    filetypes = { "jai" },
+    -- Prefer a project root, but also support standalone Jai files.
+    root_dir = function(bufnr, on_dir)
+        local file = vim.api.nvim_buf_get_name(bufnr)
+        local root = vim.fs.root(bufnr, { "jails.json", "build.jai", ".git" })
+        on_dir(root or vim.fs.dirname(file))
+    end,
+}
+
+vim.lsp.config("jails", jails)
+vim.lsp.enable("jails")
+```
+
+If `jails` is available on your `PATH`, the first command entry can simply be
+`"jails"`. The `-jai_path` pair can be omitted when Jails can discover the Jai
+compiler automatically.
+
 
 #### Manual build
 
@@ -52,7 +94,9 @@ Jails for VS Code can be downloaded from [VS Code Marketplace](https://marketpla
 8. Run `code --install-extension jails-x.x.x.vsix` to install the extension in VS Code.
 
 ### Config file
+
 You can create a config file `jails.json` inside your project root to specify:
+
 - `roots` (`main.jai`, `build.jai`) - this is used to set up files that are being parsed on init - you don't need to set this but it will improve your experience.
 - `local modules` (`modules`) - this tells the language server to also search for modules in these folders.
 - `build_root` - entry file for compiling (currently used for running compiler diagnostics - errors in the editor)
@@ -77,9 +121,11 @@ You can create a config file `jails.json` inside your project root to specify:
 ```
 
 ## Run (dev)
+
 Compile server with `jai build.jai` or compile and run test VSCode with preinstalled LSP with `jai build.jai - -vscode`.
 
 ## Dependencies
+
 - [jai_parser](https://github.com/SogoCZE/jai_parser)
 - [Jaison](https://github.com/rluba/jaison)
 - [Jai unicode](https://github.com/rluba/jai-unicode)

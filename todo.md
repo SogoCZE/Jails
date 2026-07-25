@@ -1,7 +1,7 @@
 # TODO
 
 ## 0.3.0
-- [ ] support for context
+- [x] support for context
 - [ ] goto and autocomplete for struct literals
 - [ ] improve context based autocomplete
 - [ ] polymorphic types
