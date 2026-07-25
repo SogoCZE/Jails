@@ -274,43 +274,45 @@ rebuild_context_model :: () {
     server.context_model.fields = .[];
     release(*server.context_model.pool);
 
-    push_allocator(pool_alloc(*server.context_model.pool));
+    {
+        push_allocator(pool_alloc(*server.context_model.pool));
 
-    effective_type := New(Struct);
-    block := New(Block);
-    effective_type.block = block;
-    block.parent = xx effective_type;
+        effective_type := New(Struct);
+        block := New(Block);
+        effective_type.block = block;
+        block.parent = xx effective_type;
 
-    fields: [..]*Declaration;
-    members: [..]*Node;
+        fields: [..]*Declaration;
+        members: [..]*Node;
 
-    runtime_support_file := search_for_file("modules/Runtime_Support.jai");
-    if runtime_support_file {
-        ok, context_base_decl := table_find(*runtime_support_file.declarations, "Context_Base");
-        if ok && context_base_decl.expression && context_base_decl.expression.kind == .STRUCT {
-            context_base := cast(*Struct) context_base_decl.expression;
-            if context_base.block {
-                for member: context_base.block.members {
-                    if member && member.kind == .DECLARATION {
-                        add_context_model_field(*fields, *members, cast(*Declaration) member);
+        runtime_support_file := search_for_file("modules/Runtime_Support.jai");
+        if runtime_support_file {
+            ok, context_base_decl := table_find(*runtime_support_file.declarations, "Context_Base");
+            if ok && context_base_decl.expression && context_base_decl.expression.kind == .STRUCT {
+                context_base := cast(*Struct) context_base_decl.expression;
+                if context_base.block {
+                    for member: context_base.block.members {
+                        if member && member.kind == .DECLARATION {
+                            add_context_model_field(*fields, *members, cast(*Declaration) member);
+                        }
                     }
                 }
             }
         }
-    }
 
-    for file: server.files {
-        for node: file.nodes {
-            if node.kind != .DIRECTIVE_ADD_CONTEXT || is_inside_directive_code(node) continue;
+        for file: server.files {
+            for node: file.nodes {
+                if node.kind != .DIRECTIVE_ADD_CONTEXT || is_inside_directive_code(node) continue;
 
-            decl := get_add_context_declaration(cast(*Directive_Add_Context) node);
-            add_context_model_field(*fields, *members, decl);
+                decl := get_add_context_declaration(cast(*Directive_Add_Context) node);
+                add_context_model_field(*fields, *members, decl);
+            }
         }
-    }
 
-    block.members = members;
-    server.context_model.fields = fields;
-    server.context_model.effective_type = effective_type;
+        block.members = members;
+        server.context_model.fields = fields;
+        server.context_model.effective_type = effective_type;
+    }
 }
 
 analyze_files :: () {
