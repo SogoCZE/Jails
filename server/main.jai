@@ -495,8 +495,15 @@ main :: () {
     init_memory_files();
     defer deinit_memory_files();
 
+    start_parent_watchdog();
+
     while !server.quit {
-        body, success := read_message_from_stdin(,, temp);
+        body, success, closed := read_message_from_stdin(,, temp);
+        if closed {
+            // The editor closed our stdin. Without this we would spin here forever at 100% CPU.
+            log("Input closed, shutting down.");
+            break;
+        }
         if !success {
             log("Failed to read message. Skipping.");
             continue;
@@ -555,4 +562,33 @@ main :: () {
     #import "Windows";
 } else {
     #import "POSIX";
+}
+
+// Parent watchdog.
+//
+// The main thread can be blocked for a long time (e.g. in parse_files_drain), so it can't be trusted to notice
+// that the editor went away. Previously a stuck parse meant jails outlived the editor forever, burning CPU.
+// This thread polls the parent pid and exits as soon as we get re-parented (parent died).
+parent_watchdog_thread: Thread;
+
+start_parent_watchdog :: () {
+    #if OS != .WINDOWS {
+        thread_init(*parent_watchdog_thread, parent_watchdog);
+        thread_start(*parent_watchdog_thread);
+    }
+}
+
+#if OS != .WINDOWS {
+    parent_watchdog :: (thread: *Thread) -> s64 {
+        initial_parent := getppid();
+
+        while true {
+            sleep_milliseconds(1000);
+            if getppid() != initial_parent {
+                log("Parent process % is gone, exiting.", initial_parent);
+                exit(0);
+            }
+        }
+        return 0;
+    }
 }
