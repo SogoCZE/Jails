@@ -64,20 +64,21 @@ parse_header :: (header : string) -> s64, success: bool {
     return nb_bytes, success;
 }
 
-read_message_from_stdin :: () -> string, bool {
+// Returns (body, success, closed). `closed` is true when stdin hit EOF, i.e. the client went away.
+read_message_from_stdin :: () -> string, bool, bool {
     buffer: [0xFFFF]u8;
 
     header_bytes := read_line_from_stdin(buffer);
     if header_bytes <= 0 {
       log_error("The input channel was closed!");
-      return "", false;
+      return "", false, true;
     }
     header := to_string(buffer.data, xx header_bytes);
 
     body_size, success := parse_header(header);
     if !success {
         log_error("Couldnt parse header!");
-        return "", false;
+        return "", false, false;
     }
 
     body_buffer: []u8 = ---;
@@ -86,7 +87,7 @@ read_message_from_stdin :: () -> string, bool {
 
     if read_from_stdin(buffer.data + header.count, 2) < 2 {
       log_error("Couldn't read CRLF!");
-      return "", false;
+      return "", false, false;
     } // @todo: this is somewhat weird
 
     if buffer[header.count+1] != #char "\n" {
@@ -99,12 +100,12 @@ read_message_from_stdin :: () -> string, bool {
 
     if body_read != xx body_size {
         log_error("Expected % bytes, got %!", body_size, body_read);
-        return "", false;
+        return "", false, false;
     }
 
     body := to_string(body_buffer.data, body_buffer.count);
 
-    return body, true;
+    return body, true, false;
 }
 
 send_message :: (data: $T) {
