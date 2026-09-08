@@ -497,7 +497,8 @@ LSP_Result_Initialize :: struct {
         workspaceSymbolProvider := true;
 
         definitionProvider := true;
-        // hoverProvider := true;
+        renameProvider := true;
+        hoverProvider := true;
 
         signatureHelpProvider: struct {
             triggerCharacters   := string.["("];
@@ -544,6 +545,19 @@ LSP_Request_Message_Completion :: struct {
             triggerCharacter: string;
         } @JsonName(context)
     }
+}
+
+LSP_Request_Message_Rename :: struct {
+    using request: LSP_Request_Message;
+    params: struct {
+        textDocument: LSP_Text_Document_Identifier;
+        position: LSP_Position;
+        newName: string;
+    }
+}
+
+LSP_Rename_Result :: struct {
+    changes: JSON_Value;
 }
 
 LSP_Request_Message_Signature_Help :: struct {
@@ -632,8 +646,10 @@ LSP_Completion_Item :: struct {
 }
 
 LSP_Hover :: struct {
-    contents: string;
-    contentFormat:= "markdown";
+    contents: struct {
+        kind := "markdown";
+        value: string;
+    }
 }
 
 LSP_Folding_Range_Client_Capabilities :: struct {
