@@ -24,11 +24,12 @@ handle_signature_help :: (request: LSP_Request_Message_Signature_Help) {
         return;
     }
 
-    proc_call_ident := cast(*Identifier) proc_call.procedure;
-    if !proc_call_ident {
+    if !proc_call.procedure || proc_call.procedure.kind != .IDENTIFIER {
         lsp_respond(request.id, null);
         return;
     }
+
+    proc_call_ident := cast(*Identifier) proc_call.procedure;
 
     proc_decls: [..]*Declaration;
 

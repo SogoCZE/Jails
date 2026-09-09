@@ -166,7 +166,7 @@ LSP_Did_Close_Text_Document :: struct {
 }
 
 LSP_Content_Change :: struct {
-    range: LSP_Range;
+    range: *LSP_Range; // null = full document sync (the whole text is replaced).
     text: string;
 }
 
@@ -735,7 +735,7 @@ lsp_log :: (message : string, data : *void, info : Log_Info) {
     sent_log: LSP_Log_Message = .{};
     sent_log.params.message = message;
 
-    if message.data[message.count - 1] == #char "\n" then sent_log.params.message.count -= 1;
+    if message.count > 0 && message.data[message.count - 1] == #char "\n" then sent_log.params.message.count -= 1;
 
     if info.common_flags == {
         case .ERROR;
@@ -760,9 +760,19 @@ lsp_window_message :: (format: string, args: ..Any, type: LSP_Window_Show_Messag
     free(content);
 }
 
+stdout_lock: Mutex;
+
+init_lsp_output :: () {
+    init(*stdout_lock);
+}
+
 lsp_send :: (data: $T) {
     body := json_write_string(data);
     defer free(body);
+
+    lock(*stdout_lock);
+    defer unlock(*stdout_lock);
+
     print("Content-Length: %\r\n\r\n%", body.count, body);
 }
 

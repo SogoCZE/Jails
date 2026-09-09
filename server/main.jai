@@ -31,8 +31,6 @@ Server :: struct {
     memory_files_lock: Mutex;
     memory_files: Table(string, [..]u8); // @todo: This is probably dumb - store files as array of lines instead (is this good idea?) // @ToDo: Keep track of a modified flag per file
 
-    previously_errored_file: string;
-
     diagnostics_metaprogram_path: string;
 
     user_options: User_Options;
@@ -59,7 +57,7 @@ decode_url :: (url: string) -> string {
             j += 1;
         }
 
-        if out_url[i] != #char "%" || out_url[i+1] == 0 {
+        if out_url[i] != #char "%" || i + 2 >= out_url.count {
             out_url[j] = out_url[i];
             continue;
         }
@@ -70,9 +68,9 @@ decode_url :: (url: string) -> string {
 
             out_url[j] = xx string_to_int(xx hex, 16);
             i += 2;
+        } else {
+            out_url[j] = out_url[i];
         }
-
-
     }
     out_url.count = j;
 
@@ -82,28 +80,59 @@ decode_url :: (url: string) -> string {
 find_entry_file :: (root: string) -> string {
 
     contains_main_procedure :: (file: string) -> bool {
-        content := read_entire_file(file);
+        content, ok := read_entire_file(file, log_errors=false);
+        if !ok return false;
+        defer free(content);
+
         return contains(content, "main ::") || contains(content, "main::");
     }
 
-    // @Fixme: This does not take the root into account!
-    COMMON_MAIN_PATH :: string.["/src/main.jai", "main.jai"]; // Maybe build.jai ... etc?
+    COMMON_MAIN_PATH :: string.["src/main.jai", "main.jai"]; // Maybe build.jai ... etc?
 
     for path: COMMON_MAIN_PATH {
-        if file_exists(join(root, path, separator = "/")) && contains_main_procedure(path) {
+        full_path := join(root, path, separator = "/",, temp);
+        if file_exists(full_path) && contains_main_procedure(full_path) {
             return path;
         }
     }
 
-    files := file_list(root, true);
 
-    for file: files {
+    MAX_SCANNED_FILES :: 5000;
+
+    Scan :: struct {
+        candidates: [..]string;
+        scanned: int;
+    }
+
+    visit :: (info: *File_Visit_Info, scan: *Scan) {
+        if info.is_directory {
+            if starts_with(info.short_name, ".") || info.short_name == "node_modules" { // Probably silly... But you know...
+                info.descend_into_directory = false;
+            }
+            return;
+        }
+
+        if scan.scanned >= MAX_SCANNED_FILES return;
+        if !ends_with(info.full_name, ".jai") return;
+
+        scan.scanned += 1;
+        array_add(*scan.candidates, copy_string(info.full_name));
+    }
+
+    scan: Scan;
+    scan.candidates.allocator = temp;
+    {
+        push_allocator(temp);
+        visit_files(root, true, *scan, visit, visit_files=true, visit_directories=true);
+    }
+
+    for file: scan.candidates {
         if contains(file, "main.jai") && contains_main_procedure(file) {
             return replace(file, root, "");
         }
     }
 
-    for file: files {
+    for file: scan.candidates {
         if contains_main_procedure(file) {
             return replace(file, root, "");
         }
@@ -140,7 +169,7 @@ find_jai_path :: (executable_name: string) -> string, string {
         raw_path = trim(raw_path);
 
         BUFFER_SIZE :: 4096;
-        buf: [BUFFER_SIZE] u8;
+        buf: [BUFFER_SIZE + 1] u8;
 
         length := readlink(to_c_string(raw_path), buf.data, BUFFER_SIZE);
         if length > 0 {
@@ -163,6 +192,11 @@ find_jai_path :: (executable_name: string) -> string, string {
 
     while contains(raw_path, "//") raw_path = replace(raw_path, "//", "/");
     path := split(raw_path, "/");
+
+    if path.count < 2 {
+        log_error("Unexpected jai executable location '%', cannot derive the Jai path from it.", raw_path);
+        return "", "";
+    }
 
     pop(*path); // jai.exe or jai
     pop(*path); // bin
@@ -315,7 +349,9 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             }
 
             if server.roots.count == 0 {
-                server.roots = .[find_entry_file(server.project_root)];
+                roots := NewArray(1, string);
+                roots[0] = ifx server.build_root.count > 0 then server.build_root else find_entry_file(server.project_root);
+                server.roots = roots;
             }
 
             // Include $workingDirectory/modules as a default local module path (like a compiler)
@@ -406,7 +442,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             analyze_files();
 
         case "textDocument/documentSymbol";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol);
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Document_Symbol,, temp);
             if !success {
                 log_error("Unable to parse textDocument/documentSymbol message");
                 return;
@@ -417,7 +453,7 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
             handle_document_symbol(body);
 
         case "workspace/symbol";
-            success, body := json_parse_string(raw_request, LSP_Request_Message_Workspace_Symbol);
+            success, body := json_parse_string(raw_request, LSP_Request_Message_Workspace_Symbol,, temp);
             if !success {
                 log_error("Unable to parse workspace/symbol message");
                 return;
@@ -467,6 +503,8 @@ handle_request :: (request: LSP_Request_Message, raw_request: string) {
 }
 
 main :: () {
+    init_lsp_output();
+
     context.logger = lsp_log;
 
     success: bool;
@@ -494,6 +532,9 @@ main :: () {
 
     init_memory_files();
     defer deinit_memory_files();
+
+    init_diagnostics();
+    start_diagnostics_thread();
 
     start_parent_watchdog();
 
@@ -572,13 +613,77 @@ main :: () {
 parent_watchdog_thread: Thread;
 
 start_parent_watchdog :: () {
-    #if OS != .WINDOWS {
-        thread_init(*parent_watchdog_thread, parent_watchdog);
-        thread_start(*parent_watchdog_thread);
-    }
+    thread_init(*parent_watchdog_thread, parent_watchdog);
+    thread_start(*parent_watchdog_thread);
 }
 
-#if OS != .WINDOWS {
+#if OS == .WINDOWS {
+    // The Windows module does not expose these, so we bind what we need ourselves.
+    watchdog_kernel32 :: #library,system "kernel32";
+
+    WATCHDOG_TH32CS_SNAPPROCESS :: 0x00000002;
+    WATCHDOG_SYNCHRONIZE        :: 0x00100000;
+    WATCHDOG_WAIT_FOREVER       :: 0xFFFFFFFF;
+
+    Watchdog_PROCESSENTRY32W :: struct {
+        dwSize:              u32;
+        cntUsage:            u32;
+        th32ProcessID:       u32;
+        th32DefaultHeapID:   u64;
+        th32ModuleID:        u32;
+        cntThreads:          u32;
+        th32ParentProcessID: u32;
+        pcPriClassBase:      s32;
+        dwFlags:             u32;
+        szExeFile:           [260]u16;
+    }
+
+    watchdog_CreateToolhelp32Snapshot :: (dwFlags: u32, th32ProcessID: u32) -> HANDLE #foreign watchdog_kernel32 "CreateToolhelp32Snapshot";
+    watchdog_Process32FirstW :: (hSnapshot: HANDLE, lppe: *Watchdog_PROCESSENTRY32W) -> s32 #foreign watchdog_kernel32 "Process32FirstW";
+    watchdog_Process32NextW  :: (hSnapshot: HANDLE, lppe: *Watchdog_PROCESSENTRY32W) -> s32 #foreign watchdog_kernel32 "Process32NextW";
+    watchdog_OpenProcess :: (dwDesiredAccess: u32, bInheritHandle: s32, dwProcessId: u32) -> HANDLE #foreign watchdog_kernel32 "OpenProcess";
+
+    get_parent_process_id :: () -> u32 {
+        my_pid := GetCurrentProcessId();
+
+        snapshot := watchdog_CreateToolhelp32Snapshot(WATCHDOG_TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE return 0;
+        defer CloseHandle(snapshot);
+
+        entry: Watchdog_PROCESSENTRY32W;
+        entry.dwSize = size_of(Watchdog_PROCESSENTRY32W);
+
+        if watchdog_Process32FirstW(snapshot, *entry) == 0 return 0;
+
+        while true {
+            if entry.th32ProcessID == my_pid return entry.th32ParentProcessID;
+            if watchdog_Process32NextW(snapshot, *entry) == 0 break;
+        }
+
+        return 0;
+    }
+
+    parent_watchdog :: (thread: *Thread) -> s64 {
+        parent_pid := get_parent_process_id();
+        if parent_pid == 0 {
+            log_error("Parent watchdog: could not determine the parent process, relying on stdin EOF only.");
+            return 0;
+        }
+
+        handle := watchdog_OpenProcess(WATCHDOG_SYNCHRONIZE, 0, parent_pid);
+        if handle == null {
+            log_error("Parent watchdog: could not open the parent process %, relying on stdin EOF only.", parent_pid);
+            return 0;
+        }
+
+        // Blocks until the parent process terminates.
+        WaitForSingleObject(handle, WATCHDOG_WAIT_FOREVER);
+        log("Parent process % is gone, exiting.", parent_pid);
+        exit(0);
+
+        return 0;
+    }
+} else {
     parent_watchdog :: (thread: *Thread) -> s64 {
         initial_parent := getppid();
 

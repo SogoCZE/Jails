@@ -101,7 +101,7 @@ handle_goto_procedure_named_argument :: (request: LSP_Request_Message_Definition
 
     procedure_call := cast(*Procedure_Call) binary_op.parent;
 
-    if !procedure_call.procedure {
+    if !procedure_call.procedure || procedure_call.procedure.kind != .IDENTIFIER {
         return false;
     }
 
@@ -112,7 +112,7 @@ handle_goto_procedure_named_argument :: (request: LSP_Request_Message_Definition
     }
 
     procedure_decl := decls[0]; // TODO: here we need to resolve procedure overloading in the future.
-    if !procedure_decl.expression {
+    if !procedure_decl.expression || procedure_decl.expression.kind != .PROCEDURE {
         return false;
     }
 
@@ -122,7 +122,7 @@ handle_goto_procedure_named_argument :: (request: LSP_Request_Message_Definition
         unwrapped_arg := unwrap_polymorphic_constant(arg);
 
         // It should always be decl??
-        if unwrapped_arg.kind != .DECLARATION {
+        if !unwrapped_arg || unwrapped_arg.kind != .DECLARATION {
             log("arg.kind: %", arg.kind);
             continue;
         }
